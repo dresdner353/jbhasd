@@ -31,3 +31,8 @@ pi@raspberrypi:~ $ curl 'http://192.168.12.196/json?control=Uplighter&state=0'
 pi@raspberrypi:~ $ curl 'http://192.168.12.196/json?control=Uplighter&state=1'
 { "name": "esp8266-9840833", "zone": "Playroom", "controls": [{ "name": "Uplighter", "type": "switch", "state": 1 }] }
 pi@raspberrypi:~ $
+```
+
+The sonoff_basic.ino file in this repo is the basic firmware I wrote that should work on any Sonoff device and easily adapt to other ESP-8266 devices. You need to only correct the GPIO pin assignments as required for switches and LEDs.
+
+Python3 script zero_discover.py should aid in discovering your device after it attaches to your LAN. Script jbhasd_server.py is a very basic server I wrote that turns on two uplighter lights for me as a first stab at a working deployment of the firmware. I'll add more sophisticated scripts as I grow the concept further.
