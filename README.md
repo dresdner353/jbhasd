@@ -23,6 +23,7 @@ If you need to re-configure, just power up and press the button within 5 seconds
 
 Once the device is connected to your WiFI, you can discover it via zeroconf and access the JSON URL to see the device details. Then you can use GET or POST to pass in the desired control and state you wish to set. The response each time will be the current overall state. I haven't added any error responses yet. So if you pass bogus paramaters to it, it will just respond back with the current status:
 
+```
 pi@raspberrypi:~ $ curl 'http://192.168.12.196/json'
 { "name": "esp8266-9840833", "zone": "Playroom", "controls": [{ "name": "Uplighter", "type": "switch", "state": 1 }] }
 pi@raspberrypi:~ $ curl 'http://192.168.12.196/json?control=Uplighter&state=0'
@@ -30,4 +31,3 @@ pi@raspberrypi:~ $ curl 'http://192.168.12.196/json?control=Uplighter&state=0'
 pi@raspberrypi:~ $ curl 'http://192.168.12.196/json?control=Uplighter&state=1'
 { "name": "esp8266-9840833", "zone": "Playroom", "controls": [{ "name": "Uplighter", "type": "switch", "state": 1 }] }
 pi@raspberrypi:~ $
-
