@@ -11,9 +11,9 @@ The basic principle for the ESP-8266 device would be that it registers on the Wi
 
 So first up, JSON was going to feature in this.. when the device is probed, it responds with a JSON string defining its identity and capabilities. Then the server imparts commands to the device in the form of GET or POST requests where it simply passes the name of the control it wants to change and the desired state. At this early stage, its just switches I'm supporting, but I'll be getting around to adding support for temp sensors and other controls as I further develop the solution.
 
-Now onto the ESP-8266 sketch itself. Here I wanted to flash the sketch onto an ESP-8266 device such as a Sonoff or any of the various break-out variations you can get. The intention was to have the device inside a safe housing and have it fitted with the necessary mains supply and a single button and LED indicator. 
+Now onto the ESP-8266 sketch itself. Here I wanted to flash the sketch onto an ESP-8266 device such as a Sonoff or any of the break-out variations you can get. The intention was to have the device inside a safe housing and have it fitted with all necessary cabling for mains supply and then feature a single button and LED indicator on the housing itself.
 
-When you first power up the device, the LED flashes at a medium speed and you have 5 seconds to press the hardware button to put it into programming mode where it acts as an open wireless AP. The LED will start flashing at a fast rate once the device enters AP mode.
+When you first power up the device, the LED flashes at a medium speed and you have 5 seconds to press the hardware button to put it into programming mode where it then acts as an open wireless AP. The LED will start flashing at a fast rate once the device enters AP mode.
 
 In AP mode, the device uses captive DNS, ensuring that once you connect to it from a mobile device or computer, you should be quickly directed to a landing page where you can set the config options. 
 
