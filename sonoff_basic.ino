@@ -226,7 +226,7 @@ void setup_switches()
     Serial.printf("setup_switches()\n");
 
     // loop until we reach the terminator where
-    // both pins are -1
+    // name is NULL
     i = 0;
     while (gv_switch_register[i].name) {
 
@@ -281,7 +281,7 @@ void check_manual_switches()
     //delay(delay_msecs);
 
     // loop until we reach the terminator where
-    // both pins are -1
+    // name is NULL
     i = 0;
     while (gv_switch_register[i].name) {
 
@@ -318,7 +318,8 @@ const char *get_json_status()
     Serial.printf("get_json_status()\n");
 
     /* 
-     *  { "name": "%s", "zone": "%s", "controls": [%s] }
+     *  { "name": "%s", "zone": "%s", "controls": [%s], "system" : { "reset_reason" : "%s", "free_heap" : %d, 
+     *  "chip_id" : %d, "flash_id" : %d, "flash_size" : %d, "flash_real_size" : %d, "flash_speed" : %d, "cycle_count" : %d }  }
      *  Control: { "name": "%s", "type": "%s", "state": %d }
      */
 
@@ -344,10 +345,21 @@ const char *get_json_status()
     }
                                 
     ets_sprintf(json_buffer,
-                "{ \"name\": \"%s\", \"zone\": \"%s\", \"controls\": [%s] }\n",
+                "{ \"name\": \"%s\", \"zone\": \"%s\", \"controls\": [%s], "
+                "\"system\" : { \"reset_reason\" : \"%s\", \"free_heap\" : %u, "
+                "\"chip_id\" : %u, \"flash_id\" : %u, \"flash_size\" : %u, "
+                "\"flash_real_size\" : %u, \"flash_speed\" : %u, \"cycle_count\" : %u } }\n",
                  gv_mdns_hostname,
                  gv_config.zone,
-                 controls_buffer);
+                 controls_buffer,
+                 ESP.getResetReason().c_str(),
+                 ESP.getFreeHeap(),
+                 ESP.getChipId(),
+                 ESP.getFlashChipId(),
+                 ESP.getFlashChipSize(),
+                 ESP.getFlashChipRealSize(),
+                 ESP.getFlashChipSpeed(),
+                 ESP.getCycleCount());
 
     return json_buffer;
 }
@@ -636,6 +648,12 @@ void sta_handle_json() {
 
     // Return current status as standard
     gv_web_server.send(200, "text/html", get_json_status());
+
+    // reboot if directed
+    if (gv_web_server.hasArg("reboot")) {
+        Serial.printf("Received reboot command\n");
+        ESP.restart();
+    }
 }
 
 void start_sta_mode()
