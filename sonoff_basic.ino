@@ -578,14 +578,46 @@ void start_ap_mode()
 }
 
 void sta_handle_root() {
+    char switch_web_form_buffer[1024];
+    char switch_name[50];
+    int switch_state;
+    int i;
+
     Serial.printf("sta_handle_root()\n");
 
-    ets_sprintf(
-        gv_web_page_buffer,
-        "<h1>Device Status</h1>"
-        "<p>Hostname: %s</p>",
-        gv_mdns_hostname);
-        
+    // Check for switch and state
+    if (gv_web_server.hasArg("control") && gv_web_server.hasArg("state")) {
+        strcpy(switch_name, gv_web_server.arg("control").c_str());
+        switch_state = atoi(gv_web_server.arg("state").c_str());
+        set_switch_state(switch_name, -1, switch_state); // specifying name only
+    }
+
+    // Will display basic info page
+    // with on/off buttons per configured 
+    // switch
+    ets_sprintf(gv_web_page_buffer,
+                "<h2>%s</h2>"
+                "<p>Zone: %s</p>",
+                gv_mdns_hostname, 
+                gv_config.zone);
+
+    // append entries for switches
+    // as simple on/off switch pairs 
+    i = 0;
+    while (gv_switch_register[i].name) {
+        if (strlen(gv_switch_register[i].name) > 0) {
+            ets_sprintf(switch_web_form_buffer,
+                        "<p><a href=\"/?control=%s&state=1\"><button>%s On</button></a>&nbsp;"
+                        "<a href=\"/?control=%s&state=0\"><button>%s Off</button></a></p>",
+                        gv_config.switch_names[i],
+                        gv_config.switch_names[i],
+                        gv_config.switch_names[i],
+                        gv_config.switch_names[i]);
+            strcat(gv_web_page_buffer, switch_web_form_buffer);
+        }
+        i++; // to the next entry in register
+    }
+
     gv_web_server.send(200, "text/html", gv_web_page_buffer);
 }
 
