@@ -18,11 +18,11 @@
 // switches..
 // 
 // struct gpio_switch gv_switch_register[] = {
-//     { "mains", 12, 13, 0, 1, 0 }, // Standard Sonoff 
-//     { "Fred", -1, -1, -1, 0, 0 }, // dummy switch
-//     { "Barney", -1, -1, -1, 0, 0 }, // dummy switch
-//     { "Wilma", -1, -1, -1, 0, 0 }, // dummy switch
-//     { NULL, -1, -1, -1, -1, -1} // terminator.. never delete this
+//     { "A",  12, 13,  0,  1,  0 }, // Standard Sonoff 
+//     { "B",  -1, -1, -1,  0,  0 }, // dummy switch
+//     { "C",  -1, -1, -1,  0,  0 }, // dummy switch
+//     { "D",  -1, -1, -1,  0,  0 }, // dummy switch
+//     { NULL, -1, -1, -1, -1, -1 }  // terminator.. never delete this
 // };
 // 
 // This array defines one functioning switch defaulted to the name "mains" that uses
@@ -57,14 +57,14 @@
 // to ensure a first read is interpreted as blank
 #define MAX_FIELD_LEN 20
 #define MAX_SWITCHES 20
-#define CFG_MARKER_STR "pooky3"
+#define CFG_MARKER_VAL 0xB3
 struct eeprom_config {
-    char marker[MAX_FIELD_LEN];
+    unsigned char marker;
     char zone[MAX_FIELD_LEN];
     char wifi_ssid[MAX_FIELD_LEN];
     char wifi_password[MAX_FIELD_LEN];
     char switch_names[MAX_SWITCHES][MAX_FIELD_LEN];
-    char switch_initial_states[MAX_SWITCHES];
+    unsigned char switch_initial_states[MAX_SWITCHES];
 } gv_config;
 
 // Runtime mode
@@ -98,7 +98,8 @@ int gv_wifi_led_pin = 13;
 // auto-launch the landing config page
 #define WEB_PORT 80
 ESP8266WebServer gv_web_server(WEB_PORT);
-char gv_web_page_buffer[10240];
+char gv_large_buffer[4096];
+char gv_small_buffer[512];
 const byte DNS_PORT = 53;
 IPAddress gv_ap_ip(192, 168, 1, 1);
 IPAddress gv_sta_ip;
@@ -111,11 +112,11 @@ char gv_mdns_hostname[MAX_FIELD_LEN];
 // Both PIN selections are optional (-1 implies unset)
 struct gpio_switch {
     char *name;
-    int relay_pin; // output pin used fro relay
-    int led_pin; // output pin used for LED
-    int manual_pin; // input pin used fro manual toggle
-    int initial_state;
-    int current_state;
+    char relay_pin; // output pin used fro relay
+    char led_pin; // output pin used for LED
+    char manual_pin; // input pin used fro manual toggle
+    char initial_state;
+    char current_state;
 };
 
 // In memory definition of the gpio switches/leds we have
@@ -132,11 +133,11 @@ struct gpio_switch {
 // Excluding the last NULL entry, this number of entries 
 // in this array should not exceed MAX_SWITCHES
 struct gpio_switch gv_switch_register[] = {
-    { "mains", 12, 13, 0, 1, 0 }, // Standard Sonoff 
-    { "Fred", -1, -1, -1, 0, 0 }, // dummy switch
-    { "Barney", -1, -1, -1, 0, 0 }, // dummy switch
-    { "Wilma", -1, -1, -1, 0, 0 }, // dummy switch
-    { NULL, -1, -1, -1, -1, -1} // terminator.. never delete this
+    { "A",  12, 13,  0,  1,  0 }, // Standard Sonoff 
+    { "B",  -1, -1, -1,  0,  0 }, // dummy switch
+    { "C",  -1, -1, -1,  0,  0 }, // dummy switch
+    { "D",  -1, -1, -1,  0,  0 }, // dummy switch
+    { NULL, -1, -1, -1, -1, -1 }  // terminator.. never delete this
 };
 
 // Not sure how standard LOW,HIGH norms are
@@ -309,9 +310,6 @@ void check_manual_switches()
 
 const char *get_json_status()
 {
-    static char json_buffer[4096];
-    static char controls_buffer[4096];
-
     char *str_ptr;
     int i;
 
@@ -323,8 +321,8 @@ const char *get_json_status()
      *  Control: { "name": "%s", "type": "%s", "state": %d }
      */
 
-    str_ptr = controls_buffer;
-    controls_buffer[0] = 0;
+    str_ptr = gv_small_buffer;
+    gv_small_buffer[0] = 0;
     i = 0;
     while(gv_switch_register[i].name) {
 
@@ -332,7 +330,7 @@ const char *get_json_status()
         // Those disabled will have had their name
         // set empty
         if (strlen(gv_switch_register[i].name) > 0) {
-            if (str_ptr != controls_buffer) {
+            if (str_ptr != gv_small_buffer) {
                 // separator
                 str_ptr += ets_sprintf(str_ptr, ", ");
             }
@@ -344,14 +342,14 @@ const char *get_json_status()
         i++;
     }
                                 
-    ets_sprintf(json_buffer,
+    ets_sprintf(gv_large_buffer,
                 "{ \"name\": \"%s\", \"zone\": \"%s\", \"controls\": [%s], "
                 "\"system\" : { \"reset_reason\" : \"%s\", \"free_heap\" : %u, "
                 "\"chip_id\" : %u, \"flash_id\" : %u, \"flash_size\" : %u, "
                 "\"flash_real_size\" : %u, \"flash_speed\" : %u, \"cycle_count\" : %u } }\n",
                  gv_mdns_hostname,
                  gv_config.zone,
-                 controls_buffer,
+                 gv_small_buffer,
                  ESP.getResetReason().c_str(),
                  ESP.getFreeHeap(),
                  ESP.getChipId(),
@@ -361,7 +359,7 @@ const char *get_json_status()
                  ESP.getFlashChipSpeed(),
                  ESP.getCycleCount());
 
-    return json_buffer;
+    return gv_large_buffer;
 }
 
 void load_config() 
@@ -374,13 +372,13 @@ void load_config()
     EEPROM.begin(512);
     EEPROM.get(0, gv_config);
 
-    if (strcmp(gv_config.marker, CFG_MARKER_STR) != 0) {
-        Serial.printf("marker field not matched to special string.. assuming unconfigured\n");
+    if (gv_config.marker != CFG_MARKER_VAL) {
+        Serial.printf("marker field not matched to special value.. assuming unconfigured\n");
         // memset to 0, empty strings galore
         memset(&gv_config, 0, sizeof(gv_config));
     }
     else {
-        Serial.printf("Marker:%s\n"
+        Serial.printf("Marker:%02X\n"
                       "Zone:%s\n"
                       "Wifi SSID:%s\n"
                       "Wifi Password:%s\n",
@@ -405,11 +403,11 @@ void save_config()
     Serial.printf("save_config()\n");
     int i;
     
-    // set marker field to special string
-    strcpy(gv_config.marker, CFG_MARKER_STR);
+    // set marker field to special value
+    gv_config.marker = CFG_MARKER_VAL;
     
     Serial.printf("Writing EEPROM data..\n");
-    Serial.printf("Marker:%s\n"
+    Serial.printf("Marker:%d\n"
                   "Zone:%s\n"
                   "Wifi SSID:%s\n"
                   "Wifi Password:%s\n",
@@ -434,7 +432,6 @@ void save_config()
 
 void ap_handle_root() {
     int i;
-    char arg_name[20];
     
     Serial.printf("ap_handle_root()\n");
     if (gv_web_server.hasArg("zone")) {
@@ -449,13 +446,13 @@ void ap_handle_root() {
             Serial.printf("Getting post args for switches %d/%d\n",
                           i, MAX_SWITCHES - 1);
             // format switch arg name
-            ets_sprintf(arg_name,
+            ets_sprintf(gv_small_buffer,
                         "switch%d",
                         i);
             // Retrieve if present
-            if (gv_web_server.hasArg(arg_name)) {
+            if (gv_web_server.hasArg(gv_small_buffer)) {
                 Serial.printf("Arg %s present\n",
-                              arg_name);
+                              gv_small_buffer);
 
                 // Be careful here. Had to strcpy against
                 // the address of the first char of the string array
@@ -463,35 +460,35 @@ void ap_handle_root() {
                 // caused exceptions so it needed to be clearly spelled 
                 // out in terms of address
                 strcpy(&(gv_config.switch_names[i][0]), 
-                       gv_web_server.arg(arg_name).c_str());
+                       gv_web_server.arg(gv_small_buffer).c_str());
                 Serial.printf("Got:%s:%s\n", 
-                              arg_name,
+                              gv_small_buffer,
                               gv_config.switch_names[i]);
             }
              
             // format state arg name
-            ets_sprintf(arg_name,
+            ets_sprintf(gv_small_buffer,
                         "state%d",
                         i);
             // Retrieve if present
-            if (gv_web_server.hasArg(arg_name)) {
+            if (gv_web_server.hasArg(gv_small_buffer)) {
                 Serial.printf("Arg %s present\n",
-                              arg_name);
+                              gv_small_buffer);
                               
                 gv_config.switch_initial_states[i] =
-                    atoi(gv_web_server.arg(arg_name).c_str());
+                    atoi(gv_web_server.arg(gv_small_buffer).c_str());
                 Serial.printf("Got:%s:%d\n", 
-                              arg_name, 
+                              gv_small_buffer, 
                               gv_config.switch_initial_states[i]);
             }
         }
         
         save_config();
-        gv_web_server.send(200, "text/html", "Applying settings and switching to client mode");
+        gv_web_server.send(200, "text/html", "Applying settings and rebooting");
         ESP.restart();
     }
     else {
-        gv_web_server.send(200, "text/html", gv_web_page_buffer);
+        gv_web_server.send(200, "text/html", gv_large_buffer);
     }
 }
 
@@ -513,10 +510,9 @@ void start_ap_mode()
     Serial.printf("start_ap_mode()\n");
     gv_mode = MODE_WIFI_AP;
     int i;
-    char switch_web_form_buffer[1024];
 
     ets_sprintf(
-        gv_web_page_buffer,
+        gv_large_buffer,
         "<h2>%s Setup</h2>"
         "<form action=\"/\" method=\"post\">"
         "<div>"
@@ -543,7 +539,7 @@ void start_ap_mode()
     i = 0;
     while (gv_switch_register[i].name) {
         ets_sprintf(
-            switch_web_form_buffer,
+            gv_small_buffer,
             "<div>"
             "    <label>Switch %d</label>"
             "    <input type=\"text\" value=\"%s\" maxlength=\"%d\" name=\"switch%d\">"
@@ -557,12 +553,12 @@ void start_ap_mode()
             MAX_FIELD_LEN,
             i,
             i);
-        strcat(gv_web_page_buffer, switch_web_form_buffer);
+        strcat(gv_large_buffer, gv_small_buffer);
         i++; // to the next entry in register
     }
 
     // Terminate form with post button and </form>
-    strcat(gv_web_page_buffer, 
+    strcat(gv_large_buffer, 
            "<div>"
            "    <button>Apply</button>"
            "</div>"
@@ -590,8 +586,6 @@ void start_ap_mode()
 }
 
 void sta_handle_root() {
-    char switch_web_form_buffer[1024];
-    char switch_name[50];
     int switch_state;
     int i;
 
@@ -599,15 +593,15 @@ void sta_handle_root() {
 
     // Check for switch and state
     if (gv_web_server.hasArg("control") && gv_web_server.hasArg("state")) {
-        strcpy(switch_name, gv_web_server.arg("control").c_str());
+        strcpy(gv_small_buffer, gv_web_server.arg("control").c_str());
         switch_state = atoi(gv_web_server.arg("state").c_str());
-        set_switch_state(switch_name, -1, switch_state); // specifying name only
+        set_switch_state(gv_small_buffer, -1, switch_state); // specifying name only
     }
 
     // Will display basic info page
     // with on/off buttons per configured 
     // switch
-    ets_sprintf(gv_web_page_buffer,
+    ets_sprintf(gv_large_buffer,
                 "<h2>%s</h2>"
                 "<p>Zone: %s</p>",
                 gv_mdns_hostname, 
@@ -618,32 +612,31 @@ void sta_handle_root() {
     i = 0;
     while (gv_switch_register[i].name) {
         if (strlen(gv_switch_register[i].name) > 0) {
-            ets_sprintf(switch_web_form_buffer,
+            ets_sprintf(gv_small_buffer,
                         "<p><a href=\"/?control=%s&state=1\"><button>%s On</button></a>&nbsp;"
                         "<a href=\"/?control=%s&state=0\"><button>%s Off</button></a></p>",
                         gv_config.switch_names[i],
                         gv_config.switch_names[i],
                         gv_config.switch_names[i],
                         gv_config.switch_names[i]);
-            strcat(gv_web_page_buffer, switch_web_form_buffer);
+            strcat(gv_large_buffer, gv_small_buffer);
         }
         i++; // to the next entry in register
     }
 
-    gv_web_server.send(200, "text/html", gv_web_page_buffer);
+    gv_web_server.send(200, "text/html", gv_large_buffer);
 }
 
 void sta_handle_json() {
-    char switch_name[50];
     int switch_state;
     
     Serial.printf("sta_handle_json()\n");
 
     // Check for switch and state
     if (gv_web_server.hasArg("control") && gv_web_server.hasArg("state")) {
-        strcpy(switch_name, gv_web_server.arg("control").c_str());
+        strcpy(gv_small_buffer, gv_web_server.arg("control").c_str());
         switch_state = atoi(gv_web_server.arg("state").c_str());
-        set_switch_state(switch_name, -1, switch_state); // specifying name only
+        set_switch_state(gv_small_buffer, -1, switch_state); // specifying name only
     }
 
     // Return current status as standard
