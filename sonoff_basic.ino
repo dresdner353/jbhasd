@@ -684,8 +684,8 @@ void sta_handle_root() {
     // with on/off buttons per configured 
     // switch
     ets_sprintf(gv_large_buffer,
-                "<h2>%s</h2>"
-                "<p>Zone: %s</p>",
+                "<div>hostname:&nbsp;%s</div>"
+                "<div>Zone:&nbsp;%s</div>",
                 gv_mdns_hostname, 
                 gv_config.zone);
 
@@ -695,8 +695,8 @@ void sta_handle_root() {
     while (gv_switch_register[i].name) {
         if (strlen(gv_switch_register[i].name) > 0) {
             ets_sprintf(gv_small_buffer,
-                        "<p><a href=\"/?control=%s&state=1\"><button>%s On</button></a>&nbsp;"
-                        "<a href=\"/?control=%s&state=0\"><button>%s Off</button></a></p>",
+                        "<div><a href=\"/?control=%s&state=1\"><button>%s On</button></a>&nbsp;"
+                        "<a href=\"/?control=%s&state=0\"><button>%s Off</button></a></div>",
                         gv_config.switch_names[i],
                         gv_config.switch_names[i],
                         gv_config.switch_names[i],
