@@ -3,7 +3,7 @@
 # Simple basic python3 script
 # to detect specified on-network JBHASD devices
 # by zone and switch name and turn them on
-# 30 mins after sunset and off at 2AM
+# 10 mins after sunset and off at 2AM
 # Its more a proof of concept for now
 # until I build something more substantial
 # The script loops every 60secs, detecting all devices
@@ -79,7 +79,7 @@ last_sunset_check = -1
 sunset_epoch = 0
 
 # Lights on N seconds after sunset
-sunset_lights_on_offset = 1800
+sunset_lights_on_offset = 600
 
 # Lights off at given HHMM time
 # Time here is a 4 digit decimal number
