@@ -146,7 +146,7 @@ while (1):
 
     print ("Discovered Devices:")
     for key in jbhasd_url_dict.keys():
-        print("\nName:%s URL:%s" % (key, jbhasd_url_dict[key]))
+        print("\nHostname:%s URL:%s" % (key, jbhasd_url_dict[key]))
 
         response = None
         try:
@@ -157,11 +157,12 @@ while (1):
 
         if (response is not None):
             response_str = response.read()
+            print("Raw JSON data..\n%s" % (response_str))
             json_data = json.loads(response_str.decode('utf-8'))
             device_name = json_data['name']
             zone_name = json_data['zone']
-            print("JSON.. Name:%s Zone:%s" % (device_name, 
-                                              zone_name))
+            print("Name:%s Zone:%s" % (device_name, 
+                                       zone_name))
             for control in json_data['controls']:
                 control_name = control['name']
                 control_type = control['type']
