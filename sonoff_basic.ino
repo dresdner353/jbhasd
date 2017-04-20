@@ -6,6 +6,7 @@
 //
 // The defaults below will work with a Sonoff wifi switch
 // but can easily be adapted for other breakouts
+// Also includes support for DHT temp sensors
 
 #include <EEPROM.h>
 #include <ESP8266WiFi.h>
@@ -14,6 +15,7 @@
 #include <ESP8266mDNS.h>
 #include <DNSServer.h>
 #include <ESP8266mDNS.h>
+#include <DHT.h>
 
 // Boot time programming pin
 // If grounded within first 5 seconds, it causes the device 
@@ -47,6 +49,8 @@ struct gpio_switch {
     unsigned char current_state;
 };
 
+// Value used to define an unset PIN
+// using 255 as we're operating in unsigned char
 #define NO_PIN 255
 
 // In memory definition of the gpio switches/leds we have.
@@ -73,6 +77,44 @@ struct gpio_switch gv_switch_register[] = {
     { NULL,  NO_PIN, NO_PIN, NO_PIN, 0, 0 }  // terminator.. never delete this
 };
 
+// enum type for sensor types
+// only one supported for now in DHT
+// defined a NONE type for clarity
+enum gpio_sensor_type {
+    GP_SENS_TYPE_NONE,  // None
+    GP_SENS_TYPE_DHT    // DHT-type sensor 
+};
+
+// Definition for a sensor
+// name, type, variant, pin, struct/class obj ref
+// and 2 floats to hold values
+struct gpio_sensor {
+    char *name;
+    enum gpio_sensor_type sensor_type;
+    unsigned char sensor_variant; // DHT11 DHT22, DHT21 etc
+    unsigned char sensor_pin; // pin for sensor
+    void *ref; // point to allocated reference struct/class
+
+    // value place holders
+    float f1;
+    float f2;
+};
+
+// Sensor register
+// Read as name, type, variant, sensor pin, ref ptr and 2 float variables
+// The name acts as default but can be over-ridden by config.
+// Ideally, dont add entries of type GP_SENS_TYPE_NONE. These are pure dummy
+// sensors and only end up populating a dummy entry in the JSON status
+// You can however ddefine a DHT sensor and assign NO_PIN for its read pin
+// That will result in it acting with pseudo random values based on cycle count
+// Allows you to test the feature without having to use actual sensors.
+struct gpio_sensor gv_sensor_register[] = {
+    { "Temp",  GP_SENS_TYPE_DHT, DHT21,      14, NULL, 0, 0 }, // Standard Sonoff spare GPIO 14
+    { "Wilma", GP_SENS_TYPE_DHT,     0,  NO_PIN, NULL, 0, 0 }, // Fake DHT with no pin
+    { NULL,    GP_SENS_TYPE_NONE,    0,       0, NULL, 0, 0 }  // terminator.. never delete
+};
+
+
 // EEPROM Configuration
 // It uses a struct of fields which is cast directly against 
 // the eeprom array. The marker field is used to store a dummy 
@@ -82,8 +124,9 @@ struct gpio_switch gv_switch_register[] = {
 // config is then reset
 
 #define MAX_FIELD_LEN 20
-#define MAX_SWITCHES 20
-#define CFG_MARKER_VAL 0xB4
+#define MAX_SWITCHES 5
+#define MAX_SENSORS 5
+#define CFG_MARKER_VAL 0x05
 
 struct eeprom_config {
     unsigned char marker;
@@ -92,6 +135,7 @@ struct eeprom_config {
     char wifi_password[MAX_FIELD_LEN];
     char switch_names[MAX_SWITCHES][MAX_FIELD_LEN];
     unsigned char switch_initial_states[MAX_SWITCHES];
+    char sensor_names[MAX_SENSORS][MAX_FIELD_LEN];
 } gv_config;
 
 // Runtime mode
@@ -121,11 +165,12 @@ char gv_mdns_hostname[MAX_FIELD_LEN];
 
 // Output buffers
 // In an effort to keep the RAM usage low
-// It seems best to use a single large and single 
-// small buffer to do all string formatting for
+// It seems best to use a single large and two 
+// small buffers to do all string formatting for
 // web pages and JSON strings
 char gv_large_buffer[4096];
-char gv_small_buffer[1024];
+char gv_small_buffer_1[1024];
+char gv_small_buffer_2[1024];
 
 // Not sure how standard LOW,HIGH norms are
 // but these registers allow us customise as required.
@@ -314,6 +359,146 @@ void check_manual_switches()
     }
 }
 
+// Function: setup_sensors
+// Scans the in-memory array and configures the 
+// defined sensor pins
+void setup_sensors()
+{
+    static int already_setup = 0;
+    int i;
+    DHT *dhtp;
+
+    Serial.printf("setup_sensors()\n");
+
+    // Protect against multiple calls
+    // can only really set these sensors up once
+    // because of the pointer ref field
+    // could try to get smart and call delete on set pointers
+    // but its probably safer to just do this once.
+    if (already_setup) {
+        Serial.printf("already setup (returning)\n");
+    }
+    already_setup = 1;
+
+    // loop until we reach the terminator where
+    // name is NULL
+    i = 0;
+    while (gv_sensor_register[i].name) {
+        gv_sensor_register[i].name = gv_config.sensor_names[i];
+        if (strlen(gv_sensor_register[i].name) > 0) {
+            Serial.printf("Setting up sensor %s\n", 
+                          gv_sensor_register[i].name);
+
+            switch (gv_sensor_register[i].sensor_type) {
+              case GP_SENS_TYPE_NONE:
+                // do nothing
+                break;
+
+              case GP_SENS_TYPE_DHT:
+                Serial.printf("DHT Type %d on pin %d\n", 
+                              gv_sensor_register[i].sensor_variant,
+                              gv_sensor_register[i].sensor_pin);
+
+                if (gv_sensor_register[i].sensor_pin != NO_PIN) {
+                    // Setup DHT temp/humidity sensor and record
+                    // class pointer in void* ref 
+                    dhtp = new DHT(gv_sensor_register[i].sensor_pin,
+                                   gv_sensor_register[i].sensor_variant);
+                    gv_sensor_register[i].ref = dhtp;
+                }
+                else {
+                    Serial.printf("Sensor not assigned to pin (fake)\n");
+                    // non-pin assigned DHT
+                    // for faking/simulation
+                    gv_sensor_register[i].ref = NULL;
+                }
+                break;
+            }
+        }
+
+        i++; // to the next entry in register
+    }
+}
+
+// Function: float_get_fp
+// Returns floating point part of float
+// as integer. Needed due to limitations of
+// formatting where it cant handle %f in ets_sprintf
+int float_get_fp(float f, int precision) {
+   
+   int f_int;
+   unsigned int f_fp;
+   double pwr_of_ten;
+   
+   // Calculate power of ten for precision
+   pwr_of_ten = pow(10, precision);
+   
+   // Integer part
+   f_int = (int)f;
+
+   // decimal part
+   if (f_int < 0) {
+      f_fp = (int) (pwr_of_ten * -1 * f) % (int)pwr_of_ten;
+   } else {
+      f_fp = (int) (pwr_of_ten * f) % (int)pwr_of_ten;
+   }
+
+   return f_fp;
+}
+
+// Function read_sensors()
+// Read sensor information
+void read_sensors()
+{
+    int i;
+    DHT *dhtp;
+    float f1, f2;
+
+    Serial.printf("read_sensors()\n");
+
+    i = 0;
+    while(gv_sensor_register[i].name) {
+        if (strlen(gv_sensor_register[i].name) > 0) {
+            switch (gv_sensor_register[i].sensor_type) {
+              case GP_SENS_TYPE_DHT:
+                dhtp = (DHT*)gv_sensor_register[i].ref;
+
+                if (gv_sensor_register[i].sensor_pin != NO_PIN) {
+                    // Humidity
+                    f1 = dhtp->readHumidity();
+
+                    // Temp Celsius
+                    f2 = dhtp->readTemperature();
+
+                    if (isnan(f1) || isnan(f2)) {
+                        Serial.printf("Sensor read failed for %s\n", 
+                                      gv_sensor_register[i].name);
+                    }
+                    else {
+                        gv_sensor_register[i].f1 = f1;
+                        gv_sensor_register[i].f2 = f2;
+                    }
+                }
+                else {
+                    // fake the values
+                    gv_sensor_register[i].f1 = (ESP.getCycleCount() % 100) + 0.5;
+                    gv_sensor_register[i].f2 = ((ESP.getCycleCount() + 
+                                                 ESP.getFreeHeap()) % 100) + 0.25;
+                }
+                Serial.printf("Sensor: %s Humidity: %d.%02d Temperature: %d.%02d\n",
+                              gv_sensor_register[i].name,
+                              (int)gv_sensor_register[i].f1,
+                              float_get_fp(gv_sensor_register[i].f1, 2),
+                              (int)gv_sensor_register[i].f2,
+                              float_get_fp(gv_sensor_register[i].f2, 2));
+                break;
+            }
+        }
+
+        i++;
+    }
+}
+
 // Function: get_json_status
 // formats and returns a JSON string representing
 // the device details, configuration status and system info
@@ -324,16 +509,21 @@ const char *get_json_status()
 
     Serial.printf("get_json_status()\n");
 
+    // refresh sensors
+    read_sensors();
+
     /*  JSON specification for the status string we return 
-     *  { "name": "%s", "zone": "%s", "controls": [%s], "system" : { "reset_reason" : "%s", 
+     *  { "name": "%s", "zone": "%s", "controls": [%s], "sensors": [%s], "system" : { "reset_reason" : "%s", 
      *  "free_heap" : %d, "chip_id" : %d, "flash_id" : %d, "flash_size" : %d, 
      *  "flash_real_size" : %d, "flash_speed" : %d, "cycle_count" : %d } }
      *
      *  Control: { "name": "%s", "type": "%s", "state": %d }
+     *  Sensor: { "name": "%s", "type": "%s", "humidity": "%s", temp: "%s" }
      */
 
-    str_ptr = gv_small_buffer;
-    gv_small_buffer[0] = 0;
+    // switches
+    str_ptr = gv_small_buffer_1;
+    gv_small_buffer_1[0] = 0;
     i = 0;
     while(gv_switch_register[i].name) {
 
@@ -341,7 +531,7 @@ const char *get_json_status()
         // Those disabled will have had their name
         // set empty
         if (strlen(gv_switch_register[i].name) > 0) {
-            if (str_ptr != gv_small_buffer) {
+            if (str_ptr != gv_small_buffer_1) {
                 // separator
                 str_ptr += ets_sprintf(str_ptr, ", ");
             }
@@ -354,14 +544,55 @@ const char *get_json_status()
         i++;
     }
 
+    // sensors
+    str_ptr = gv_small_buffer_2;
+    gv_small_buffer_2[0] = 0;
+    i = 0;
+    while(gv_sensor_register[i].name) {
+        if (strlen(gv_sensor_register[i].name) > 0) {
+            if (str_ptr != gv_small_buffer_2) {
+                // separator
+                str_ptr += ets_sprintf(str_ptr, ", ");
+            }
+
+            switch (gv_sensor_register[i].sensor_type) {
+              case GP_SENS_TYPE_NONE:
+                // dummy not expecting to go here really
+                // but we can put out a dummy entry if only to keep 
+                // the JSON valid
+                str_ptr += ets_sprintf(str_ptr,
+                                       "{ \"name\": \"%s\", \"type\": \"dummy\" }",
+                                       gv_sensor_register[i].name);
+                break;
+
+              case GP_SENS_TYPE_DHT:
+                str_ptr += ets_sprintf(str_ptr,
+                                       "{ \"name\": \"%s\", \"type\": \"temp/humidity\", "
+                                       "\"humidity\": \"%d.%02d\", "
+                                       "\"temp\": \"%d.%02d\" }",
+                                       gv_sensor_register[i].name,
+                                       (int)gv_sensor_register[i].f1,
+                                       float_get_fp(gv_sensor_register[i].f1, 2),
+                                       (int)gv_sensor_register[i].f2,
+                                       float_get_fp(gv_sensor_register[i].f2, 2));
+                break;
+            }
+        }
+
+        i++;
+    }
+
     ets_sprintf(gv_large_buffer,
-                "{ \"name\": \"%s\", \"zone\": \"%s\", \"controls\": [%s], "
+                "{ \"name\": \"%s\", \"zone\": \"%s\", "
+                "\"controls\": [%s], "
+                "\"sensors\": [%s], "
                 "\"system\" : { \"reset_reason\" : \"%s\", \"free_heap\" : %u, "
                 "\"chip_id\" : %u, \"flash_id\" : %u, \"flash_size\" : %u, "
                 "\"flash_real_size\" : %u, \"flash_speed\" : %u, \"cycle_count\" : %u } }\n",
                 gv_mdns_hostname,
                 gv_config.zone,
-                gv_small_buffer,
+                gv_small_buffer_1,
+                gv_small_buffer_2,
                 ESP.getResetReason().c_str(),
                 ESP.getFreeHeap(),
                 ESP.getChipId(),
@@ -394,12 +625,20 @@ void load_config()
         // memset to 0, empty strings galore
         memset(&gv_config, 0, sizeof(gv_config));
 
-        // populate defaults from in-memory array
+        // populate switch defaults from in-memory array
         i = 0;
         while (gv_switch_register[i].name) {
             strcpy(&(gv_config.switch_names[i][0]),
                    gv_switch_register[i].name);
             gv_config.switch_initial_states[i] = gv_switch_register[i].initial_state;
+            i++;
+        }
+
+        // populate sensor defaults
+        i = 0;
+        while (gv_sensor_register[i].name) {
+            strcpy(&(gv_config.sensor_names[i][0]),
+                   gv_sensor_register[i].name);
             i++;
         }
     }
@@ -421,6 +660,14 @@ void load_config()
                       i, 
                       gv_config.switch_names[i],
                       gv_config.switch_initial_states[i]);
+    }
+    
+    // Print values of each sensor name
+    for (i = 0; i < MAX_SENSORS; i++) {
+        // format switch arg name
+        Serial.printf("Sensor[%d]:%s\n", 
+                      i, 
+                      gv_config.sensor_names[i]);
     }
 }
 
@@ -451,6 +698,14 @@ void save_config()
                       i, 
                       gv_config.switch_names[i],
                       gv_config.switch_initial_states[i]);
+    }
+    
+    // Print values of each sensor name
+    for (i = 0; i < MAX_SENSORS; i++) {
+        // format switch arg name
+        Serial.printf("Sensor[%d]:%s\n", 
+                      i, 
+                      gv_config.sensor_names[i]);
     }
 
     EEPROM.begin(512);
@@ -488,37 +743,59 @@ void ap_handle_root() {
             Serial.printf("Getting post args for switches %d/%d\n",
                           i, MAX_SWITCHES - 1);
             // format switch arg name
-            ets_sprintf(gv_small_buffer,
+            ets_sprintf(gv_small_buffer_1,
                         "switch%d",
                         i);
             // Retrieve if present
-            if (gv_web_server.hasArg(gv_small_buffer)) {
+            if (gv_web_server.hasArg(gv_small_buffer_1)) {
                 // Be careful here. Had to strcpy against
                 // the address of the first char of the string array
                 // just using gv_config.switch_names[i] on its own
                 // caused exceptions so it needed to be clearly spelled 
                 // out in terms of address
                 strcpy(&(gv_config.switch_names[i][0]), 
-                       gv_web_server.arg(gv_small_buffer).c_str());
+                       gv_web_server.arg(gv_small_buffer_1).c_str());
                 Serial.printf("Got:%s:%s\n", 
-                              gv_small_buffer,
+                              gv_small_buffer_1,
                               gv_config.switch_names[i]);
             }
 
             // format state arg name
-            ets_sprintf(gv_small_buffer,
+            ets_sprintf(gv_small_buffer_1,
                         "state%d",
                         i);
             // Retrieve if present
-            if (gv_web_server.hasArg(gv_small_buffer)) {
+            if (gv_web_server.hasArg(gv_small_buffer_1)) {
                 Serial.printf("Arg %s present\n",
-                              gv_small_buffer);
+                              gv_small_buffer_1);
 
                 gv_config.switch_initial_states[i] =
-                    atoi(gv_web_server.arg(gv_small_buffer).c_str());
+                    atoi(gv_web_server.arg(gv_small_buffer_1).c_str());
                 Serial.printf("Got:%s:%d\n", 
-                              gv_small_buffer, 
+                              gv_small_buffer_1, 
                               gv_config.switch_initial_states[i]);
+            }
+        }
+        
+        for (i = 0; i < MAX_SENSORS; i++) {
+            Serial.printf("Getting post args for sensors %d/%d\n",
+                          i, MAX_SENSORS - 1);
+            // format sensor arg name
+            ets_sprintf(gv_small_buffer_1,
+                        "sensor%d",
+                        i);
+            // Retrieve if present
+            if (gv_web_server.hasArg(gv_small_buffer_1)) {
+                // Be careful here. Had to strcpy against
+                // the address of the first char of the string array
+                // just using gv_config.switch_names[i] on its own
+                // caused exceptions so it needed to be clearly spelled 
+                // out in terms of address
+                strcpy(&(gv_config.sensor_names[i][0]), 
+                       gv_web_server.arg(gv_small_buffer_1).c_str());
+                Serial.printf("Got:%s:%s\n", 
+                              gv_small_buffer_1,
+                              gv_config.sensor_names[i]);
             }
         }
 
@@ -606,7 +883,7 @@ void start_ap_mode()
 
         // Formt the Switch config segment
         ets_sprintf(
-                    gv_small_buffer,
+                    gv_small_buffer_1,
                     "<div>"
                     "    <label>Switch %d</label>"
                     "    <input type=\"text\" value=\"%s\" maxlength=\"%d\" name=\"switch%d\">"
@@ -624,7 +901,28 @@ void start_ap_mode()
                     combi_off_selected);
 
         // append to the larger form
-        strcat(gv_large_buffer, gv_small_buffer);
+        strcat(gv_large_buffer, gv_small_buffer_1);
+        i++; // to the next entry in register
+    }
+
+    // append name entries for sensors    
+    i = 0;
+    while (gv_sensor_register[i].name) {
+
+        // Formt the sensor config segment
+        ets_sprintf(
+                    gv_small_buffer_1,
+                    "<div>"
+                    "    <label>Sensor %d</label>"
+                    "    <input type=\"text\" value=\"%s\" maxlength=\"%d\" name=\"sensor%d\">"
+                    "</div>",
+                    i + 1,
+                    gv_config.sensor_names[i],
+                    MAX_FIELD_LEN,
+                    i);
+
+        // append to the larger form
+        strcat(gv_large_buffer, gv_small_buffer_1);
         i++; // to the next entry in register
     }
 
@@ -673,11 +971,14 @@ void sta_handle_root() {
 
     Serial.printf("sta_handle_root()\n");
 
+    // Update sensors
+    read_sensors();
+
     // Check for switch and state
     if (gv_web_server.hasArg("control") && gv_web_server.hasArg("state")) {
-        strcpy(gv_small_buffer, gv_web_server.arg("control").c_str());
+        strcpy(gv_small_buffer_1, gv_web_server.arg("control").c_str());
         switch_state = atoi(gv_web_server.arg("state").c_str());
-        set_switch_state(gv_small_buffer, -1, switch_state); // specifying name only
+        set_switch_state(gv_small_buffer_1, -1, switch_state); // specifying name only
     }
 
     // Will display basic info page
@@ -689,19 +990,35 @@ void sta_handle_root() {
                 gv_mdns_hostname, 
                 gv_config.zone);
 
+    // append details on sensors
+    i = 0;
+    while (gv_sensor_register[i].name) {
+        if (strlen(gv_sensor_register[i].name) > 0) {
+            ets_sprintf(gv_small_buffer_1,
+                        "<div>%s&nbsp;f1:%d.%02d f2:%d.%02d</div>",
+                        gv_sensor_register[i].name,
+                        (int)gv_sensor_register[i].f1,
+                        float_get_fp(gv_sensor_register[i].f1, 2),
+                        (int)gv_sensor_register[i].f2,
+                        float_get_fp(gv_sensor_register[i].f2, 2));
+            strcat(gv_large_buffer, gv_small_buffer_1);
+        }
+        i++; // to the next entry in register
+    }
+
     // append entries for switches
     // as simple on/off switch pairs 
     i = 0;
     while (gv_switch_register[i].name) {
         if (strlen(gv_switch_register[i].name) > 0) {
-            ets_sprintf(gv_small_buffer,
+            ets_sprintf(gv_small_buffer_1,
                         "<div><a href=\"/?control=%s&state=1\"><button>%s On</button></a>&nbsp;"
                         "<a href=\"/?control=%s&state=0\"><button>%s Off</button></a></div>",
                         gv_config.switch_names[i],
                         gv_config.switch_names[i],
                         gv_config.switch_names[i],
                         gv_config.switch_names[i]);
-            strcat(gv_large_buffer, gv_small_buffer);
+            strcat(gv_large_buffer, gv_small_buffer_1);
         }
         i++; // to the next entry in register
     }
@@ -724,9 +1041,9 @@ void sta_handle_json() {
 
     // Check for switch and state
     if (gv_web_server.hasArg("control") && gv_web_server.hasArg("state")) {
-        strcpy(gv_small_buffer, gv_web_server.arg("control").c_str());
+        strcpy(gv_small_buffer_1, gv_web_server.arg("control").c_str());
         switch_state = atoi(gv_web_server.arg("state").c_str());
-        set_switch_state(gv_small_buffer, -1, switch_state); // specifying name only
+        set_switch_state(gv_small_buffer_1, -1, switch_state); // specifying name only
     }
 
     // Return current status as standard
@@ -781,6 +1098,9 @@ void start_sta_mode()
     // to reset all to defaults
     // including the status LED if used
     setup_switches();
+
+    // sensors
+    setup_sensors();
 
     gv_sta_ip = WiFi.localIP();
     Serial.printf("Connected.. IP:%d.%d.%d.%d\n", 
