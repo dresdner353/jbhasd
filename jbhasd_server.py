@@ -3,7 +3,7 @@
 # Simple basic python3 script
 # to detect specified on-network JBHASD devices
 # by zone and switch name and turn them on
-# 30 mins after sunset and off at 2AM
+# 10 mins after sunset and off at 2AM
 # Its more a proof of concept for now
 # until I build something more substantial
 # The script loops every 60secs, detecting all devices
@@ -79,7 +79,7 @@ last_sunset_check = -1
 sunset_epoch = 0
 
 # Lights on N seconds after sunset
-sunset_lights_on_offset = 1800
+sunset_lights_on_offset = 600
 
 # Lights off at given HHMM time
 # Time here is a 4 digit decimal number
@@ -146,7 +146,7 @@ while (1):
 
     print ("Discovered Devices:")
     for key in jbhasd_url_dict.keys():
-        print("\nName:%s URL:%s" % (key, jbhasd_url_dict[key]))
+        print("\nHostname:%s URL:%s" % (key, jbhasd_url_dict[key]))
 
         response = None
         try:
@@ -157,11 +157,12 @@ while (1):
 
         if (response is not None):
             response_str = response.read()
+            print("Raw JSON data..\n%s" % (response_str))
             json_data = json.loads(response_str.decode('utf-8'))
             device_name = json_data['name']
             zone_name = json_data['zone']
-            print("JSON.. Name:%s Zone:%s" % (device_name, 
-                                              zone_name))
+            print("Name:%s Zone:%s" % (device_name, 
+                                       zone_name))
             for control in json_data['controls']:
                 control_name = control['name']
                 control_type = control['type']
