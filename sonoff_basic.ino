@@ -126,7 +126,7 @@ struct gpio_sensor gv_sensor_register[] = {
 #define MAX_FIELD_LEN 20
 #define MAX_SWITCHES 5
 #define MAX_SENSORS 5
-#define CFG_MARKER_VAL 0x05
+#define CFG_MARKER_VAL 0x08
 
 struct eeprom_config {
     unsigned char marker;
@@ -616,7 +616,7 @@ void load_config()
 
     Serial.printf("Read EEPROM data..(%d bytes)\n", sizeof(gv_config));
 
-    EEPROM.begin(512);
+    EEPROM.begin(sizeof(gv_config) + 10);
     EEPROM.get(0, gv_config);
 
     if (gv_config.marker != CFG_MARKER_VAL) {
@@ -708,7 +708,7 @@ void save_config()
                       gv_config.sensor_names[i]);
     }
 
-    EEPROM.begin(512);
+    EEPROM.begin(sizeof(gv_config) + 10);
     EEPROM.put(0, gv_config);
     EEPROM.commit();
 }
@@ -1147,6 +1147,11 @@ void setup()
     ets_sprintf(gv_mdns_hostname,
                 "esp8266-%d",
                 ESP.getChipId());
+
+    Serial.printf("Device boot: ChipId:%u FreeHeap:%u ResetReason:%s\n",
+                  ESP.getChipId(),
+                  ESP.getFreeHeap(),
+                  ESP.getResetReason().c_str());
 
     // Get the config at this stage
     load_config();
