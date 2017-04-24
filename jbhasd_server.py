@@ -21,6 +21,7 @@ import urllib.error
 import json
 import random
 import datetime
+from dateutil import tz
 from zeroconf import ServiceBrowser, Zeroconf
 
 # set with co-ords of Dublin Spire, Ireland
@@ -41,6 +42,10 @@ def sunset_api_time_to_epoch(time_str):
     # decode UTC time from string, strip last 6 chars first
     ts_datetime = datetime.datetime.strptime(time_str[:-6], 
                                              '%Y-%m-%dT%H:%M:%S')
+    # Adjust for UTC source timezone (strp is local based)
+    from_zone = tz.tzutc()
+    ts_datetime = ts_datetime.replace(tzinfo=from_zone)
+
     # Epoch extraction
     epoch_time = time.mktime(ts_datetime.timetuple())
 
@@ -109,7 +114,8 @@ while (1):
             json_data = json.loads(response_str.decode('utf-8'))
             sunset_str = json_data['results']['sunset']
             sunset_ts = sunset_api_time_to_epoch(sunset_str)
-            lights_on_time = int(time.strftime("%H%M", time.localtime(sunset_ts + sunset_lights_on_offset)))
+            local_time = time.localtime(sunset_ts + sunset_lights_on_offset)
+            lights_on_time = int(time.strftime("%H%M", local_time))
             print("Lights on at: (%04d)" % (lights_on_time))
 
         last_sunset_check = now
