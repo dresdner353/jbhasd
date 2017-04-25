@@ -27,9 +27,10 @@ Once the device is connected to your WiFI, you can discover it via zeroconf and 
 $ curl 'http://192.168.12.165/json'
 { "name": "esp8266-9825072", "zone": "Attic", "controls": [{ "name": "A", "type": "switch", "state": 1 }, 
 { "name": "B", "type": "switch", "state": 0 }, { "name": "C", "type": "switch", "state": 0 }, 
-{ "name": "D", "type": "switch", "state": 0 }], "sensors": [{ "name": "Temp", "type": "temp/humidity", "humidity": "38.00", 
-"temp": "21.70" }, { "name": "Wilma", "type": "temp/humidity", "humidity": "3.50", "temp": "75.25" }], 
-"system" : { "reset_reason" : "Power on", "free_heap" : 32200, "chip_id" : 9825072, "flash_id" : 1327328, 
+{ "name": "D", "type": "switch", "state": 0 }], "sensors": [{ "name": "Temp", "type": "temp/humidity", 
+"humidity": "38.00", "temp": "21.70" }, { "name": "Wilma", "type": "temp/humidity", "humidity": "3.50", 
+"temp": "75.25" }], "system" : { "reset_reason" : "Power on", "free_heap" : 32200, 
+"chip_id" : 9825072, "flash_id" : 1327328, 
 "flash_size" : 1048576, "flash_real_size" : 1048576, "flash_speed" : 40000000, "cycle_count" : 661931206 } }
 ```
 The response will list the device name, zone, controls and sensors. Each control lists its type (only switch defined for now) and given state. The sensors list their type (again only temp/humidity for now) and the humidity and temp values in Celsius. There is also a sub-struct of system details showing reset reasons, free heap etc. All this system detail was taken from the variety of calls you can make on the ESP global object. 
@@ -40,19 +41,21 @@ clong@Clong-1 ~
 $ curl 'http://192.168.12.165/json?control=A&state=0'
 { "name": "esp8266-9825072", "zone": "Attic", "controls": [{ "name": "A", "type": "switch", "state": 0 }, 
 { "name": "B", "type": "switch", "state": 0 }, { "name": "C", "type": "switch", "state": 0 }, 
-{ "name": "D", "type": "switch", "state": 0 }], "sensors": [{ "name": "Temp", "type": "temp/humidity", "humidity": "38.00", 
-"temp": "21.60" }, { "name": "Wilma", "type": "temp/humidity", "humidity": "86.50", "temp": "12.25" }], 
-"system" : { "reset_reason" : "Power on", "free_heap" : 32048, "chip_id" : 9825072, "flash_id" : 1327328, 
-"flash_size" : 1048576, "flash_real_size" : 1048576, "flash_speed" : 40000000, "cycle_count" : 716904159 } }
+{ "name": "D", "type": "switch", "state": 0 }], "sensors": [{ "name": "Temp", "type": "temp/humidity", 
+"humidity": "38.00", "temp": "21.60" }, { "name": "Wilma", "type": "temp/humidity", 
+"humidity": "86.50", "temp": "12.25" }], "system" : { "reset_reason" : "Power on", "free_heap" : 32048, 
+"chip_id" : 9825072, "flash_id" : 1327328, "flash_size" : 1048576, "flash_real_size" : 1048576, 
+"flash_speed" : 40000000, "cycle_count" : 716904159 } }
 
 clong@Clong-1 ~
 $ curl 'http://192.168.12.165/json?control=A&state=1'
 { "name": "esp8266-9825072", "zone": "Attic", "controls": [{ "name": "A", "type": "switch", "state": 1 }, 
 { "name": "B", "type": "switch", "state": 0 }, { "name": "C", "type": "switch", "state": 0 }, 
 { "name": "D", "type": "switch", "state": 0 }], "sensors": [{ "name": "Temp", "type": "temp/humidity", 
-"humidity": "38.00", "temp": "21.39" }, { "name": "Wilma", "type": "temp/humidity", "humidity": "0.50", "temp": "19.25" }], 
-"system" : { "reset_reason" : "Power on", "free_heap" : 32048, "chip_id" : 9825072, "flash_id" : 1327328, 
-"flash_size" : 1048576, "flash_real_size" : 1048576, "flash_speed" : 40000000, "cycle_count" : 954438381 } }
+"humidity": "38.00", "temp": "21.39" }, { "name": "Wilma", "type": "temp/humidity", 
+"humidity": "0.50", "temp": "19.25" }], "system" : { "reset_reason" : "Power on", "free_heap" : 32048, 
+"chip_id" : 9825072, "flash_id" : 1327328, "flash_size" : 1048576, "flash_real_size" : 1048576, 
+"flash_speed" : 40000000, "cycle_count" : 954438381 } }
 ```
 To be true to a JSON solution, I probably should go and enhance this to allow you post a full JSON body in the request. For now, I'll stick with a more basic approach as it makes command-line control easier. The examples above are all GET-based but the ESP8266 webserver supports GET and POST simultaneously.
 
