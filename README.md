@@ -57,7 +57,7 @@ $ curl 'http://192.168.12.165/json?control=A&state=1'
 ```
 To be true to a JSON solution, I probably should go and enhance this to allow you post a full JSON body in the request. For now, I'll stick with a more basic approach as it makes command-line control easier. The examples above are all GET-based but the ESP8266 webserver supports GET and POST simultaneously.
 
-If you browse to the base URL on its own.. http://xxx.xxx.xxx.xxx, then you get a very primitive web page with details on sensors and simple buttons to toggle the switches on/off.
+If you browse to the base URL on its own (minus the /json path) then you get a very primitive web page with details on sensors and simple buttons to toggle the switches on/off.
 
 The sonoff_basic.ino file in this repo is the basic firmware I wrote that should work on any Sonoff device and easily adapt to other ESP-8266 devices. You need to only correct the GPIO pin assignments as required for switches and LEDs and edit the in-memory array entries as required.
 
