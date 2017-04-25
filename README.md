@@ -37,7 +37,6 @@ The response will list the device name, zone, controls and sensors. Each control
 
 Then to demo the toggling of a switch using GET:
 ```
-clong@Clong-1 ~
 $ curl 'http://192.168.12.165/json?control=A&state=0'
 { "name": "esp8266-9825072", "zone": "Attic", "controls": [{ "name": "A", "type": "switch", "state": 0 }, 
 { "name": "B", "type": "switch", "state": 0 }, { "name": "C", "type": "switch", "state": 0 }, 
@@ -47,7 +46,6 @@ $ curl 'http://192.168.12.165/json?control=A&state=0'
 "chip_id" : 9825072, "flash_id" : 1327328, "flash_size" : 1048576, "flash_real_size" : 1048576, 
 "flash_speed" : 40000000, "cycle_count" : 716904159 } }
 
-clong@Clong-1 ~
 $ curl 'http://192.168.12.165/json?control=A&state=1'
 { "name": "esp8266-9825072", "zone": "Attic", "controls": [{ "name": "A", "type": "switch", "state": 1 }, 
 { "name": "B", "type": "switch", "state": 0 }, { "name": "C", "type": "switch", "state": 0 }, 
