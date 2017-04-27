@@ -377,6 +377,7 @@ void setup_sensors()
     // but its probably safer to just do this once.
     if (already_setup) {
         Serial.printf("already setup (returning)\n");
+        return;
     }
     already_setup = 1;
 
@@ -1063,17 +1064,30 @@ void sta_handle_json() {
 // and /json
 void start_sta_mode()
 {
-    int connect_timeout = 120;
+    int connect_timeout = 60;
+    int max_connect_attempts = 5;
+    static int connect_count = 0; // track #times we try to connect
 
     Serial.printf("start_sta_mode()\n");
     gv_mode = MODE_WIFI_STA;
 
-    Serial.printf("Connecting to Wifi SSID:%s, Password:%s, Timeout:%d\n", 
+    // Count attempts and reboot if we exceed max
+    connect_count++;
+    if (connect_count > max_connect_attempts) {
+        Serial.printf("Exceeded max connect attempts of %d.. rebooting\n",
+                      max_connect_attempts);
+        ESP.restart();
+    }
+
+    Serial.printf("Connecting to Wifi SSID:%s, Password:%s, Timeout:%d Attempt:%d/%d\n", 
                   gv_config.wifi_ssid,
                   gv_config.wifi_password,
-                  connect_timeout);
+                  connect_timeout,
+                  connect_count,
+                  max_connect_attempts);
 
     // WIFI
+    WiFi.disconnect();
     WiFi.mode(WIFI_STA);
     WiFi.begin(gv_config.wifi_ssid, 
                gv_config.wifi_password);
@@ -1093,6 +1107,11 @@ void start_sta_mode()
                       gv_config.wifi_ssid);
         return;  
     }
+
+    // reset connect count so that 
+    // we give a reconnect scenario the same max attempts
+    // before reboot
+    connect_count = 0;
 
     // Activate switches
     // to reset all to defaults
@@ -1200,10 +1219,13 @@ void setup()
 // Function: loop
 // Main loop driver callback. 
 // In both AP and STA modes, it drives the web server
-// AP mode mus addtionally operate the DNS server and toggle
+// AP mode must addtionally operate the DNS server and toggle
 // its LED state.
 // STA mode is also calling check_manual_switches() to catch 
-// any user intervention to trn things on/off in normal use
+// any user intervention to turn things on/off in normal use.
+// If WiFI is detected down in STA mode, it simply calls start_sta_mode()
+// again which will repeat the connect attempt. Helps cater for periodic 
+// loss of WiFI
 void loop() 
 {
     switch (gv_mode) {
@@ -1215,9 +1237,18 @@ void loop()
         gv_web_server.handleClient();
         toggle_wifi_led(100); // fast flashing in AP mode
         break;
+        
       case MODE_WIFI_STA:
-        gv_web_server.handleClient();
-        check_manual_switches();
+        // reconnect wifi repeatedly if not connected
+        if (WiFi.status() != WL_CONNECTED) {
+             Serial.printf("Detected WiFI Down in main loop\n");
+             start_sta_mode();
+        }
+        else {
+            // normal STA mode loop handlers
+            gv_web_server.handleClient();
+            check_manual_switches();
+        }
         break;
     }
 }
