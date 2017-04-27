@@ -83,13 +83,16 @@ zeroconf_delay_secs = 60
 last_sunset_check = -1
 sunset_epoch = 0
 
-# Lights on N seconds after sunset
-sunset_lights_on_offset = 600
+# Lights on N seconds after/before sunset
+sunset_lights_on_offset = -1200
 
 # Lights off at given HHMM time
 # Time here is a 4 digit decimal number
 # Good for numerical comparisons
 lights_off_time = int("0200")
+
+# open for append
+sensor_file = open("sensors.csv", "a")
 
 while (1):
 
@@ -195,3 +198,24 @@ while (1):
                                                               timeout = http_timeout_secs)
                         except:
                             print("Error in urlopen (switch state change)")
+
+            for sensor in json_data['sensors']:
+                sensor_name = sensor['name']
+                sensor_type = sensor['type']
+                if sensor_type == "temp/humidity":
+                    now = time.time()
+                    temp = sensor['temp']
+                    humidity = sensor['humidity']
+                    print("Sensor.. %d,%s,%s,%s,%s,%s" % (now, 
+                                                          zone_name, 
+                                                          device_name, 
+                                                          sensor_name, 
+                                                          temp, 
+                                                          humidity))
+                    sensor_file.write("%d,%s,%s,%s,%s,%s\n" % (now, 
+                                                               zone_name, 
+                                                               device_name, 
+                                                               sensor_name, 
+                                                               temp, 
+                                                               humidity))
+                    sensor_file.flush()
