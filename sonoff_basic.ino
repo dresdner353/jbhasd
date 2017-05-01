@@ -16,6 +16,8 @@
 #include <DNSServer.h>
 #include <ESP8266mDNS.h>
 #include <DHT.h>
+#include <WiFiUdp.h>
+#include <ArduinoOTA.h>
 
 // Boot time programming pin
 // If grounded within first 5 seconds, it causes the device 
@@ -145,7 +147,8 @@ struct eeprom_config {
 enum gv_mode_enum {
     MODE_INIT,      // Boot mode
     MODE_WIFI_AP,   // WiFI AP Mode (for config)
-    MODE_WIFI_STA   // WiFI station/client (operation mode)
+    MODE_WIFI_STA,  // WiFI station/client (operation mode)
+    MODE_WIFI_OTA   // OTA mode invoked from STA mode
 };
 enum gv_mode_enum gv_mode = MODE_INIT;
 
@@ -161,7 +164,7 @@ const byte DNS_PORT = 53;
 IPAddress gv_ap_ip(192, 168, 1, 1);
 IPAddress gv_sta_ip;
 DNSServer gv_dns_server;
-char gv_mdns_hostname[MAX_FIELD_LEN];
+char gv_mdns_hostname[MAX_FIELD_LEN + MAX_FIELD_LEN];
 
 // Output buffers
 // In an effort to keep the RAM usage low
@@ -829,6 +832,61 @@ void toggle_wifi_led(int delay_msecs)
     delay(delay_msecs);
 }
 
+// Function: start_ota()
+// Enables OTA service for formware 
+// flashing OTA
+void start_ota()
+{
+    static int already_setup = 0;
+
+    // Only do this once
+    // lost wifi conections will re-run start_sta_mode() so 
+    // we dont want this function called over and over
+    if (already_setup) {
+        Serial.printf("OTA already started\n");
+        return;
+    }
+    already_setup = 1;
+    
+    // Port defaults to 8266
+    // ArduinoOTA.setPort(8266);
+
+    // Set hostname
+    ArduinoOTA.setHostname(gv_mdns_hostname);
+
+    // No authentication by default
+    // ArduinoOTA.setPassword((const char *)"123");
+
+    ArduinoOTA.onStart([]() {
+        Serial.printf("OTA Start\n");
+
+        // Change mode to lock in OTA behaviour
+        gv_mode = MODE_WIFI_OTA;
+    });
+    
+    ArduinoOTA.onEnd([]() {
+        Serial.printf("\nEnd\n");
+    });
+    
+    ArduinoOTA.onProgress([](unsigned int progress, 
+                             unsigned int total) {
+        Serial.printf("Progress: %02u%%\r", (progress / (total / 100)));
+    });
+    
+    ArduinoOTA.onError([](ota_error_t error) {
+        Serial.printf("Error[%u]: \n", error);
+        if (error == OTA_AUTH_ERROR) Serial.printf("Auth Failed\n");
+        else if (error == OTA_BEGIN_ERROR) Serial.printf("Begin Failed\n");
+        else if (error == OTA_CONNECT_ERROR) Serial.printf("Connect Failed\n");
+        else if (error == OTA_RECEIVE_ERROR) Serial.printf("Receive Failed\n");
+        else if (error == OTA_END_ERROR) Serial.printf("End Failed\n");
+    });
+    
+    ArduinoOTA.begin();
+
+    Serial.printf("OTA service started\n");
+}
+
 // Function: start_ap_mode
 // Sets up the device in AP mode
 // The function formats the config form used in 
@@ -1143,6 +1201,8 @@ void start_sta_mode()
     gv_web_server.onNotFound(sta_handle_root);
     gv_web_server.begin();
     Serial.printf("HTTP server started for client mode\n"); 
+
+    start_ota();
 }
 
 // Function: setup
@@ -1161,12 +1221,6 @@ void setup()
 
     gv_mode = MODE_INIT;
 
-    // Set mdns hostname based on chip ID and prefix
-    // will also use this for AP SSID
-    ets_sprintf(gv_mdns_hostname,
-                "esp8266-%d",
-                ESP.getChipId());
-
     Serial.printf("Device boot: ChipId:%u FreeHeap:%u ResetReason:%s\n",
                   ESP.getChipId(),
                   ESP.getFreeHeap(),
@@ -1174,6 +1228,14 @@ void setup()
 
     // Get the config at this stage
     load_config();
+
+    // Set mdns hostname based on prefix, chip ID and zone
+    // will also use this for AP SSID
+    // and OTA mode
+    ets_sprintf(gv_mdns_hostname,
+                "esp8266-%d-%s",
+                ESP.getChipId(),
+                gv_config.zone);
 
     // Activate switches
     // will perform full setup
@@ -1219,10 +1281,12 @@ void setup()
 // Function: loop
 // Main loop driver callback. 
 // In both AP and STA modes, it drives the web server
-// AP mode must addtionally operate the DNS server and toggle
+// AP mode must addtionally operate the DNS server, and toggle
 // its LED state.
 // STA mode is also calling check_manual_switches() to catch 
 // any user intervention to turn things on/off in normal use.
+// STA mode also calls the OTA handler to drive any OTA updating 
+// while in STA mode
 // If WiFI is detected down in STA mode, it simply calls start_sta_mode()
 // again which will repeat the connect attempt. Helps cater for periodic 
 // loss of WiFI
@@ -1247,8 +1311,14 @@ void loop()
         else {
             // normal STA mode loop handlers
             gv_web_server.handleClient();
+            ArduinoOTA.handle();
             check_manual_switches();
         }
+        break;
+
+      case MODE_WIFI_OTA:
+        // pure OTA only behaviour
+        ArduinoOTA.handle();
         break;
     }
 }
