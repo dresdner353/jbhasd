@@ -128,7 +128,7 @@ struct gpio_sensor gv_sensor_register[] = {
 #define MAX_FIELD_LEN 20
 #define MAX_SWITCHES 5
 #define MAX_SENSORS 5
-#define CFG_MARKER_VAL 0x08
+#define CFG_MARKER_VAL 0x09
 
 struct eeprom_config {
     unsigned char marker;
@@ -138,6 +138,7 @@ struct eeprom_config {
     char switch_names[MAX_SWITCHES][MAX_FIELD_LEN];
     unsigned char switch_initial_states[MAX_SWITCHES];
     char sensor_names[MAX_SENSORS][MAX_FIELD_LEN];
+    unsigned char ota_enabled;
 } gv_config;
 
 // Runtime mode
@@ -651,11 +652,13 @@ void load_config()
     Serial.printf("Marker:%02X\n"
                   "Zone:%s\n"
                   "Wifi SSID:%s\n"
-                  "Wifi Password:%s\n",
+                  "Wifi Password:%s\n"
+                  "OTA Update:%u\n",
                   gv_config.marker,
                   gv_config.zone,
                   gv_config.wifi_ssid,
-                  gv_config.wifi_password);
+                  gv_config.wifi_password,
+                  gv_config.ota_enabled);
 
     // Print values of each switch name
     for (i = 0; i < MAX_SWITCHES; i++) {
@@ -689,11 +692,13 @@ void save_config()
     Serial.printf("Marker:%d\n"
                   "Zone:%s\n"
                   "Wifi SSID:%s\n"
-                  "Wifi Password:%s\n",
+                  "Wifi Password:%s\n"
+                  "OTA Update:%u\n",
                   gv_config.marker,
                   gv_config.zone,
                   gv_config.wifi_ssid,
-                  gv_config.wifi_password);
+                  gv_config.wifi_password,
+                  gv_config.ota_enabled);
 
     // Print values of each switch name
     for (i = 0; i < MAX_SWITCHES; i++) {
@@ -742,6 +747,9 @@ void ap_handle_root() {
         strcpy(gv_config.wifi_password, 
                gv_web_server.arg("password").c_str());
         Serial.printf("Got WiFI Password: %s\n", gv_config.wifi_password);
+        
+        gv_config.ota_enabled = atoi(gv_web_server.arg("ota_enabled").c_str());
+        Serial.printf("Got OTA Enabled: %u\n", gv_config.ota_enabled);
 
         for (i = 0; i < MAX_SWITCHES; i++) {
             Serial.printf("Getting post args for switches %d/%d\n",
@@ -846,6 +854,13 @@ void start_ota()
         Serial.printf("OTA already started\n");
         return;
     }
+
+    if (!gv_config.ota_enabled) {
+        Serial.printf("OTA mode not enabled.. returning\n");
+        return;
+    }
+
+    // mark as setup, preventing multiple calls
     already_setup = 1;
     
     // Port defaults to 8266
@@ -900,6 +915,16 @@ void start_ap_mode()
 
     char *combi_on_selected, *combi_off_selected;
 
+    // combi state for OTA 
+    if (gv_config.ota_enabled) {
+        combi_on_selected = "selected";
+        combi_off_selected = "";
+    }
+    else {
+        combi_on_selected = "";
+        combi_off_selected = "selected";
+    }
+
     ets_sprintf(
                 gv_large_buffer,
                 "<h2>%s Setup</h2>"
@@ -915,6 +940,13 @@ void start_ap_mode()
                 "<div>"
                 "    <label>WIFI Password:</label>"
                 "    <input type=\"text\" value=\"%s\" maxlength=\"%d\" name=\"password\">"
+                "</div>"
+                "<div>"
+                "    <label>OTA Update:</label>"
+                "    <select name=\"ota_enabled\">"
+                "        <option value=\"1\" %s>Enabled</option>"
+                "        <option value=\"0\" %s>Disabled</option>"
+                "    </select>"
                 "</div>",
                 gv_mdns_hostname,
                 gv_config.zone, 
@@ -922,7 +954,9 @@ void start_ap_mode()
                 gv_config.wifi_ssid,
                 MAX_FIELD_LEN,
                 gv_config.wifi_password,
-                MAX_FIELD_LEN);
+                MAX_FIELD_LEN,
+                combi_on_selected,
+                combi_off_selected);
 
     // append name entries for switches    
     i = 0;
@@ -1246,9 +1280,19 @@ void setup()
 
     // Set up status LED
     pinMode(gv_wifi_led_pin, OUTPUT);
+    
+    // If we have no SSID provisioned
+    // then we go straight for AP mode
+    if (strlen(gv_config.wifi_ssid) == 0) {
+        Serial.printf("No legit config present.. going directly to AP mode\n");
+        start_ap_mode();
+        return;
+    }
 
-    // 5 seconds or so to activate the reset pin
-    // in the form of 25x200ms delay
+    // Assuming we've got legit config in play
+    // we give 5 seconds or so to activate the reset pin
+    // in the form of 25x200ms delay. That will let us 
+    // jump into AP mode
     pinMode(gv_boot_program_pin, INPUT_PULLUP);
     int pin_wait_timer = 25;
     int delay_msecs = 200;
@@ -1268,14 +1312,7 @@ void setup()
     }
 
     Serial.printf("Passed pin wait stage.. normal startup\n");
-    // If we have no SSID provisioned
-    // then we go for AP mode
-    if (strlen(gv_config.wifi_ssid) == 0) {
-        start_ap_mode();
-    }
-    else {
-        start_sta_mode();
-    }
+    start_sta_mode();
 }
 
 // Function: loop
