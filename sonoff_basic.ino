@@ -518,7 +518,8 @@ const char *get_json_status()
     read_sensors();
 
     /*  JSON specification for the status string we return 
-     *  { "name": "%s", "zone": "%s", "controls": [%s], "sensors": [%s], "system" : { "reset_reason" : "%s", 
+     *  { "name": "%s", "zone": "%s", "ota_enabled" : %d, "controls": [%s], "sensors": [%s], 
+     *  "system" : { "reset_reason" : "%s", 
      *  "free_heap" : %d, "chip_id" : %d, "flash_id" : %d, "flash_size" : %d, 
      *  "flash_real_size" : %d, "flash_speed" : %d, "cycle_count" : %d } }
      *
@@ -588,7 +589,7 @@ const char *get_json_status()
     }
 
     ets_sprintf(gv_large_buffer,
-                "{ \"name\": \"%s\", \"zone\": \"%s\", "
+                "{ \"name\": \"%s\", \"zone\": \"%s\", \"ota_enabled\" : %u, "
                 "\"controls\": [%s], "
                 "\"sensors\": [%s], "
                 "\"system\" : { \"reset_reason\" : \"%s\", \"free_heap\" : %u, "
@@ -596,6 +597,7 @@ const char *get_json_status()
                 "\"flash_real_size\" : %u, \"flash_speed\" : %u, \"cycle_count\" : %u } }\n",
                 gv_mdns_hostname,
                 gv_config.zone,
+                gv_config.ota_enabled,
                 gv_small_buffer_1,
                 gv_small_buffer_2,
                 ESP.getResetReason().c_str(),
