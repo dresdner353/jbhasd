@@ -128,7 +128,7 @@ struct gpio_sensor gv_sensor_register[] = {
 #define MAX_FIELD_LEN 20
 #define MAX_SWITCHES 5
 #define MAX_SENSORS 5
-#define CFG_MARKER_VAL 0x09
+#define CFG_MARKER_VAL 0x0B
 
 struct eeprom_config {
     unsigned char marker;
@@ -139,6 +139,7 @@ struct eeprom_config {
     unsigned char switch_initial_states[MAX_SWITCHES];
     char sensor_names[MAX_SENSORS][MAX_FIELD_LEN];
     unsigned char ota_enabled;
+    unsigned char manual_switches_enabled;
 } gv_config;
 
 // Runtime mode
@@ -331,6 +332,11 @@ void check_manual_switches()
     //Serial.printf("check_manual_switches()\n");
     //delay(delay_msecs);
 
+    if (!gv_config.manual_switches_enabled) {
+        //Serial.printf("manual switches disabled.. returning\n");
+        return;
+    }
+
     // loop until we reach the terminator where
     // name is NULL
     i = 0;
@@ -518,7 +524,9 @@ const char *get_json_status()
     read_sensors();
 
     /*  JSON specification for the status string we return 
-     *  { "name": "%s", "zone": "%s", "ota_enabled" : %d, "controls": [%s], "sensors": [%s], 
+     *  { "name": "%s", "zone": "%s", "ota_enabled" : %d, "manual_switches_enabled" : %d, 
+     *  "controls": [%s], 
+     *  "sensors": [%s], 
      *  "system" : { "reset_reason" : "%s", 
      *  "free_heap" : %d, "chip_id" : %d, "flash_id" : %d, "flash_size" : %d, 
      *  "flash_real_size" : %d, "flash_speed" : %d, "cycle_count" : %d } }
@@ -589,7 +597,10 @@ const char *get_json_status()
     }
 
     ets_sprintf(gv_large_buffer,
-                "{ \"name\": \"%s\", \"zone\": \"%s\", \"ota_enabled\" : %u, "
+                "{ \"name\": \"%s\", "
+                "\"zone\": \"%s\", "
+                "\"ota_enabled\" : %u, "
+                "\"manual_switches_enabled\" : %u, "
                 "\"controls\": [%s], "
                 "\"sensors\": [%s], "
                 "\"system\" : { \"reset_reason\" : \"%s\", \"free_heap\" : %u, "
@@ -598,6 +609,7 @@ const char *get_json_status()
                 gv_mdns_hostname,
                 gv_config.zone,
                 gv_config.ota_enabled,
+                gv_config.manual_switches_enabled,
                 gv_small_buffer_1,
                 gv_small_buffer_2,
                 ESP.getResetReason().c_str(),
@@ -648,6 +660,15 @@ void load_config()
                    gv_sensor_register[i].name);
             i++;
         }
+
+        // OTA defaults to Enabled
+        gv_config.ota_enabled = 1;
+
+        // Manual Switches enabled by default
+        gv_config.manual_switches_enabled = 1;
+
+        // Default zone to an init state
+        strcpy(gv_config.zone, "Unknown");
     }
 
     // Print out config details
@@ -655,12 +676,14 @@ void load_config()
                   "Zone:%s\n"
                   "Wifi SSID:%s\n"
                   "Wifi Password:%s\n"
-                  "OTA Update:%u\n",
+                  "OTA Update:%u\n"
+                  "Manual switches:%u\n",
                   gv_config.marker,
                   gv_config.zone,
                   gv_config.wifi_ssid,
                   gv_config.wifi_password,
-                  gv_config.ota_enabled);
+                  gv_config.ota_enabled,
+                  gv_config.manual_switches_enabled);
 
     // Print values of each switch name
     for (i = 0; i < MAX_SWITCHES; i++) {
@@ -695,12 +718,14 @@ void save_config()
                   "Zone:%s\n"
                   "Wifi SSID:%s\n"
                   "Wifi Password:%s\n"
-                  "OTA Update:%u\n",
+                  "OTA Update:%u\n"
+                  "Manual switches:%u\n",
                   gv_config.marker,
                   gv_config.zone,
                   gv_config.wifi_ssid,
                   gv_config.wifi_password,
-                  gv_config.ota_enabled);
+                  gv_config.ota_enabled,
+                  gv_config.manual_switches_enabled);
 
     // Print values of each switch name
     for (i = 0; i < MAX_SWITCHES; i++) {
@@ -752,6 +777,9 @@ void ap_handle_root() {
         
         gv_config.ota_enabled = atoi(gv_web_server.arg("ota_enabled").c_str());
         Serial.printf("Got OTA Enabled: %u\n", gv_config.ota_enabled);
+
+        gv_config.manual_switches_enabled = atoi(gv_web_server.arg("manual_switches_enabled").c_str());
+        Serial.printf("Got Manual Switches Enabled: %u\n", gv_config.manual_switches_enabled);
 
         for (i = 0; i < MAX_SWITCHES; i++) {
             Serial.printf("Getting post args for switches %d/%d\n",
@@ -914,17 +942,31 @@ void start_ap_mode()
     Serial.printf("start_ap_mode()\n");
     gv_mode = MODE_WIFI_AP;
     int i;
+    char *combi_selected = "selected";
+    char *combi_not_selected = "";
 
-    char *combi_on_selected, *combi_off_selected;
+    char *switch_initial_on_selected, *switch_initial_off_selected;
+    char *ota_on_selected, *ota_off_selected;
+    char *manual_on_selected, *manual_off_selected;
 
     // combi state for OTA 
     if (gv_config.ota_enabled) {
-        combi_on_selected = "selected";
-        combi_off_selected = "";
+        ota_on_selected = combi_selected;
+        ota_off_selected = combi_not_selected;
     }
     else {
-        combi_on_selected = "";
-        combi_off_selected = "selected";
+        ota_on_selected = combi_not_selected;
+        ota_off_selected = combi_selected;
+    }
+
+    // combi state for Manual switches
+    if (gv_config.manual_switches_enabled) {
+        manual_on_selected = combi_selected;
+        manual_off_selected = combi_not_selected;
+    }
+    else {
+        manual_on_selected = combi_not_selected;
+        manual_off_selected = combi_selected;
     }
 
     ets_sprintf(
@@ -949,6 +991,13 @@ void start_ap_mode()
                 "        <option value=\"1\" %s>Enabled</option>"
                 "        <option value=\"0\" %s>Disabled</option>"
                 "    </select>"
+                "</div>"
+                "<div>"
+                "    <label>Manual Switches:</label>"
+                "    <select name=\"manual_switches_enabled\">"
+                "        <option value=\"1\" %s>Enabled</option>"
+                "        <option value=\"0\" %s>Disabled</option>"
+                "    </select>"
                 "</div>",
                 gv_mdns_hostname,
                 gv_config.zone, 
@@ -957,8 +1006,10 @@ void start_ap_mode()
                 MAX_FIELD_LEN,
                 gv_config.wifi_password,
                 MAX_FIELD_LEN,
-                combi_on_selected,
-                combi_off_selected);
+                ota_on_selected,
+                ota_off_selected,
+                manual_on_selected,
+                manual_off_selected);
 
     // append name entries for switches    
     i = 0;
@@ -968,12 +1019,12 @@ void start_ap_mode()
         // the one set to "selected" will force the combi
         // to the current value as stored in config
         if (gv_config.switch_initial_states[i] == 1) {
-            combi_on_selected = "selected";
-            combi_off_selected = "";
+            switch_initial_on_selected = combi_selected;
+            switch_initial_off_selected = combi_not_selected;
         }
         else {
-            combi_on_selected = "";
-            combi_off_selected = "selected";
+            switch_initial_on_selected = combi_not_selected;
+            switch_initial_off_selected = combi_selected;
         }
 
         // Formt the Switch config segment
@@ -992,8 +1043,8 @@ void start_ap_mode()
                     MAX_FIELD_LEN,
                     i,
                     i,
-                    combi_on_selected,
-                    combi_off_selected);
+                    switch_initial_on_selected,
+                    switch_initial_off_selected);
 
         // append to the larger form
         strcat(gv_large_buffer, gv_small_buffer_1);
