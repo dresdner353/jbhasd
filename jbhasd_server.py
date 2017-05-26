@@ -118,7 +118,7 @@ t.daemon = True
 t.start()
 
 # initial grace before main loop
-time.sleep(20)
+time.sleep(10)
 
 while (1):
 
@@ -160,6 +160,12 @@ while (1):
 
     last_device_poll = now
 
+    # calculate epoch for current minute
+    # This tries to ensure we sample for each related minute
+    # rather than according to actual second of the sample
+    # avoids gaps at minute granularity
+    sample_min_epoch = int(now / 60) * 60
+
     # Calculate desired state
     desired_state = 0
     if (lights_on_time <= lights_off_time):
@@ -178,6 +184,7 @@ while (1):
     print("Lights on at: (%04d)" % (lights_on_time))
     print("Lights off at hour: %04d" % (lights_off_time))
     print("Desired State for Lights: %d" % (desired_state))
+    print("Sample Time: %s" % (time.ctime(sample_min_epoch)))
 
     print ("Discovered Devices:(%d)" % (len(jbhasd_url_dict)))
 
@@ -228,16 +235,15 @@ while (1):
                 sensor_name = sensor['name']
                 sensor_type = sensor['type']
                 if sensor_type == "temp/humidity":
-                    now = time.time()
                     temp = sensor['temp']
                     humidity = sensor['humidity']
-                    print("Sensor.. %d,%s,%s,%s,%s,%s" % (now, 
+                    print("Sensor.. %d,%s,%s,%s,%s,%s" % (sample_min_epoch, 
                                                           zone_name, 
                                                           device_name, 
                                                           sensor_name, 
                                                           temp, 
                                                           humidity))
-                    sensor_file.write("%d,%s,%s,%s,%s,%s\n" % (now, 
+                    sensor_file.write("%d,%s,%s,%s,%s,%s\n" % (sample_min_epoch, 
                                                                zone_name, 
                                                                device_name, 
                                                                sensor_name, 
