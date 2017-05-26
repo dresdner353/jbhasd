@@ -21,6 +21,7 @@ import urllib.error
 import json
 import random
 import datetime
+import threading
 from dateutil import tz
 from zeroconf import ServiceBrowser, Zeroconf
 
@@ -37,6 +38,8 @@ sunset_url = 'http://api.sunrise-sunset.org/json?lat=53.349809&lng=-6.2624431&fo
 # "nautical_twilight_end":"2017-04-11T20:42:31+00:00",
 # "astronomical_twilight_begin":"2017-04-11T03:19:41+00:00",
 # "astronomical_twilight_end":"2017-04-11T21:34:10+00:00"},"status":"OK"}
+
+zeroconf_delay_secs = 60
 
 def sunset_api_time_to_epoch(time_str):
     # decode UTC time from string, strip last 6 chars first
@@ -76,11 +79,26 @@ class MyZeroConfListener(object):
             url_str = "http://%s:%d/json" % (address, port)
             jbhasd_url_dict[name] = url_str
 
+def discover_devices():
+    # loop forever 
+    while (1):
+        print("\n\nService Discovery.. (%d seconds)" % (zeroconf_delay_secs))
+        zeroconf = Zeroconf()
+        listener = MyZeroConfListener()  
+        browser = ServiceBrowser(zeroconf, "_JBHASD._tcp.local.", listener)  
+
+        # loop interval
+        time.sleep(zeroconf_delay_secs)
+        zeroconf.close()
+
+
+# Init dict of discovered device URLs
+jbhasd_url_dict = {}
 
 http_timeout_secs = 2
-zeroconf_delay_secs = 60
 
 last_sunset_check = -1
+last_device_poll = -1
 sunset_epoch = 0
 
 # Lights on N seconds after/before sunset
@@ -94,9 +112,16 @@ lights_off_time = int("0200")
 # open for append
 sensor_file = open("sensors.csv", "a")
 
+# device discovery thread
+t = threading.Thread(target = discover_devices)
+t.daemon = True
+t.start()
+
+# initial grace before main loop
+time.sleep(20)
+
 while (1):
 
-    # Sunset check
     now = time.time()
     current_time = int(time.strftime("%H%M", time.localtime()))
 
@@ -123,16 +148,17 @@ while (1):
 
         last_sunset_check = now
 
+    # Device poll controls
+    # Looking to poll each discovered device
+    # once every minute
+    time_since_last_poll = now - last_device_poll
+    print("Time since last device poll: %d seconds" % (time_since_last_poll))
+    if time_since_last_poll < 60:
+        print("sleeping 5")
+        time.sleep(5)
+        continue
 
-    print("\n\nService Discovery.. (%d seconds)" % (zeroconf_delay_secs))
-    jbhasd_url_dict = {}
-    zeroconf = Zeroconf()
-    listener = MyZeroConfListener()  
-    browser = ServiceBrowser(zeroconf, "_JBHASD._tcp.local.", listener)  
-
-    # loop interval
-    time.sleep(zeroconf_delay_secs)
-    zeroconf.close()
+    last_device_poll = now
 
     # Calculate desired state
     desired_state = 0
@@ -153,8 +179,13 @@ while (1):
     print("Lights off at hour: %04d" % (lights_off_time))
     print("Desired State for Lights: %d" % (desired_state))
 
-    print ("Discovered Devices:")
-    for key in jbhasd_url_dict.keys():
+    print ("Discovered Devices:(%d)" % (len(jbhasd_url_dict)))
+
+    # Iterate list of keys in dict
+    # take as a snapshot due to threaded nature
+    # .keys() iterator not suitable here
+    device_url_list = list(jbhasd_url_dict)
+    for key in device_url_list:
         print("\nHostname:%s URL:%s" % (key, jbhasd_url_dict[key]))
 
         response = None
@@ -182,12 +213,6 @@ while (1):
     
                 if (check_switch(zone_name, control_name)):
                     print("  Marked for Sunrise/Sunset automation")
-
-                    # current_time
-                    # lights_on_time
-                    # lights_off_time
-
-                   
                     if (desired_state != control_state):
                         print("  ==========> Changing state from %d to %d" % (control_state, desired_state))
                         data = urllib.parse.urlencode({'control' : control_name, 'state'  : desired_state})
