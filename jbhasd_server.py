@@ -118,15 +118,19 @@ t.daemon = True
 t.start()
 
 # initial grace before main loop
-time.sleep(10)
+time.sleep(5)
 
 while (1):
 
+    # Calculate the epoch for the most recent
+    # minute. That is our sample time and measurement
+    # for elapsed time between sample intervals
     now = time.time()
+    sample_min_epoch = int(now / 60) * 60
     current_time = int(time.strftime("%H%M", time.localtime()))
 
     # recalc every 12 hours or at midnight
-    if ((now - last_sunset_check) >= 12*60*60 or
+    if ((sample_min_epoch - last_sunset_check) >= 12*60*60 or
         (current_time == 0)):
         # Re-calculate
         print("Getting Sunset times..")
@@ -146,25 +150,20 @@ while (1):
             lights_on_time = int(time.strftime("%H%M", local_time))
             print("Lights on at: (%04d)" % (lights_on_time))
 
-        last_sunset_check = now
+        last_sunset_check = sample_min_epoch
 
     # Device poll controls
     # Looking to poll each discovered device
     # once every minute
-    time_since_last_poll = now - last_device_poll
-    print("Time since last device poll: %d seconds" % (time_since_last_poll))
+    # We need to measure 60+ seconds gap between the current epoch 
+    # sample minute and last. This will keep us from slipping
+    time_since_last_poll = sample_min_epoch - last_device_poll
     if time_since_last_poll < 60:
-        print("sleeping 5")
+        print("Waiting to pass next minute interval.. sleeping for 5")
         time.sleep(5)
         continue
 
-    last_device_poll = now
-
-    # calculate epoch for current minute
-    # This tries to ensure we sample for each related minute
-    # rather than according to actual second of the sample
-    # avoids gaps at minute granularity
-    sample_min_epoch = int(now / 60) * 60
+    last_device_poll = sample_min_epoch
 
     # Calculate desired state
     desired_state = 0
