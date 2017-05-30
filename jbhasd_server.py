@@ -102,7 +102,7 @@ last_device_poll = -1
 sunset_epoch = 0
 
 # Lights on N seconds after/before sunset
-sunset_lights_on_offset = -1200
+sunset_lights_on_offset = -3600
 
 # Lights off at given HHMM time
 # Time here is a 4 digit decimal number
@@ -148,7 +148,6 @@ while (1):
             sunset_ts = sunset_api_time_to_epoch(sunset_str)
             local_time = time.localtime(sunset_ts + sunset_lights_on_offset)
             lights_on_time = int(time.strftime("%H%M", local_time))
-            print("Lights on at: (%04d)" % (lights_on_time))
 
         last_sunset_check = sample_min_epoch
 
@@ -192,7 +191,7 @@ while (1):
     # .keys() iterator not suitable here
     device_url_list = list(jbhasd_url_dict)
     for key in device_url_list:
-        print("\nHostname:%s URL:%s" % (key, jbhasd_url_dict[key]))
+        print("\nHostname:%s \nURL:%s" % (key, jbhasd_url_dict[key]))
 
         response = None
         try:
@@ -203,7 +202,7 @@ while (1):
 
         if (response is not None):
             response_str = response.read()
-            print("Raw JSON data..\n%s" % (response_str))
+            #print("Raw JSON data..\n%s" % (response_str))
             json_data = json.loads(response_str.decode('utf-8'))
             device_name = json_data['name']
             zone_name = json_data['zone']
@@ -228,7 +227,7 @@ while (1):
                             response = urllib.request.urlopen(req,
                                                               timeout = http_timeout_secs)
                         except:
-                            print("Error in urlopen (switch state change)")
+                            print("  Error in urlopen (switch state change)")
 
             for sensor in json_data['sensors']:
                 sensor_name = sensor['name']
@@ -236,7 +235,7 @@ while (1):
                 if sensor_type == "temp/humidity":
                     temp = sensor['temp']
                     humidity = sensor['humidity']
-                    print("Sensor.. %d,%s,%s,%s,%s,%s" % (sample_min_epoch, 
+                    print("  Sensor.. %d,%s,%s,%s,%s,%s" % (sample_min_epoch, 
                                                           zone_name, 
                                                           device_name, 
                                                           sensor_name, 
