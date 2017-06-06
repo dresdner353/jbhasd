@@ -128,7 +128,7 @@ struct gpio_sensor gv_sensor_register[] = {
 #define MAX_FIELD_LEN 20
 #define MAX_SWITCHES 5
 #define MAX_SENSORS 5
-#define CFG_MARKER_VAL 0x0B
+#define CFG_MARKER_VAL 0x0C
 
 struct eeprom_config {
     unsigned char marker;
@@ -139,6 +139,7 @@ struct eeprom_config {
     unsigned char switch_initial_states[MAX_SWITCHES];
     char sensor_names[MAX_SENSORS][MAX_FIELD_LEN];
     unsigned char ota_enabled;
+    unsigned char telnet_enabled;
     unsigned char manual_switches_enabled;
 } gv_config;
 
@@ -189,6 +190,121 @@ char gv_small_buffer_2[1024];
 int gv_switch_state_reg[] = { LOW, HIGH };
 int gv_led_state_reg[] = { HIGH, LOW };
 
+// Telnet Support
+// Wrapper layer around logging to serial or
+// to connected network client
+// could be enhanced later on
+#define LOGBUF_MAX 2048
+
+enum gv_logging_enum {
+    LOGGING_SERIAL,     // Log to Serial
+    LOGGING_NW_CLIENT,  // Log to connected network client
+};
+
+enum gv_logging_enum gv_logging = LOGGING_SERIAL;
+
+// Telnet server
+#define MAX_TELNET_CLIENTS 3
+WiFiServer telnet_server(23);
+WiFiClient telnet_clients[MAX_TELNET_CLIENTS];
+
+// Function start_telnet
+// enables telnet server
+void start_telnet()
+{
+    log_message("start_telnet()\n");
+
+    if (!gv_config.telnet_enabled) {
+        log_message("Telnet not enabled.. returning\n");
+        return;
+    }
+
+    // start telnet server
+    telnet_server.begin();
+    telnet_server.setNoDelay(true);
+
+    gv_logging = LOGGING_NW_CLIENT;
+}
+
+// Function handle_telnet_sessions
+// loop function for driving telnet
+// session handling both accepting new
+// sessions and flushing data from existing 
+// sessions
+void handle_telnet_sessions()
+{
+    uint8_t i;
+
+    if (gv_logging != LOGGING_NW_CLIENT) {
+        return;
+    }
+    
+    // check for new sessions
+    if (telnet_server.hasClient()) {
+        for(i = 0; i < MAX_TELNET_CLIENTS; i++) {
+            // find free/disconnected spot
+            if (!telnet_clients[i] || !telnet_clients[i].connected()) {
+                if(telnet_clients[i]) {
+                    telnet_clients[i].stop();
+                }
+            telnet_clients[i] = telnet_server.available();
+            continue;
+        }
+    }
+    
+    //no free/disconnected spot so reject
+    WiFiClient serverClient = telnet_server.available();
+    serverClient.stop();
+    }
+
+    //check clients for data
+    for (i = 0; i < MAX_TELNET_CLIENTS; i++) {
+        if (telnet_clients[i] && telnet_clients[i].connected()) {
+            if(telnet_clients[i].available()) {
+                // throw away any data
+                while(telnet_clients[i].available()) {
+                    telnet_clients[i].read();
+                }
+            }
+        }
+    }
+}
+
+// Function: log_message
+// Wraps calls to Serial.print or connected
+// network client
+void log_message(char *format, ... )
+{
+    static char log_buf[LOGBUF_MAX + 1];
+    uint8_t i;
+    va_list args;
+    
+    va_start(args, format);
+    vsnprintf(log_buf, 
+              LOGBUF_MAX, 
+              format, 
+              args);
+    log_buf[LOGBUF_MAX] = 0; // force terminate last character
+    va_end(args);
+
+    switch(gv_logging) {
+      case LOGGING_SERIAL:
+        Serial.print(log_buf);
+        break;
+        
+      case LOGGING_NW_CLIENT:
+        for(i = 0; i < MAX_TELNET_CLIENTS; i++) {
+            if (telnet_clients[i] && telnet_clients[i].connected()) {
+                telnet_clients[i].write((uint8_t*)log_buf, strlen(log_buf));
+                telnet_clients[i].flush();
+            }
+        }
+        break;
+    }
+   
+}
+
+
 // Function: set_switch_state
 // Sets the desired switch state to the value of the state arg
 // The switch is referenced by name or index value
@@ -200,7 +316,7 @@ void set_switch_state(const char *name,
     int i = 0;
     int found = 0;
 
-    Serial.printf("set_switch_state(name=%s, index=%d, state=%d)\n",
+    log_message("set_switch_state(name=%s, index=%d, state=%d)\n",
                   name,
                   index,
                   state);
@@ -216,14 +332,14 @@ void set_switch_state(const char *name,
         // Check for a value for name
         // Run the risk of matching against an empty named switch otherwise
         if (!name or strlen(name) == 0) {
-            Serial.printf("no name specified for switch.. ignoring\n");
+            log_message("no name specified for switch.. ignoring\n");
             return;
         }
         // locate the switch by name in register
         while (gv_switch_register[i].name && !found) {
             if (!strcmp(gv_switch_register[i].name, name)) {
                 found = 1;
-                Serial.printf("found switch in register\n");
+                log_message("found switch in register\n");
             }
             else {
                 i++;
@@ -259,7 +375,7 @@ void set_switch_state(const char *name,
         }
     }
     else {
-        Serial.printf("switch not found in register\n");
+        log_message("switch not found in register\n");
     }
 }
 
@@ -270,7 +386,7 @@ void setup_switches()
 {
     int i;
 
-    Serial.printf("setup_switches()\n");
+    log_message("setup_switches()\n");
 
     // loop until we reach the terminator where
     // name is NULL
@@ -286,24 +402,24 @@ void setup_switches()
         // Allows for the config to disable hard-coded
         // defaults
         if (strlen(gv_switch_register[i].name) > 0) {
-            Serial.printf("Setting up switch:%s, initial state:%d\n",
+            log_message("Setting up switch:%s, initial state:%d\n",
                           gv_switch_register[i].name,
                           gv_switch_register[i].initial_state);
 
             if (gv_switch_register[i].relay_pin != NO_PIN) {
-                Serial.printf("    switch pin:%d\n",
+                log_message("    switch pin:%d\n",
                               gv_switch_register[i].relay_pin);
                 pinMode(gv_switch_register[i].relay_pin, OUTPUT);
             }
 
             if (gv_switch_register[i].led_pin != NO_PIN) {
-                Serial.printf("    LED pin:%d\n",
+                log_message("    LED pin:%d\n",
                               gv_switch_register[i].led_pin);
                 pinMode(gv_switch_register[i].led_pin, OUTPUT);
             }
 
             if (gv_switch_register[i].manual_pin != NO_PIN) {
-                Serial.printf("    Manual pin:%d\n",
+                log_message("    Manual pin:%d\n",
                               gv_switch_register[i].manual_pin);
                 pinMode(gv_switch_register[i].manual_pin, INPUT_PULLUP);
             }
@@ -329,11 +445,11 @@ void check_manual_switches()
     int took_action = 0;
 
     //disabled to keep the serial activity quiet
-    //Serial.printf("check_manual_switches()\n");
+    //log_message("check_manual_switches()\n");
     //delay(delay_msecs);
 
     if (!gv_config.manual_switches_enabled) {
-        //Serial.printf("manual switches disabled.. returning\n");
+        //log_message("manual switches disabled.. returning\n");
         return;
     }
 
@@ -347,10 +463,10 @@ void check_manual_switches()
         // Excludes non-relevant or config-disabled entries
         if (strlen(gv_switch_register[i].name) > 0 && 
             gv_switch_register[i].manual_pin != NO_PIN) {
-            //Serial.printf("Check Manual pin:%d\n", gv_switch_register[i].manual_pin);
+            //log_message("Check Manual pin:%d\n", gv_switch_register[i].manual_pin);
             button_state = digitalRead(gv_switch_register[i].manual_pin);
             if (button_state == LOW) {
-                Serial.printf("Detected manual push on switch:%s pin:%d\n",
+                log_message("Detected manual push on switch:%s pin:%d\n",
                               gv_switch_register[i].name,
                               gv_switch_register[i].manual_pin);
                 set_switch_state(gv_switch_register[i].name,
@@ -378,7 +494,7 @@ void setup_sensors()
     int i;
     DHT *dhtp;
 
-    Serial.printf("setup_sensors()\n");
+    log_message("setup_sensors()\n");
 
     // Protect against multiple calls
     // can only really set these sensors up once
@@ -386,7 +502,7 @@ void setup_sensors()
     // could try to get smart and call delete on set pointers
     // but its probably safer to just do this once.
     if (already_setup) {
-        Serial.printf("already setup (returning)\n");
+        log_message("already setup (returning)\n");
         return;
     }
     already_setup = 1;
@@ -397,7 +513,7 @@ void setup_sensors()
     while (gv_sensor_register[i].name) {
         gv_sensor_register[i].name = gv_config.sensor_names[i];
         if (strlen(gv_sensor_register[i].name) > 0) {
-            Serial.printf("Setting up sensor %s\n", 
+            log_message("Setting up sensor %s\n", 
                           gv_sensor_register[i].name);
 
             switch (gv_sensor_register[i].sensor_type) {
@@ -406,7 +522,7 @@ void setup_sensors()
                 break;
 
               case GP_SENS_TYPE_DHT:
-                Serial.printf("DHT Type %d on pin %d\n", 
+                log_message("DHT Type %d on pin %d\n", 
                               gv_sensor_register[i].sensor_variant,
                               gv_sensor_register[i].sensor_pin);
 
@@ -418,7 +534,7 @@ void setup_sensors()
                     gv_sensor_register[i].ref = dhtp;
                 }
                 else {
-                    Serial.printf("Sensor not assigned to pin (fake)\n");
+                    log_message("Sensor not assigned to pin (fake)\n");
                     // non-pin assigned DHT
                     // for faking/simulation
                     gv_sensor_register[i].ref = NULL;
@@ -465,7 +581,7 @@ void read_sensors()
     DHT *dhtp;
     float f1, f2;
 
-    Serial.printf("read_sensors()\n");
+    log_message("read_sensors()\n");
 
     i = 0;
     while(gv_sensor_register[i].name) {
@@ -482,7 +598,7 @@ void read_sensors()
                     f2 = dhtp->readTemperature();
 
                     if (isnan(f1) || isnan(f2)) {
-                        Serial.printf("Sensor read failed for %s\n", 
+                        log_message("Sensor read failed for %s\n", 
                                       gv_sensor_register[i].name);
                     }
                     else {
@@ -496,7 +612,7 @@ void read_sensors()
                     gv_sensor_register[i].f2 = ((ESP.getCycleCount() + 
                                                  ESP.getFreeHeap()) % 100) + 0.25;
                 }
-                Serial.printf("Sensor: %s Humidity: %d.%02d Temperature: %d.%02d\n",
+                log_message("Sensor: %s Humidity: %d.%02d Temperature: %d.%02d\n",
                               gv_sensor_register[i].name,
                               (int)gv_sensor_register[i].f1,
                               float_get_fp(gv_sensor_register[i].f1, 2),
@@ -518,13 +634,14 @@ const char *get_json_status()
     char *str_ptr;
     int i;
 
-    Serial.printf("get_json_status()\n");
+    log_message("get_json_status()\n");
 
     // refresh sensors
     read_sensors();
 
     /*  JSON specification for the status string we return 
-     *  { "name": "%s", "zone": "%s", "ota_enabled" : %d, "manual_switches_enabled" : %d, 
+     *  { "name": "%s", "zone": "%s", "ota_enabled" : %d, "telnet_enabled" : %d, 
+     *  "manual_switches_enabled" : %d, 
      *  "controls": [%s], 
      *  "sensors": [%s], 
      *  "system" : { "reset_reason" : "%s", 
@@ -600,6 +717,7 @@ const char *get_json_status()
                 "{ \"name\": \"%s\", "
                 "\"zone\": \"%s\", "
                 "\"ota_enabled\" : %u, "
+                "\"telnet_enabled\" : %u, "
                 "\"manual_switches_enabled\" : %u, "
                 "\"controls\": [%s], "
                 "\"sensors\": [%s], "
@@ -609,6 +727,7 @@ const char *get_json_status()
                 gv_mdns_hostname,
                 gv_config.zone,
                 gv_config.ota_enabled,
+                gv_config.telnet_enabled,
                 gv_config.manual_switches_enabled,
                 gv_small_buffer_1,
                 gv_small_buffer_2,
@@ -631,15 +750,15 @@ const char *get_json_status()
 void load_config() 
 {
     int i;
-    Serial.printf("load_config()\n");
+    log_message("load_config()\n");
 
-    Serial.printf("Read EEPROM data..(%d bytes)\n", sizeof(gv_config));
+    log_message("Read EEPROM data..(%d bytes)\n", sizeof(gv_config));
 
     EEPROM.begin(sizeof(gv_config) + 10);
     EEPROM.get(0, gv_config);
 
     if (gv_config.marker != CFG_MARKER_VAL) {
-        Serial.printf("marker field not matched to special value.. "
+        log_message("marker field not matched to special value.. "
                       "resetting config to defaults\n");
         // memset to 0, empty strings galore
         memset(&gv_config, 0, sizeof(gv_config));
@@ -664,6 +783,9 @@ void load_config()
         // OTA defaults to Enabled
         gv_config.ota_enabled = 1;
 
+        // Telnet defaults to Enabled
+        gv_config.telnet_enabled = 1;
+
         // Manual Switches enabled by default
         gv_config.manual_switches_enabled = 1;
 
@@ -672,23 +794,25 @@ void load_config()
     }
 
     // Print out config details
-    Serial.printf("Marker:%02X\n"
+    log_message("Marker:%02X\n"
                   "Zone:%s\n"
                   "Wifi SSID:%s\n"
                   "Wifi Password:%s\n"
                   "OTA Update:%u\n"
+                  "Telnet:%u\n"
                   "Manual switches:%u\n",
                   gv_config.marker,
                   gv_config.zone,
                   gv_config.wifi_ssid,
                   gv_config.wifi_password,
                   gv_config.ota_enabled,
+                  gv_config.telnet_enabled,
                   gv_config.manual_switches_enabled);
 
     // Print values of each switch name
     for (i = 0; i < MAX_SWITCHES; i++) {
         // format switch arg name
-        Serial.printf("Switch[%d]:%s state:%d\n", 
+        log_message("Switch[%d]:%s state:%d\n", 
                       i, 
                       gv_config.switch_names[i],
                       gv_config.switch_initial_states[i]);
@@ -697,7 +821,7 @@ void load_config()
     // Print values of each sensor name
     for (i = 0; i < MAX_SENSORS; i++) {
         // format switch arg name
-        Serial.printf("Sensor[%d]:%s\n", 
+        log_message("Sensor[%d]:%s\n", 
                       i, 
                       gv_config.sensor_names[i]);
     }
@@ -707,30 +831,32 @@ void load_config()
 // Writes config to EEPROM
 void save_config() 
 {
-    Serial.printf("save_config()\n");
+    log_message("save_config()\n");
     int i;
 
     // set marker field to special value
     gv_config.marker = CFG_MARKER_VAL;
 
-    Serial.printf("Writing EEPROM data..\n");
-    Serial.printf("Marker:%d\n"
+    log_message("Writing EEPROM data..\n");
+    log_message("Marker:%d\n"
                   "Zone:%s\n"
                   "Wifi SSID:%s\n"
                   "Wifi Password:%s\n"
                   "OTA Update:%u\n"
+                  "Telnet:%u\n"
                   "Manual switches:%u\n",
                   gv_config.marker,
                   gv_config.zone,
                   gv_config.wifi_ssid,
                   gv_config.wifi_password,
                   gv_config.ota_enabled,
+                  gv_config.telnet_enabled,
                   gv_config.manual_switches_enabled);
 
     // Print values of each switch name
     for (i = 0; i < MAX_SWITCHES; i++) {
         // format switch arg name
-        Serial.printf("Switch[%d]:%s state:%d\n", 
+        log_message("Switch[%d]:%s state:%d\n", 
                       i, 
                       gv_config.switch_names[i],
                       gv_config.switch_initial_states[i]);
@@ -739,7 +865,7 @@ void save_config()
     // Print values of each sensor name
     for (i = 0; i < MAX_SENSORS; i++) {
         // format switch arg name
-        Serial.printf("Sensor[%d]:%s\n", 
+        log_message("Sensor[%d]:%s\n", 
                       i, 
                       gv_config.sensor_names[i]);
     }
@@ -759,30 +885,33 @@ void save_config()
 void ap_handle_root() {
     int i;
 
-    Serial.printf("ap_handle_root()\n");
+    log_message("ap_handle_root()\n");
     if (gv_web_server.hasArg("zone")) {
-        Serial.printf("Detected config post\n");
+        log_message("Detected config post\n");
 
         strcpy(gv_config.zone, 
                gv_web_server.arg("zone").c_str());
-        Serial.printf("Got Zone: %s\n", gv_config.zone);
+        log_message("Got Zone: %s\n", gv_config.zone);
 
         strcpy(gv_config.wifi_ssid, 
                gv_web_server.arg("ssid").c_str());
-        Serial.printf("Got WiFI SSID: %s\n", gv_config.wifi_ssid);
+        log_message("Got WiFI SSID: %s\n", gv_config.wifi_ssid);
 
         strcpy(gv_config.wifi_password, 
                gv_web_server.arg("password").c_str());
-        Serial.printf("Got WiFI Password: %s\n", gv_config.wifi_password);
+        log_message("Got WiFI Password: %s\n", gv_config.wifi_password);
         
         gv_config.ota_enabled = atoi(gv_web_server.arg("ota_enabled").c_str());
-        Serial.printf("Got OTA Enabled: %u\n", gv_config.ota_enabled);
+        log_message("Got OTA Enabled: %u\n", gv_config.ota_enabled);
+
+        gv_config.telnet_enabled = atoi(gv_web_server.arg("telnet_enabled").c_str());
+        log_message("Got Telnet Enabled: %u\n", gv_config.telnet_enabled);
 
         gv_config.manual_switches_enabled = atoi(gv_web_server.arg("manual_switches_enabled").c_str());
-        Serial.printf("Got Manual Switches Enabled: %u\n", gv_config.manual_switches_enabled);
+        log_message("Got Manual Switches Enabled: %u\n", gv_config.manual_switches_enabled);
 
         for (i = 0; i < MAX_SWITCHES; i++) {
-            Serial.printf("Getting post args for switches %d/%d\n",
+            log_message("Getting post args for switches %d/%d\n",
                           i, MAX_SWITCHES - 1);
             // format switch arg name
             ets_sprintf(gv_small_buffer_1,
@@ -797,7 +926,7 @@ void ap_handle_root() {
                 // out in terms of address
                 strcpy(&(gv_config.switch_names[i][0]), 
                        gv_web_server.arg(gv_small_buffer_1).c_str());
-                Serial.printf("Got:%s:%s\n", 
+                log_message("Got:%s:%s\n", 
                               gv_small_buffer_1,
                               gv_config.switch_names[i]);
             }
@@ -808,19 +937,19 @@ void ap_handle_root() {
                         i);
             // Retrieve if present
             if (gv_web_server.hasArg(gv_small_buffer_1)) {
-                Serial.printf("Arg %s present\n",
+                log_message("Arg %s present\n",
                               gv_small_buffer_1);
 
                 gv_config.switch_initial_states[i] =
                     atoi(gv_web_server.arg(gv_small_buffer_1).c_str());
-                Serial.printf("Got:%s:%d\n", 
+                log_message("Got:%s:%d\n", 
                               gv_small_buffer_1, 
                               gv_config.switch_initial_states[i]);
             }
         }
         
         for (i = 0; i < MAX_SENSORS; i++) {
-            Serial.printf("Getting post args for sensors %d/%d\n",
+            log_message("Getting post args for sensors %d/%d\n",
                           i, MAX_SENSORS - 1);
             // format sensor arg name
             ets_sprintf(gv_small_buffer_1,
@@ -835,7 +964,7 @@ void ap_handle_root() {
                 // out in terms of address
                 strcpy(&(gv_config.sensor_names[i][0]), 
                        gv_web_server.arg(gv_small_buffer_1).c_str());
-                Serial.printf("Got:%s:%s\n", 
+                log_message("Got:%s:%s\n", 
                               gv_small_buffer_1,
                               gv_config.sensor_names[i]);
             }
@@ -881,12 +1010,12 @@ void start_ota()
     // lost wifi conections will re-run start_sta_mode() so 
     // we dont want this function called over and over
     if (already_setup) {
-        Serial.printf("OTA already started\n");
+        log_message("OTA already started\n");
         return;
     }
 
     if (!gv_config.ota_enabled) {
-        Serial.printf("OTA mode not enabled.. returning\n");
+        log_message("OTA mode not enabled.. returning\n");
         return;
     }
 
@@ -903,33 +1032,33 @@ void start_ota()
     // ArduinoOTA.setPassword((const char *)"123");
 
     ArduinoOTA.onStart([]() {
-        Serial.printf("OTA Start\n");
+        log_message("OTA Start\n");
 
         // Change mode to lock in OTA behaviour
         gv_mode = MODE_WIFI_OTA;
     });
     
     ArduinoOTA.onEnd([]() {
-        Serial.printf("\nEnd\n");
+        log_message("\nEnd\n");
     });
     
     ArduinoOTA.onProgress([](unsigned int progress, 
                              unsigned int total) {
-        Serial.printf("Progress: %02u%%\r", (progress / (total / 100)));
+        log_message("Progress: %02u%%\r", (progress / (total / 100)));
     });
     
     ArduinoOTA.onError([](ota_error_t error) {
-        Serial.printf("Error[%u]: \n", error);
-        if (error == OTA_AUTH_ERROR) Serial.printf("Auth Failed\n");
-        else if (error == OTA_BEGIN_ERROR) Serial.printf("Begin Failed\n");
-        else if (error == OTA_CONNECT_ERROR) Serial.printf("Connect Failed\n");
-        else if (error == OTA_RECEIVE_ERROR) Serial.printf("Receive Failed\n");
-        else if (error == OTA_END_ERROR) Serial.printf("End Failed\n");
+        log_message("Error[%u]: \n", error);
+        if (error == OTA_AUTH_ERROR) log_message("Auth Failed\n");
+        else if (error == OTA_BEGIN_ERROR) log_message("Begin Failed\n");
+        else if (error == OTA_CONNECT_ERROR) log_message("Connect Failed\n");
+        else if (error == OTA_RECEIVE_ERROR) log_message("Receive Failed\n");
+        else if (error == OTA_END_ERROR) log_message("End Failed\n");
     });
     
     ArduinoOTA.begin();
 
-    Serial.printf("OTA service started\n");
+    log_message("OTA service started\n");
 }
 
 // Function: start_ap_mode
@@ -939,7 +1068,7 @@ void start_ota()
 // this along with config data
 void start_ap_mode()
 {
-    Serial.printf("start_ap_mode()\n");
+    log_message("start_ap_mode()\n");
     gv_mode = MODE_WIFI_AP;
     int i;
     char *combi_selected = "selected";
@@ -947,6 +1076,7 @@ void start_ap_mode()
 
     char *switch_initial_on_selected, *switch_initial_off_selected;
     char *ota_on_selected, *ota_off_selected;
+    char *telnet_on_selected, *telnet_off_selected;
     char *manual_on_selected, *manual_off_selected;
 
     // combi state for OTA 
@@ -958,7 +1088,16 @@ void start_ap_mode()
         ota_on_selected = combi_not_selected;
         ota_off_selected = combi_selected;
     }
-
+    
+    // combi state for Telnet
+    if (gv_config.telnet_enabled) {
+        telnet_on_selected = combi_selected;
+        telnet_off_selected = combi_not_selected;
+    }
+    else {
+        telnet_on_selected = combi_not_selected;
+        telnet_off_selected = combi_selected;
+    }
     // combi state for Manual switches
     if (gv_config.manual_switches_enabled) {
         manual_on_selected = combi_selected;
@@ -993,6 +1132,13 @@ void start_ap_mode()
                 "    </select>"
                 "</div>"
                 "<div>"
+                "    <label>Telnet:</label>"
+                "    <select name=\"telnet_enabled\">"
+                "        <option value=\"1\" %s>Enabled</option>"
+                "        <option value=\"0\" %s>Disabled</option>"
+                "    </select>"
+                "</div>"
+                "<div>"
                 "    <label>Manual Switches:</label>"
                 "    <select name=\"manual_switches_enabled\">"
                 "        <option value=\"1\" %s>Enabled</option>"
@@ -1008,6 +1154,8 @@ void start_ap_mode()
                 MAX_FIELD_LEN,
                 ota_on_selected,
                 ota_off_selected,
+                telnet_on_selected,
+                telnet_off_selected,
                 manual_on_selected,
                 manual_off_selected);
 
@@ -1090,7 +1238,7 @@ void start_ap_mode()
     // landing page
     gv_dns_server.start(DNS_PORT, "*", gv_ap_ip);
 
-    Serial.printf("AP IP:%d.%d.%d.%d\n", 
+    log_message("AP IP:%d.%d.%d.%d\n", 
                   gv_ap_ip[0],
                   gv_ap_ip[1],
                   gv_ap_ip[2],
@@ -1101,7 +1249,7 @@ void start_ap_mode()
     gv_web_server.on("/apply", ap_handle_root);
     gv_web_server.onNotFound(ap_handle_root);
     gv_web_server.begin();
-    Serial.printf("HTTP server started for AP mode\n"); 
+    log_message("HTTP server started for AP mode\n"); 
 }
 
 // Function: sta_handle_root
@@ -1115,7 +1263,7 @@ void sta_handle_root() {
     int switch_state;
     int i;
 
-    Serial.printf("sta_handle_root()\n");
+    log_message("sta_handle_root()\n");
 
     // Update sensors
     read_sensors();
@@ -1183,7 +1331,7 @@ void sta_handle_root() {
 void sta_handle_json() {
     int switch_state;
 
-    Serial.printf("sta_handle_json()\n");
+    log_message("sta_handle_json()\n");
 
     // Check for switch and state
     if (gv_web_server.hasArg("control") && gv_web_server.hasArg("state")) {
@@ -1197,7 +1345,7 @@ void sta_handle_json() {
 
     // reboot if directed
     if (gv_web_server.hasArg("reboot")) {
-        Serial.printf("Received reboot command\n");
+        log_message("Received reboot command\n");
         ESP.restart();
     }
 }
@@ -1213,18 +1361,18 @@ void start_sta_mode()
     int max_connect_attempts = 5;
     static int connect_count = 0; // track #times we try to connect
 
-    Serial.printf("start_sta_mode()\n");
+    log_message("start_sta_mode()\n");
     gv_mode = MODE_WIFI_STA;
 
     // Count attempts and reboot if we exceed max
     connect_count++;
     if (connect_count > max_connect_attempts) {
-        Serial.printf("Exceeded max connect attempts of %d.. rebooting\n",
+        log_message("Exceeded max connect attempts of %d.. rebooting\n",
                       max_connect_attempts);
         ESP.restart();
     }
 
-    Serial.printf("Connecting to Wifi SSID:%s, Password:%s, Timeout:%d Attempt:%d/%d\n", 
+    log_message("Connecting to Wifi SSID:%s, Password:%s, Timeout:%d Attempt:%d/%d\n", 
                   gv_config.wifi_ssid,
                   gv_config.wifi_password,
                   connect_timeout,
@@ -1241,14 +1389,14 @@ void start_sta_mode()
            connect_timeout > 0) {
         delay(1000);
         toggle_wifi_led(1000);
-        Serial.printf(".");
+        log_message(".");
         connect_timeout--;
     }
 
-    Serial.printf("\n");
+    log_message("\n");
 
     if (WiFi.status() != WL_CONNECTED) {
-        Serial.printf("Timed out trying to connect to %s\n",
+        log_message("Timed out trying to connect to %s\n",
                       gv_config.wifi_ssid);
         return;  
     }
@@ -1267,19 +1415,19 @@ void start_sta_mode()
     setup_sensors();
 
     gv_sta_ip = WiFi.localIP();
-    Serial.printf("Connected.. IP:%d.%d.%d.%d\n", 
+    log_message("Connected.. IP:%d.%d.%d.%d\n", 
                   gv_sta_ip[0],
                   gv_sta_ip[1],
                   gv_sta_ip[2],
                   gv_sta_ip[3]);
 
     // MDNS & DNS-SD using "JBHASD"
-    Serial.printf("Activating MDNS for hostname:%s\n", gv_mdns_hostname);
+    log_message("Activating MDNS for hostname:%s\n", gv_mdns_hostname);
     if (!MDNS.begin(gv_mdns_hostname)) {
-        Serial.printf("Error setting up MDNS responder!\n");
+        log_message("Error setting up MDNS responder!\n");
     }
     else {
-        Serial.printf("Activating DNS-SD\n");
+        log_message("Activating DNS-SD\n");
         MDNS.addService("JBHASD", "tcp", WEB_PORT);  
     }
 
@@ -1287,9 +1435,10 @@ void start_sta_mode()
     gv_web_server.on("/json", sta_handle_json);
     gv_web_server.onNotFound(sta_handle_root);
     gv_web_server.begin();
-    Serial.printf("HTTP server started for client mode\n"); 
+    log_message("HTTP server started for client mode\n"); 
 
     start_ota();
+    start_telnet();
 }
 
 // Function: setup
@@ -1308,7 +1457,7 @@ void setup()
 
     gv_mode = MODE_INIT;
 
-    Serial.printf("Device boot: ChipId:%u FreeHeap:%u ResetReason:%s\n",
+    log_message("Device boot: ChipId:%u FreeHeap:%u ResetReason:%s\n",
                   ESP.getChipId(),
                   ESP.getFreeHeap(),
                   ESP.getResetReason().c_str());
@@ -1337,7 +1486,7 @@ void setup()
     // If we have no SSID provisioned
     // then we go straight for AP mode
     if (strlen(gv_config.wifi_ssid) == 0) {
-        Serial.printf("No legit config present.. going directly to AP mode\n");
+        log_message("No legit config present.. going directly to AP mode\n");
         start_ap_mode();
         return;
     }
@@ -1351,20 +1500,20 @@ void setup()
     int delay_msecs = 200;
     int button_state;
 
-    Serial.printf("Entering pin wait stage\n");
+    log_message("Entering pin wait stage\n");
     while (pin_wait_timer > 0) {
-        Serial.printf("Button wait #%d\n", pin_wait_timer);
+        log_message("Button wait #%d\n", pin_wait_timer);
         toggle_wifi_led(delay_msecs);
         button_state = digitalRead(gv_boot_program_pin);
         if (button_state == LOW) {
-            Serial.printf("Detected pin down.. going to AP mode\n");
+            log_message("Detected pin down.. going to AP mode\n");
             start_ap_mode();
             return;
         }
         pin_wait_timer--;
     }
 
-    Serial.printf("Passed pin wait stage.. normal startup\n");
+    log_message("Passed pin wait stage.. normal startup\n");
     start_sta_mode();
 }
 
@@ -1389,13 +1538,14 @@ void loop()
       case MODE_WIFI_AP:
         gv_dns_server.processNextRequest();
         gv_web_server.handleClient();
+        handle_telnet_sessions();
         toggle_wifi_led(100); // fast flashing in AP mode
         break;
         
       case MODE_WIFI_STA:
         // reconnect wifi repeatedly if not connected
         if (WiFi.status() != WL_CONNECTED) {
-             Serial.printf("Detected WiFI Down in main loop\n");
+             log_message("Detected WiFI Down in main loop\n");
              start_sta_mode();
         }
         else {
@@ -1403,6 +1553,7 @@ void loop()
             gv_web_server.handleClient();
             ArduinoOTA.handle();
             check_manual_switches();
+            handle_telnet_sessions();
         }
         break;
 
