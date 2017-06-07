@@ -25,17 +25,44 @@ Once the device is connected to your WiFI, you can discover it via zeroconf and 
 
 ```
 $ curl 'http://192.168.12.165/json'
-{ "name": "esp8266-9825072-Attic", "zone": "Attic", "ota_enabled" : 1, "controls": [{ "name": "A", "type": "switch", "state": 1 }, { "name": "B", "type": "switch", "state": 0 }, { "name": "C", "type": "switch", "state": 0 }, { "name": "D", "type": "switch", "state": 0 }], "sensors": [{ "name": "Temp", "type": "temp/humidity", "humidity": "47.29", "temp": "24.20" }, { "name": "Wilma", "type": "temp/humidity", "humidity": "7.50", "temp": "67.25" }], "system" : { "reset_reason" : "Software/System restart", "free_heap" : 30712, "chip_id" : 9825072, "flash_id" : 1327328, "flash_size" : 1048576, "flash_real_size" : 1048576, "flash_speed" : 40000000, "cycle_count" : 248706992 } }
+{ "name": "esp8266-9825072-Attic", "zone": "Attic", "ota_enabled" : 1, 
+"controls": [{ "name": "A", "type": "switch", "state": 1 }, 
+{ "name": "B", "type": "switch", "state": 0 }, 
+{ "name": "C", "type": "switch", "state": 0 }, 
+{ "name": "D", "type": "switch", "state": 0 }], 
+"sensors": [{ "name": "Temp", "type": "temp/humidity", "humidity": "47.29", "temp": "24.20" }, 
+{ "name": "Wilma", "type": "temp/humidity", "humidity": "7.50", "temp": "67.25" }], 
+"system" : { "reset_reason" : "Software/System restart", "free_heap" : 30712, 
+"chip_id" : 9825072, "flash_id" : 1327328, "flash_size" : 1048576, 
+"flash_real_size" : 1048576, "flash_speed" : 40000000, "cycle_count" : 248706992 } }
 ```
 The response will list the device name, zone, OTA state, controls and sensors. Each control lists its type (only switch defined for now) and given state. The sensors list their type (only temp/humidity for now) and the humidity and temp values in Celsius. There is also a sub-struct of system details showing reset reasons, free heap etc. All this system detail was taken from the variety of calls you can make on the ESP global object. 
 
 Then to demo the toggling of a switch using GET (note the changes to control "A" on each response:
 ```
 $ curl 'http://192.168.12.165/json?control=A&state=0'
-{ "name": "esp8266-9825072-Attic", "zone": "Attic", "ota_enabled" : 1, "controls": [{ "name": "A", "type": "switch", "state": 0 }, { "name": "B", "type": "switch", "state": 0 }, { "name": "C", "type": "switch", "state": 0 }, { "name": "D", "type": "switch", "state": 0 }], "sensors": [{ "name": "Temp", "type": "temp/humidity", "humidity": "47.29", "temp": "24.20" }, { "name": "Wilma", "type": "temp/humidity", "humidity": "72.50", "temp": "20.25" }], "system" : { "reset_reason" : "Software/System restart", "free_heap" : 30560, "chip_id" : 9825072, "flash_id" : 1327328, "flash_size" : 1048576, "flash_real_size" : 1048576, "flash_speed" : 40000000, "cycle_count" : 4038990944 } }
+{ "name": "esp8266-9825072-Attic", "zone": "Attic", "ota_enabled" : 1, 
+"controls": [{ "name": "A", "type": "switch", "state": 0 }, 
+{ "name": "B", "type": "switch", "state": 0 }, 
+{ "name": "C", "type": "switch", "state": 0 }, 
+{ "name": "D", "type": "switch", "state": 0 }], 
+"sensors": [{ "name": "Temp", "type": "temp/humidity", "humidity": "47.29", "temp": "24.20" }, 
+{ "name": "Wilma", "type": "temp/humidity", "humidity": "72.50", "temp": "20.25" }], 
+"system" : { "reset_reason" : "Software/System restart", "free_heap" : 30560, 
+"chip_id" : 9825072, "flash_id" : 1327328, "flash_size" : 1048576, 
+"flash_real_size" : 1048576, "flash_speed" : 40000000, "cycle_count" : 4038990944 } }
 
 $ curl 'http://192.168.12.165/json?control=A&state=1'
-{ "name": "esp8266-9825072-Attic", "zone": "Attic", "ota_enabled" : 1, "controls": [{ "name": "A", "type": "switch", "state": 1 }, { "name": "B", "type": "switch", "state": 0 }, { "name": "C", "type": "switch", "state": 0 }, { "name": "D", "type": "switch", "state": 0 }], "sensors": [{ "name": "Temp", "type": "temp/humidity", "humidity": "47.40", "temp": "24.29" }, { "name": "Wilma", "type": "temp/humidity", "humidity": "28.50", "temp": "59.25" }], "system" : { "reset_reason" : "Software/System restart", "free_heap" : 30560, "chip_id" : 9825072, "flash_id" : 1327328, "flash_size" : 1048576, "flash_real_size" : 1048576, "flash_speed" : 40000000, "cycle_count" : 1636317248 } }
+{ "name": "esp8266-9825072-Attic", "zone": "Attic", "ota_enabled" : 1, 
+"controls": [{ "name": "A", "type": "switch", "state": 1 }, 
+{ "name": "B", "type": "switch", "state": 0 }, 
+{ "name": "C", "type": "switch", "state": 0 }, 
+{ "name": "D", "type": "switch", "state": 0 }], 
+"sensors": [{ "name": "Temp", "type": "temp/humidity", "humidity": "47.40", "temp": "24.29" }, 
+{ "name": "Wilma", "type": "temp/humidity", "humidity": "28.50", "temp": "59.25" }], 
+"system" : { "reset_reason" : "Software/System restart", "free_heap" : 30560, 
+"chip_id" : 9825072, "flash_id" : 1327328, "flash_size" : 1048576, 
+"flash_real_size" : 1048576, "flash_speed" : 40000000, "cycle_count" : 1636317248 } }
 ```
 The examples above are all GET-based but the ESP8266 webserver supports GET and POST simultaneously.
 
