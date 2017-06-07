@@ -70,9 +70,13 @@ If you browse to the base URL on its own (minus the /json path) then you get a v
 
 The sonoff_basic.ino file in this repo is the basic firmware I wrote that should work on any Sonoff device and easily adapt to other ESP-8266 devices. You need to only correct the GPIO pin assignments as required for switches and LEDs and edit the in-memory array entries as required.
 
+Also included is a firmware for an ESP-01 device with momentary switch on GPIO-0 and DHT sensor on GPIO-2. ITs the exact code with the array defaults edited for the device variant.
+
 Python3 script zero_discover.py should aid in discovering your device after it attaches to your LAN. Script jbhasd_server.py is a very basic server I wrote that turns on two uplighter lights for me as a first stab at a working deployment of the firmware. The same script also reads temp and humidity from all sensors of type "temp/humidity" and saves these to a CSV file. I'll rework this example and add more sophisticated scripts as I grow the concept further.
 
 The sketch also supports OTA updating once it gets into STA mode. This makes the task updating devices easier. I've only used the Arduino IDE for this but it discovers the devices without issue and lets you select the network port for flashing. This OTA updating can also be disabled in config.
+
+Also supported in STA mode is a telnet interface to port 23 that acts as a debug feed from the device showing all logging messages. 
 
 A link to some photos of the prototypes and enclosures I've built to date..
 https://goo.gl/photos/uwRadttk9wY7vvGm6
