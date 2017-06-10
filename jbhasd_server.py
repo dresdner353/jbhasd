@@ -235,16 +235,18 @@ while (1):
                 if sensor_type == "temp/humidity":
                     temp = sensor['temp']
                     humidity = sensor['humidity']
-                    print("  Sensor.. %d,%s,%s,%s,%s,%s" % (sample_min_epoch, 
-                                                          zone_name, 
-                                                          device_name, 
-                                                          sensor_name, 
-                                                          temp, 
-                                                          humidity))
-                    sensor_file.write("%d,%s,%s,%s,%s,%s\n" % (sample_min_epoch, 
-                                                               zone_name, 
-                                                               device_name, 
-                                                               sensor_name, 
-                                                               temp, 
-                                                               humidity))
+                    print("  Sensor.. %d,%s,%s,%s,%s,%s,%s" % (sample_min_epoch, 
+                                                            zone_name, 
+                                                            device_name, 
+                                                            jbhasd_url_dict[key],
+                                                            sensor_name, 
+                                                            temp, 
+                                                            humidity))
+                    sensor_file.write("%d,%s,%s,%s,%s,%s,%s\n" % (sample_min_epoch, 
+                                                                  zone_name, 
+                                                                  device_name, 
+                                                                  jbhasd_url_dict[key],
+                                                                  sensor_name, 
+                                                                  temp, 
+                                                                  humidity))
                     sensor_file.flush()
