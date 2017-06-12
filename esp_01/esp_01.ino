@@ -1452,6 +1452,12 @@ void setup()
 
     gv_mode = MODE_INIT;
 
+    // timer reset 
+    // helps stop spontaneous watchdog
+    // timers resetting the device
+    ESP.wdtDisable();
+    ESP.wdtEnable(WDTO_8S);
+
     log_message("Device boot: ChipId:%u FreeHeap:%u ResetReason:%s\n",
                   ESP.getChipId(),
                   ESP.getFreeHeap(),
@@ -1526,6 +1532,10 @@ void setup()
 // loss of WiFI
 void loop() 
 {
+    // timer reset 
+    // for preventing watchdog resets
+    ESP.wdtFeed();
+    
     switch (gv_mode) {
       case MODE_INIT:
         break;
