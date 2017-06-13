@@ -110,6 +110,12 @@ sunset_lights_on_offset = -3600
 # Good for numerical comparisons
 lights_off_time = int("0200")
 
+# Over-ride threshold
+# Time at which we stop auto-turning off
+# switches assuming the undesired on
+# state is deliberate
+override_threshold_time = int("1200")
+
 # open for append
 sensor_file = open("sensors.csv", "a")
 
@@ -228,12 +234,13 @@ while (1):
                         effective_state = 1
 
                     # If on and we want it off
-                    # and its before mid-day, then turn off
-                    # Allows for manual over-ride from mid-day 
+                    # and its before override_threshold_time, 
+                    # then turn off
+                    # Allows for manual over-ride from set time
                     # omward
                     if (control_state == 1 and 
                         desired_state == 0 and
-                        current_time < 1200):
+                        current_time < override_threshold_time):
                         effective_state = 0
 
                     if (effective_state != control_state):
