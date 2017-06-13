@@ -225,7 +225,10 @@ while (1):
     
                 if (check_switch(zone_name, control_name)):
                     print("  Marked for Sunrise/Sunset automation")
-                    effective_state = desired_state
+
+                    # Assume current control state is what we
+                    # want until determined otherwise
+                    effective_state = control_state
 
                     # If off and we want it on
                     # turn on
@@ -275,3 +278,5 @@ while (1):
                                                                   temp, 
                                                                   humidity))
                     sensor_file.flush()
+
+    print("\n\n")
