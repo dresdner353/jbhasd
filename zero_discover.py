@@ -1,11 +1,12 @@
 # Simple Python3 script to 
 # use zeroconf to discover JBHASD devices on the LAN
 # and print their details and URLs
+# waits a long time and exits
 
 from six.moves import input  
 from zeroconf import ServiceBrowser, Zeroconf
 import socket
-
+import time
 
 class MyListener(object):  
     def remove_service(self, zeroconf, type, name):
@@ -20,7 +21,6 @@ class MyListener(object):
 zeroconf = Zeroconf()  
 listener = MyListener()  
 browser = ServiceBrowser(zeroconf, "_JBHASD._tcp.local.", listener)  
-try:  
-    input("Press enter to exit...\n\n")
-finally:  
-    zeroconf.close()
+
+while 1:
+    time.sleep(5)
