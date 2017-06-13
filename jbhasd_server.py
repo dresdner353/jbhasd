@@ -58,6 +58,7 @@ def sunset_api_time_to_epoch(time_str):
 switch_tlist = [
         ("Livingroom", "Uplighter"),
         ("Playroom", "Uplighter"),
+        ("Attic", "A"),
         ]
 
 def check_switch(zone_name, switch_name):
@@ -95,7 +96,7 @@ def discover_devices():
 # Init dict of discovered device URLs
 jbhasd_url_dict = {}
 
-http_timeout_secs = 2
+http_timeout_secs = 5
 
 last_sunset_check = -1
 last_device_poll = -1
@@ -218,9 +219,26 @@ while (1):
     
                 if (check_switch(zone_name, control_name)):
                     print("  Marked for Sunrise/Sunset automation")
-                    if (desired_state != control_state):
-                        print("  ==========> Changing state from %d to %d" % (control_state, desired_state))
-                        data = urllib.parse.urlencode({'control' : control_name, 'state'  : desired_state})
+                    effective_state = desired_state
+
+                    # If off and we want it on
+                    # turn on
+                    if (control_state == 0 and 
+                        desired_state == 1):
+                        effective_state = 1
+
+                    # If on and we want it off
+                    # and its before mid-day, then turn off
+                    # Allows for manual over-ride from mid-day 
+                    # omward
+                    if (control_state == 1 and 
+                        desired_state == 0 and
+                        current_time < 1200):
+                        effective_state = 0
+
+                    if (effective_state != control_state):
+                        print("  ==========> Changing state from %d to %d" % (control_state, effective_state))
+                        data = urllib.parse.urlencode({'control' : control_name, 'state'  : effective_state})
                         post_data = data.encode('utf-8')
                         req = urllib.request.Request(jbhasd_url_dict[key], post_data)
                         try:
