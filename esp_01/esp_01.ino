@@ -1,4 +1,4 @@
-// ESP-8266 Sketch for a standalone device
+// ESP-8266 Sketch for a ESP-01 device
 // using what I call the JBHASD "API" 
 // (Json-Based Home Automation with Service Discovery)
 // 
@@ -108,6 +108,7 @@ struct gpio_sensor {
 // Allows you to test the feature without having to use actual sensors.
 struct gpio_sensor gv_sensor_register[] = {
     { "Temp",  GP_SENS_TYPE_DHT, DHT21,      2, NULL, 0, 0 }, // Standard Sonoff spare GPIO 14
+    { "Fake",  GP_SENS_TYPE_DHT,     0, NO_PIN, NULL, 0, 0 }, // Fake DHT with no pin
     { NULL,    GP_SENS_TYPE_NONE,    0,       0, NULL, 0, 0 }  // terminator.. never delete
 };
 
@@ -192,6 +193,7 @@ int gv_led_state_reg[] = { HIGH, LOW };
 #define LOGBUF_MAX 2048
 
 enum gv_logging_enum {
+    LOGGING_NONE,
     LOGGING_SERIAL,     // Log to Serial
     LOGGING_NW_CLIENT,  // Log to connected network client
 };
@@ -824,13 +826,19 @@ void load_config()
 
 // Function: save_config
 // Writes config to EEPROM
-void save_config() 
+// has optional arg used to set specific 
+// config version or default to hard-coded value
+void save_config(unsigned char marker = CFG_MARKER_VAL) 
 {
     log_message("save_config()\n");
     int i;
 
-    // set marker field to special value
-    gv_config.marker = CFG_MARKER_VAL;
+    // set marker field to marker arg
+    // which either defaults to the defined constant
+    // or value passed in
+    // used to drive a factory reset if called
+    // save_config(0)
+    gv_config.marker = marker;
 
     log_message("Writing EEPROM data..\n");
     log_message("Marker:%d\n"
@@ -1343,6 +1351,13 @@ void sta_handle_json() {
         log_message("Received reboot command\n");
         ESP.restart();
     }
+
+    // factory reset if directed
+    if (gv_web_server.hasArg("reset")) {
+        log_message("Received reset command\n");
+        save_config(0);
+        ESP.restart();
+    }
 }
 
 // Function: start_sta_mode
@@ -1401,9 +1416,12 @@ void start_sta_mode()
     // before reboot
     connect_count = 0;
 
+    // wifi LED off
+    digitalWrite(gv_wifi_led_pin, 
+                 gv_led_state_reg[0]);
+
     // Activate switches
     // to reset all to defaults
-    // including the status LED if used
     setup_switches();
 
     // sensors
