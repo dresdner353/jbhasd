@@ -33,7 +33,7 @@ int gv_boot_program_pin = 0;
 // LED indicator pin for AP and STA connect states
 // We use this LED to apply three flashing rates
 // for Boot, AP mode and the wifi connect state
-// This value matches the SONOFF 
+// This value matches the S20 Green LED 
 int gv_wifi_led_pin = 13;
 
 // Definition for the use of GPIO pins as 
@@ -202,8 +202,21 @@ enum gv_logging_enum {
     LOGGING_NW_CLIENT,  // Log to connected network client
 };
 
-// default is no logging because of rx/tx GPIO overload
 enum gv_logging_enum gv_logging = LOGGING_NONE;
+
+// Function start_serial
+// Starts serial logging after 
+// checking GPIO pin usage 
+// across switches and sensors
+void start_serial()
+{
+    if (!pin_in_use(3) &&  // Rx
+        !pin_in_use(1)) {  // Tx
+        gv_logging = LOGGING_SERIAL;
+        Serial.begin(115200);
+        delay(1000);
+    }
+}
 
 // Telnet server
 #define MAX_TELNET_CLIENTS 3
@@ -626,6 +639,68 @@ void read_sensors()
 
         i++;
     }
+}
+
+// Function: pin_in_use
+// Returns 1 if specified pin is 
+// found in use in any of the switches,
+// sensors or the wifi status pin
+int pin_in_use(int pin)
+{
+    int i;
+
+    log_message("pin_in_use(pin=%d)\n", pin);
+
+    if (gv_wifi_led_pin == pin) {
+        log_message("pin in use on wifi status led\n");
+        return 1;
+    }
+
+    // loop until we reach the terminator where
+    // name is NULL
+    i = 0;
+    while (gv_switch_register[i].name) {
+        if (strlen(gv_switch_register[i].name) > 0) {
+
+            if (gv_switch_register[i].relay_pin == pin) {
+                log_message("pin in use on switch %s relay \n",
+                            gv_switch_register[i].name);
+                return 1;
+            }
+
+            if (gv_switch_register[i].led_pin == pin) {
+                log_message("pin in use on switch %s led \n",
+                            gv_switch_register[i].name);
+                return 1;
+            }
+
+            if (gv_switch_register[i].manual_pin == pin) {
+                log_message("pin in use on switch %s manual pin \n",
+                            gv_switch_register[i].name);
+                return 1;
+            }
+
+            i++; // to the next entry in register
+        }
+    }
+
+    // Repeat for sensors
+    i = 0;
+    while (gv_sensor_register[i].name) {
+        if (strlen(gv_sensor_register[i].name) > 0) {
+
+            if (gv_sensor_register[i].sensor_pin == pin) {
+                log_message("pin in use on sensor %s\n",
+                            gv_sensor_register[i].name);
+                return 1;
+            }
+
+            i++; // to the next entry in register
+        }
+    }
+
+    // if we got to hear, no matches found
+    return 0;
 }
 
 // Function: get_json_status
@@ -1470,10 +1545,9 @@ void start_sta_mode()
 // (wifi SSID blank), then it forces itself into AP mode
 void setup() 
 {
-    //Serial.begin(115200);
-    delay(1000);
-
     gv_mode = MODE_INIT;
+
+    start_serial();
 
     // timer reset 
     // helps stop spontaneous watchdog
