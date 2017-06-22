@@ -74,7 +74,7 @@ struct gpio_switch {
 // in this array should not exceed MAX_SWITCHES
 struct gpio_switch gv_switch_register[] = {
     { "Socket",        12, NO_PIN,     0,  1, 0 }, // S20 relay+Blue LED GPIO 12
-    { "Green LED", NO_PIN,     13,     0,  1, 0 }, // S20 Green LED GPIO 13
+    { "Green LED", NO_PIN,     13, NO_PIN, 1, 0 }, // S20 Green LED GPIO 13
     { NULL,        NO_PIN, NO_PIN, NO_PIN, 0, 0 }  // terminator.. never delete this
 };
 
