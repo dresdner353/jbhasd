@@ -1450,6 +1450,7 @@ void start_sta_mode()
     int connect_timeout = 60;
     int max_connect_attempts = 5;
     static int connect_count = 0; // track #times we try to connect
+    int i;
 
     log_message("start_sta_mode()\n");
     gv_mode = MODE_WIFI_STA;
@@ -1477,7 +1478,6 @@ void start_sta_mode()
 
     while (WiFi.status() != WL_CONNECTED && 
            connect_timeout > 0) {
-        delay(1000);
         toggle_wifi_led(1000);
         log_message(".");
         connect_timeout--;
@@ -1495,6 +1495,11 @@ void start_sta_mode()
     // we give a reconnect scenario the same max attempts
     // before reboot
     connect_count = 0;
+
+    // 20 quick flashes to signal WIFI connected
+    for (i = 1; i <= 20; i++) {
+        toggle_wifi_led(50);
+    }
 
     // wifi LED off
     digitalWrite(gv_wifi_led_pin, 
