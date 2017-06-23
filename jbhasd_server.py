@@ -56,17 +56,84 @@ def sunset_api_time_to_epoch(time_str):
 
 # Zone Switchname
 switch_tlist = [
-        ("Livingroom", "Uplighter"),
-        ("Playroom", "Uplighter"),
-        ("Attic", "A"),
+#        Zone           Switch         On          Off       Override
+        ("Livingroom",  "Uplighter",   "sunset",   "0200",   "1200" ),
+        ("Playroom",    "Uplighter",   "sunset",   "0200",   "1200" ),
+
+        ("Attic",       "A",           "1200",     "1205",   "2359" ),
+        ("Attic",       "A",           "1330",     "1400",   "2359" ),
+        ("Attic",       "A",           "1500",     "1501",   "2359" ),
+
+        ("S20T1",       "Socket",      "1200",     "1202",   "2359" ),
+        ("S20T1",       "Green LED",   "1200",     "1210",   "2359" ),
+
+        ("S20T2",       "Socket",      "1120",     "1150",   "2359" ),
+        ("S20T2",       "Green LED",   "1120",     "1150",   "2359" ),
+
+        ("S20T3",       "Socket",      "1500",     "1600",   "1200" ),
+        ("S20T3",       "Green LED",   "1505",     "1510",   "1200" ),
+
+        ("S20T4",       "Socket",      "sunset",   "0200",   "1200" ),
+        ("S20T4",       "Green LED",   "sunset",   "0200",   "1200" ),
         ]
 
-def check_switch(zone_name, switch_name):
-    # returns 1 for matches in switch_tlist
-    for zone, switch in switch_tlist:
+def check_switch(zone_name, 
+                 switch_name, 
+                 current_time, 
+                 control_state):
+
+    # represents state of switch
+    # -1 do nothing.. not matched
+    # 0 off
+    # 1 on
+    desired_state = -1
+
+    for zone, switch, on_time, off_time, override_time in switch_tlist:
         if zone == zone_name and switch == switch_name:
-                return 1
-    return 0
+            # have a match
+            # desired state will have a value now
+            # so we assume off initially
+            # but this only applies to the first 
+            # encounter
+            # that allows us to straddle several 
+            # events on the same switch and leave
+            # an overall on state fall-through
+            # in fact the logic of the decisions below are
+            # all about setting desired_state to 1 and 
+            # never to 0 for this very reason
+            if (desired_state == -1):
+                desired_state = 0
+
+            # sunset keyword replacemenet with
+            # dynamic sunset offset time
+            if (on_time == "sunset"):
+                on_time = sunset_on_time
+            else:
+                on_time = int(on_time)
+
+            off_time = int(off_time)
+            override_time = int(override_time)
+
+            if (on_time <= off_time):
+                if (current_time >= on_time and 
+                    current_time < off_time):
+                    desired_state = 1
+            else:
+                if (current_time > on_time):
+                    desired_state = 1
+                else:
+                    if (current_time < on_time and
+                        current_time < off_time):
+                        desired_state = 1
+
+            # override scenarios
+            # stopping us turning off a switch
+            if (control_state == 1 and 
+                desired_state == 0 and
+                current_time >= override_time):
+                desired_state = 1
+
+    return desired_state
 
 class MyZeroConfListener(object):  
     def remove_service(self, zeroconf, type, name):
@@ -105,17 +172,6 @@ sunset_epoch = 0
 # Lights on N seconds after/before sunset
 sunset_lights_on_offset = -3600
 
-# Lights off at given HHMM time
-# Time here is a 4 digit decimal number
-# Good for numerical comparisons
-lights_off_time = int("0200")
-
-# Over-ride threshold
-# Time at which we stop auto-turning off
-# switches assuming the undesired on
-# state is deliberate
-override_threshold_time = int("1200")
-
 # open for append
 sensor_file = open("sensors.csv", "a")
 
@@ -153,8 +209,8 @@ while (1):
             json_data = json.loads(response_str.decode('utf-8'))
             sunset_str = json_data['results']['sunset']
             sunset_ts = sunset_api_time_to_epoch(sunset_str)
-            local_time = time.localtime(sunset_ts + sunset_lights_on_offset)
-            lights_on_time = int(time.strftime("%H%M", local_time))
+            sunset_local_time = time.localtime(sunset_ts + sunset_lights_on_offset)
+            sunset_on_time = int(time.strftime("%H%M", sunset_local_time))
 
         last_sunset_check = sample_min_epoch
 
@@ -171,24 +227,7 @@ while (1):
 
     last_device_poll = sample_min_epoch
 
-    # Calculate desired state
-    desired_state = 0
-    if (lights_on_time <= lights_off_time):
-        if (current_time >= lights_on_time and 
-            current_time < lights_off_time):
-            desired_state = 1
-    else:
-        if (current_time > lights_on_time):
-            desired_state = 1
-        else:
-            if (current_time < lights_on_time and
-                current_time < lights_off_time):
-                desired_state = 1
-
     print("Current Time: (%04d)" % (current_time))
-    print("Lights on at: (%04d)" % (lights_on_time))
-    print("Lights off at hour: %04d" % (lights_off_time))
-    print("Desired State for Lights: %d" % (desired_state))
     print("Sample Time: %s" % (time.ctime(sample_min_epoch)))
 
     print ("Discovered Devices:(%d)" % (len(jbhasd_url_dict)))
@@ -223,39 +262,22 @@ while (1):
                                                               control_type,
                                                               control_state))
     
-                if (check_switch(zone_name, control_name)):
-                    print("  Marked for Sunrise/Sunset automation")
+                desired_state = check_switch(zone_name, 
+                                             control_name,
+                                             current_time,
+                                             control_state)
+                print("  Desired State: %d" % (desired_state))
 
-                    # Assume current control state is what we
-                    # want until determined otherwise
-                    effective_state = control_state
-
-                    # If off and we want it on
-                    # turn on
-                    if (control_state == 0 and 
-                        desired_state == 1):
-                        effective_state = 1
-
-                    # If on and we want it off
-                    # and its before override_threshold_time, 
-                    # then turn off
-                    # Allows for manual over-ride from set time
-                    # omward
-                    if (control_state == 1 and 
-                        desired_state == 0 and
-                        current_time < override_threshold_time):
-                        effective_state = 0
-
-                    if (effective_state != control_state):
-                        print("  ==========> Changing state from %d to %d" % (control_state, effective_state))
-                        data = urllib.parse.urlencode({'control' : control_name, 'state'  : effective_state})
-                        post_data = data.encode('utf-8')
-                        req = urllib.request.Request(jbhasd_url_dict[key], post_data)
-                        try:
-                            response = urllib.request.urlopen(req,
-                                                              timeout = http_timeout_secs)
-                        except:
-                            print("  Error in urlopen (switch state change)")
+                if (desired_state != -1 and control_state != desired_state):
+                    print("  ==========> Changing state from %d to %d" % (control_state, desired_state))
+                    data = urllib.parse.urlencode({'control' : control_name, 'state'  : desired_state})
+                    post_data = data.encode('utf-8')
+                    req = urllib.request.Request(jbhasd_url_dict[key], post_data)
+                    try:
+                        response = urllib.request.urlopen(req,
+                                                          timeout = http_timeout_secs)
+                    except:
+                        print("  Error in urlopen (switch state change)")
 
             for sensor in json_data['sensors']:
                 sensor_name = sensor['name']
