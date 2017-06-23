@@ -61,6 +61,7 @@ switch_tlist = [
         ("Playroom",    "Uplighter",   "sunset",   "0200",   "1200" ),
 
         ("Attic",       "A",           "1200",     "1205",   "2359" ),
+        ("Attic",       "A",           "1230",     "1232",   "1200" ),
         ("Attic",       "A",           "1330",     "1400",   "2359" ),
         ("Attic",       "A",           "1500",     "1501",   "2359" ),
 
@@ -73,8 +74,8 @@ switch_tlist = [
         ("S20T3",       "Socket",      "1500",     "1600",   "1200" ),
         ("S20T3",       "Green LED",   "1505",     "1510",   "1200" ),
 
-        ("S20T4",       "Socket",      "sunset",   "0200",   "1200" ),
-        ("S20T4",       "Green LED",   "sunset",   "0200",   "1200" ),
+        ("S20T4",       "Socket",      "sunset",   "0200",   "1600" ),
+        ("S20T4",       "Green LED",   "sunset",   "0200",   "1600" ),
         ]
 
 def check_switch(zone_name, 
@@ -126,10 +127,12 @@ def check_switch(zone_name,
                         current_time < off_time):
                         desired_state = 1
 
-            # override scenarios
+            # override scenario turning on 
+            # before the scheduled on time
             # stopping us turning off a switch
             if (control_state == 1 and 
                 desired_state == 0 and
+                current_time < on_time and
                 current_time >= override_time):
                 desired_state = 1
 
