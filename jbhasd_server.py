@@ -22,6 +22,7 @@ import json
 import random
 import datetime
 import threading
+import os
 from dateutil import tz
 from zeroconf import ServiceBrowser, Zeroconf
 
@@ -40,6 +41,21 @@ sunset_url = 'http://api.sunrise-sunset.org/json?lat=53.349809&lng=-6.2624431&fo
 # "astronomical_twilight_end":"2017-04-11T21:34:10+00:00"},"status":"OK"}
 
 zeroconf_delay_secs = 60
+
+# Init dict of discovered device URLs
+jbhasd_url_dict = {}
+
+# dict to count failed URL requests
+failed_url_dict = {}
+
+http_timeout_secs = 5
+
+last_sunset_check = -1
+last_device_poll = -1
+sunset_epoch = 0
+
+# Lights on N seconds after/before sunset
+sunset_lights_on_offset = -3600
 
 def sunset_api_time_to_epoch(time_str):
     # decode UTC time from string, strip last 6 chars first
@@ -153,7 +169,6 @@ class MyZeroConfListener(object):
 def discover_devices():
     # loop forever 
     while (1):
-        print("\n\nService Discovery.. (%d seconds)" % (zeroconf_delay_secs))
         zeroconf = Zeroconf()
         listener = MyZeroConfListener()  
         browser = ServiceBrowser(zeroconf, "_JBHASD._tcp.local.", listener)  
@@ -163,20 +178,10 @@ def discover_devices():
         zeroconf.close()
 
 
-# Init dict of discovered device URLs
-jbhasd_url_dict = {}
 
-http_timeout_secs = 5
-
-last_sunset_check = -1
-last_device_poll = -1
-sunset_epoch = 0
-
-# Lights on N seconds after/before sunset
-sunset_lights_on_offset = -3600
 
 # open for append
-sensor_file = open("sensors.csv", "a")
+analytics_file = open("analytics.csv", "a")
 
 # device discovery thread
 t = threading.Thread(target = discover_devices)
@@ -195,9 +200,8 @@ while (1):
     sample_min_epoch = int(now / 60) * 60
     current_time = int(time.strftime("%H%M", time.localtime()))
 
-    # recalc every 12 hours or at midnight
-    if ((sample_min_epoch - last_sunset_check) >= 12*60*60 or
-        (current_time == 0)):
+    # recalc every 6 hours
+    if ((sample_min_epoch - last_sunset_check) >= 6*60*60):
         # Re-calculate
         print("Getting Sunset times..")
         response = None
@@ -224,10 +228,11 @@ while (1):
     # sample minute and last. This will keep us from slipping
     time_since_last_poll = sample_min_epoch - last_device_poll
     if time_since_last_poll < 60:
-        print("Waiting to pass next minute interval.. sleeping for 5")
+        print(".", end = '', flush = True)
         time.sleep(5)
         continue
 
+    os.system('clear')
     last_device_poll = sample_min_epoch
 
     print("Current Time: (%04d)" % (current_time))
@@ -240,42 +245,65 @@ while (1):
     # .keys() iterator not suitable here
     device_url_list = list(jbhasd_url_dict)
     for key in device_url_list:
-        print("\nHostname:%s \nURL:%s" % (key, jbhasd_url_dict[key]))
-
         response = None
+        url = jbhasd_url_dict[key]
         try:
-            response = urllib.request.urlopen(jbhasd_url_dict[key], 
+            response = urllib.request.urlopen(url, 
                                               timeout = http_timeout_secs)
         except:
-            print("Error in urlopen (status check)")
+            if (url in failed_url_dict):
+                failed_url_dict[url] += 1
+            else:
+                failed_url_dict[url] = 1
+
+            print("\nError in urlopen (status check).. Name:%s URL:%s Failed Attempts:%d" % (key, 
+                                                                                             url, 
+                                                                                             failed_url_dict[url]))
+
+            if (failed_url_dict[url] >= 5):
+                # take out URL
+                print("Failed access to %s [%s] has reached 5 attempts.. deleting" % (key, url))
+                del jbhasd_url_dict[key]
+                del failed_url_dict[url]
 
         if (response is not None):
+            failed_url_dict[url] = 0 # reset any failed count
             response_str = response.read()
             #print("Raw JSON data..\n%s" % (response_str))
             json_data = json.loads(response_str.decode('utf-8'))
             device_name = json_data['name']
             zone_name = json_data['zone']
-            print("Name:%s Zone:%s" % (device_name, 
-                                       zone_name))
+            print("\nName:%s Zone:%s URL:%s" % (device_name, 
+                                              zone_name,
+                                              url))
             for control in json_data['controls']:
                 control_name = control['name']
                 control_type = control['type']
                 control_state = int(control['state'])
-                print("  Control Name:%s Type:%s State:%s" % (control_name,
-                                                              control_type,
-                                                              control_state))
-    
                 desired_state = check_switch(zone_name, 
                                              control_name,
                                              current_time,
                                              control_state)
-                print("  Desired State: %d" % (desired_state))
-
+                print("  Control Name:%s Type:%s Current State:%s Desired State:%s" % (control_name,
+                                                                                       control_type,
+                                                                                       control_state,
+                                                                                       desired_state))
+                csv_row = "%d,%d,%s,%s,%s,%s,%s,%d" % (2,
+                                                       sample_min_epoch, 
+                                                       zone_name, 
+                                                       device_name, 
+                                                       control_name, 
+                                                       "", 
+                                                       "",
+                                                       control_state)
+                analytics_file.write("%s\n" % (csv_row)) 
+                analytics_file.flush()
+    
                 if (desired_state != -1 and control_state != desired_state):
-                    print("  ==========> Changing state from %d to %d" % (control_state, desired_state))
+                    print("  ==> Changing state from %d to %d" % (control_state, desired_state))
                     data = urllib.parse.urlencode({'control' : control_name, 'state'  : desired_state})
                     post_data = data.encode('utf-8')
-                    req = urllib.request.Request(jbhasd_url_dict[key], post_data)
+                    req = urllib.request.Request(url, post_data)
                     try:
                         response = urllib.request.urlopen(req,
                                                           timeout = http_timeout_secs)
@@ -288,20 +316,19 @@ while (1):
                 if sensor_type == "temp/humidity":
                     temp = sensor['temp']
                     humidity = sensor['humidity']
-                    print("  Sensor.. %d,%s,%s,%s,%s,%s,%s" % (sample_min_epoch, 
-                                                            zone_name, 
-                                                            device_name, 
-                                                            jbhasd_url_dict[key],
-                                                            sensor_name, 
-                                                            temp, 
-                                                            humidity))
-                    sensor_file.write("%d,%s,%s,%s,%s,%s,%s\n" % (sample_min_epoch, 
-                                                                  zone_name, 
-                                                                  device_name, 
-                                                                  jbhasd_url_dict[key],
-                                                                  sensor_name, 
-                                                                  temp, 
-                                                                  humidity))
-                    sensor_file.flush()
+                    print("  Sensor Name:%s Type:%s Temp:%s Humidity:%s" % (sensor_name,
+                                                                            sensor_type,
+                                                                            temp,
+                                                                            humidity))
+                    csv_row = "%d,%d,%s,%s,%s,%s,%s,%d" % (1,
+                                                           sample_min_epoch, 
+                                                           zone_name, 
+                                                           device_name, 
+                                                           sensor_name, 
+                                                           temp, 
+                                                           humidity,
+                                                           0)
+                    analytics_file.write("%s\n" % (csv_row)) 
+                    analytics_file.flush()
 
     print("\n\n")
