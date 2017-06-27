@@ -85,7 +85,7 @@ switch_tlist = [
         ("S20T1",       "Green LED",   "1200",     "1210",   "2359" ),
 
         ("S20T2",       "Socket",      "1120",     "1150",   "2359" ),
-        ("S20T2",       "Green LED",   "1120",     "1150",   "2359" ),
+        ("S20T2",       "Green LED",   "1125",     "1145",   "2359" ),
 
         ("S20T3",       "Socket",      "1500",     "1600",   "1200" ),
         ("S20T3",       "Green LED",   "1505",     "1510",   "1200" ),
@@ -284,10 +284,17 @@ while (1):
                                              control_name,
                                              current_time,
                                              control_state)
-                print("  Control Name:%s Type:%s Current State:%s Desired State:%s" % (control_name,
-                                                                                       control_type,
-                                                                                       control_state,
-                                                                                       desired_state))
+
+                if (desired_state != -1 and control_state != desired_state):
+                    action = ">>>> Setting state to %d <<<<" % (desired_state)
+                else:
+                    action = ""
+
+                print("  %s %s Current State:%s Desired State:%s %s" % (control_type,
+                                                                        control_name,
+                                                                        control_state,
+                                                                        desired_state,
+                                                                        action))
                 csv_row = "%d,%d,%s,%s,%s,%s,%s,%d" % (2,
                                                        sample_min_epoch, 
                                                        zone_name, 
@@ -300,7 +307,6 @@ while (1):
                 analytics_file.flush()
     
                 if (desired_state != -1 and control_state != desired_state):
-                    print("  ==> Changing state from %d to %d" % (control_state, desired_state))
                     data = urllib.parse.urlencode({'control' : control_name, 'state'  : desired_state})
                     post_data = data.encode('utf-8')
                     req = urllib.request.Request(url, post_data)
@@ -316,10 +322,9 @@ while (1):
                 if sensor_type == "temp/humidity":
                     temp = sensor['temp']
                     humidity = sensor['humidity']
-                    print("  Sensor Name:%s Type:%s Temp:%s Humidity:%s" % (sensor_name,
-                                                                            sensor_type,
-                                                                            temp,
-                                                                            humidity))
+                    print("  sensor %s Temp:%s Humidity:%s" % (sensor_name,
+                                                               temp,
+                                                               humidity))
                     csv_row = "%d,%d,%s,%s,%s,%s,%s,%d" % (1,
                                                            sample_min_epoch, 
                                                            zone_name, 
