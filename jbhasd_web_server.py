@@ -1,14 +1,9 @@
 # Cormac Long April 2017
 #
-# Simple basic python3 script
+# Simple basic webserver script
 # to detect specified on-network JBHASD devices
-# by zone and switch name and turn them on
-# 10 mins after sunset and off at 2AM
-# Its more a proof of concept for now
-# until I build something more substantial
-# The script loops every 60secs, detecting all devices
-# and for those in the switch_tlist, it makes sure they
-# are set on or off as required 
+# and present a crude web I/F for turning 
+# them off/on as required
 
 
 import time
