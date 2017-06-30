@@ -111,14 +111,56 @@ def probe_devices():
 
 
 def build_web_page():
+    web_page_str = ('<head>'
+                    '  <style type="text/css">'
+                    '    * {font-family: arial}'
+                    '  </style>'
+                    '</head>')
 
-    web_page_str = '<table border="0" padding="5">'
+    web_page_str += '<table border="0" padding="5">'
+
+    # Sensors
+    web_page_str += ('<tr>'
+                     '<td><b>Zone</b></td><td><b>Sensor</b></td>'
+                     '<td><b>Temp</b></td><td><b>Humidity</b></td>'
+                     '</tr>')
 
     for device_name in jbhasd_device_status_dict:
         json_resp_str = jbhasd_device_status_dict[device_name]
         json_data = json.loads(json_resp_str.decode('utf-8'))
         zone_name = json_data['zone']
-        
+
+        for sensor in json_data['sensors']:
+            sensor_name = sensor['name']
+            sensor_type = sensor['type']
+
+            if sensor_type == 'temp/humidity':
+                temp = sensor['temp']
+                humidity = sensor['temp']
+
+                web_page_str += '<tr>'
+                web_page_str += '<td>%s</td><td>%s</td>' % (zone_name,
+                                                            sensor_name)
+                web_page_str += '<td>%sC</td><td>%s%%</td>' % (temp,
+                                                              humidity)
+                web_page_str += '</tr>'
+       
+
+    # Controls
+    web_page_str += '<tr><td></td><td></td><td></td><td></td></tr>'
+    web_page_str += '<tr><td></td><td></td><td></td><td></td></tr>'
+    web_page_str += '<tr><td></td><td></td><td></td><td></td></tr>'
+
+    web_page_str += ('<tr>'
+                     '<td><b>Zone</b></td><td><b>Switch</b></td>'
+                     '<td></td><td></td>'
+                     '</tr>')
+
+    for device_name in jbhasd_device_status_dict:
+        json_resp_str = jbhasd_device_status_dict[device_name]
+        json_data = json.loads(json_resp_str.decode('utf-8'))
+        zone_name = json_data['zone']
+
         for control in json_data['controls']:
             control_name = control['name']
             control_type = control['type']
@@ -127,40 +169,55 @@ def build_web_page():
             web_page_str += '<tr>'
             web_page_str += '<td>%s</td><td>%s</td>' % (zone_name,
                                                         control_name)
-            web_page_str += '<td><a href="/?device=%s&control=%s&state=1"><button>ON</button></a></td>' % (device_name,
-                                                                                                           control_name)
-            web_page_str += '<td><a href="/?device=%s&control=%s&state=0"><button>OFF</button></a></td>' % (device_name,
-                                                                                                            control_name)
+            web_page_str += ('<td><a href="/?device=%s&control=%s'
+                             '&state=1"><button>ON</button></a></td>') % (device_name,
+                                                                          control_name)
+
+            web_page_str += ('<td><a href="/?device=%s&control=%s'
+                             '&state=0"><button>OFF</button></a></td>') % (device_name,
+                                                                           control_name)
             web_page_str += '</tr>'
 
     web_page_str += '</table>'
 
     return web_page_str
 
+
 def process_get_params(path):
     if (len(path) > 2):
         # skip /? from path before parsing
         args_dict = urllib.parse.parse_qs(path[2:])
         print(args_dict)
-        if 'device' in args_dict:
+        if ('device' in args_dict and
+            'control' in args_dict and
+            'state' in args_dict):
             # get args. but first instances only
             # as parse_qs gives us a dict of lists
             device = args_dict['device'][0]
             control = args_dict['control'][0]
             state = args_dict['state'][0]
-            print(jbhasd_url_dict)
+
+            if not device in jbhasd_device_url_dict:
+                print("Can't find device %s in URL dict" % (device))
+                return
+
             url = jbhasd_device_url_dict[device]
 
+            # Format URL and pass control name  through quoting function
+            # Will handle any special character formatting for spaces
+            # etc
             command_url = '%s?control=%s&state=%s' % (url,
-                                                      control,
+                                                      urllib.parse.quote_plus(control),
                                                       state)
+
+
             print("Formatted command url:%s" % (command_url))
             
             try:
                 response = urllib.request.urlopen(command_url, 
                                                   timeout = http_timeout_secs)
             except:
-                print("\nError in urlopen (command).. Name:%s URL:%s" % (key, 
+                print("\nError in urlopen (command).. Name:%s URL:%s" % (device, 
                                                                          command_url))
     return
 
