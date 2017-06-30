@@ -22,8 +22,8 @@ from dateutil import tz
 from zeroconf import ServiceBrowser, Zeroconf
 from http.server import BaseHTTPRequestHandler,HTTPServer
 
-zeroconf_delay_secs = 60
-probe_delay_secs = 30
+zeroconf_refresh_interval = 30
+probe_refresh_interval = 10
 web_port = 8080
 
 # Init dict of discovered device URLs
@@ -65,7 +65,7 @@ def discover_devices():
         browser = ServiceBrowser(zeroconf, "_JBHASD._tcp.local.", listener)  
 
         # loop interval
-        time.sleep(zeroconf_delay_secs)
+        time.sleep(zeroconf_refresh_interval)
         zeroconf.close()
 
 
@@ -107,18 +107,64 @@ def probe_devices():
                 jbhasd_device_url_dict[device_name] = url
                 #print("Raw JSON data..\n%s" % (response_str))
         
-        time.sleep(probe_delay_secs)
+        time.sleep(probe_refresh_interval)
 
 
 def build_web_page():
+
+    # webpage header and title
+    # CSS thrown in 
+    # and a little refresh timer matched 
+    # to the same probe timer
     web_page_str = ('<head>'
                     '  <title>JBHASD Console</title>'
+                    '  <meta http-equiv="refresh" content="%d">'
+                    '  <meta id="META" name="viewport" content="width=device-width; initial-scale=1.0" >'
                     '  <style type="text/css">'
                     '    * {font-family: arial}'
                     '  </style>'
-                    '</head>')
+                    '</head>') % (probe_refresh_interval)
 
-    web_page_str += '<table border="0" padding="5">'
+    web_page_str += '<table border="0" padding="15">'
+
+    # Controls
+    web_page_str += ('<tr>'
+                     '<td><b>Zone</b></td>'
+                     '<td><b>Switch</b></td>'
+                     '<td><b>State</b></td>'
+                     '<td></td>'
+                     '<td></td>'
+                     '</tr>')
+
+    for device_name in jbhasd_device_status_dict:
+        json_resp_str = jbhasd_device_status_dict[device_name]
+        json_data = json.loads(json_resp_str.decode('utf-8'))
+        zone_name = json_data['zone']
+
+        for control in json_data['controls']:
+            control_name = control['name']
+            control_type = control['type']
+            control_state = int(control['state'])
+
+            web_page_str += '<tr>'
+            web_page_str += ('<td>%s</td>'
+                             '<td>%s</td>'
+                             '<td>%s</td>') % (zone_name,
+                                               control_name,
+                                               control_state)
+            web_page_str += ('<td><a href="/?device=%s&control=%s'
+                             '&state=1"><button>ON</button></a></td>') % (device_name,
+                                                                          control_name)
+
+            web_page_str += ('<td><a href="/?device=%s&control=%s'
+                             '&state=0"><button>OFF</button></a></td>') % (device_name,
+                                                                           control_name)
+            web_page_str += '</tr>'
+
+    # white space
+    web_page_str += '<tr><td></td><td></td><td></td><td></td></tr>'
+    web_page_str += '<tr><td></td><td></td><td></td><td></td></tr>'
+    web_page_str += '<tr><td></td><td></td><td></td><td></td></tr>'
 
     # Sensors
     web_page_str += ('<tr>'
@@ -137,48 +183,15 @@ def build_web_page():
 
             if sensor_type == 'temp/humidity':
                 temp = sensor['temp']
-                humidity = sensor['temp']
+                humidity = sensor['humidity']
 
                 web_page_str += '<tr>'
                 web_page_str += '<td>%s</td><td>%s</td>' % (zone_name,
                                                             sensor_name)
                 web_page_str += '<td>%sC</td><td>%s%%</td>' % (temp,
-                                                              humidity)
+                                                               humidity)
                 web_page_str += '</tr>'
        
-
-    # Controls
-    web_page_str += '<tr><td></td><td></td><td></td><td></td></tr>'
-    web_page_str += '<tr><td></td><td></td><td></td><td></td></tr>'
-    web_page_str += '<tr><td></td><td></td><td></td><td></td></tr>'
-
-    web_page_str += ('<tr>'
-                     '<td><b>Zone</b></td><td><b>Switch</b></td>'
-                     '<td></td><td></td>'
-                     '</tr>')
-
-    for device_name in jbhasd_device_status_dict:
-        json_resp_str = jbhasd_device_status_dict[device_name]
-        json_data = json.loads(json_resp_str.decode('utf-8'))
-        zone_name = json_data['zone']
-
-        for control in json_data['controls']:
-            control_name = control['name']
-            control_type = control['type']
-            control_state = int(control['state'])
-
-            web_page_str += '<tr>'
-            web_page_str += '<td>%s</td><td>%s</td>' % (zone_name,
-                                                        control_name)
-            web_page_str += ('<td><a href="/?device=%s&control=%s'
-                             '&state=1"><button>ON</button></a></td>') % (device_name,
-                                                                          control_name)
-
-            web_page_str += ('<td><a href="/?device=%s&control=%s'
-                             '&state=0"><button>OFF</button></a></td>') % (device_name,
-                                                                           control_name)
-            web_page_str += '</tr>'
-
     web_page_str += '</table>'
 
     return web_page_str
@@ -220,6 +233,10 @@ def process_get_params(path):
             except:
                 print("\nError in urlopen (command).. Name:%s URL:%s" % (device, 
                                                                          command_url))
+            if (response is not None):
+                # update the state as returned
+                json_resp_str = response.read()
+                jbhasd_device_status_dict[device] = json_resp_str
     return
 
 #This class will handles any incoming request from
