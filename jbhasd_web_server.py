@@ -112,6 +112,7 @@ def probe_devices():
 
 def build_web_page():
     web_page_str = ('<head>'
+                    '  <title>JBHASD Console</title>'
                     '  <style type="text/css">'
                     '    * {font-family: arial}'
                     '  </style>'
