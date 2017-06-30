@@ -116,9 +116,13 @@ def build_web_page():
     # CSS thrown in 
     # and a little refresh timer matched 
     # to the same probe timer
+    # of importance here is the refresh uses a directed
+    # URL of / to ensure that ant GET args present from a button click
+    # do not become part of the refresh effectively repearing the ON/OFF
+    # click over and over
     web_page_str = ('<head>'
                     '  <title>JBHASD Console</title>'
-                    '  <meta http-equiv="refresh" content="%d">'
+                    '  <meta http-equiv="refresh" content="%d url=/">'
                     '  <meta id="META" name="viewport" content="width=device-width; initial-scale=1.0" >'
                     '  <style type="text/css">'
                     '    * {font-family: arial}'
