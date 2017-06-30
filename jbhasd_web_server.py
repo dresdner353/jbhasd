@@ -205,7 +205,7 @@ def process_get_params(path):
     if (len(path) > 2):
         # skip /? from path before parsing
         args_dict = urllib.parse.parse_qs(path[2:])
-        print(args_dict)
+        #print(args_dict)
         if ('device' in args_dict and
             'control' in args_dict and
             'state' in args_dict):
@@ -229,7 +229,7 @@ def process_get_params(path):
                                                       state)
 
 
-            print("Formatted command url:%s" % (command_url))
+            #print("Formatted command url:%s" % (command_url))
             
             try:
                 response = urllib.request.urlopen(command_url, 
