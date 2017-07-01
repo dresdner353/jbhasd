@@ -24,7 +24,7 @@
 // to enter AP mode for configuration. Pin 0 seems the 
 // most compatible pin to use. It matches the Sonoff reset button
 // There's no fear here with this pin being used for the switch
-// array defined above. This boot function only applies at boot
+// array defined below. This boot function only applies at boot
 // time and the pin will be reset later on to the runtime
 // behaviour.
 int gv_boot_program_pin = 0;
@@ -72,11 +72,12 @@ struct gpio_switch {
 // Excluding the last NULL entry, this number of entries 
 // in this array should not exceed MAX_SWITCHES
 struct gpio_switch gv_switch_register[] = {
-    {  "A",      12,     13,     0,  1, 0 }, // Standard Sonoff 
-    {  "B",  NO_PIN, NO_PIN, NO_PIN, 0, 0 }, // dummy switch
-    {  "C",  NO_PIN, NO_PIN, NO_PIN, 0, 0 }, // dummy switch
-    {  "D",  NO_PIN, NO_PIN, NO_PIN, 0, 0 }, // dummy switch
-    { NULL,  NO_PIN, NO_PIN, NO_PIN, 0, 0 }  // terminator.. never delete this
+//    Name   Relay Pin   LED Pin     Manual Pin  Init State  Current state
+    { "A",   12,         13,         0,          1,          0 }, // Standard Sonoff relay
+    { "B",   NO_PIN,     NO_PIN,     NO_PIN,     0,          0 }, // dummy switch
+    { "C",   NO_PIN,     NO_PIN,     NO_PIN,     0,          0 }, // dummy switch
+    { "D",   NO_PIN,     NO_PIN,     NO_PIN,     0,          0 }, // dummy switch
+    { NULL,  NO_PIN,     NO_PIN,     NO_PIN,     0,          0 }  // terminator.. never delete this
 };
 
 // enum type for sensor types
@@ -111,9 +112,10 @@ struct gpio_sensor {
 // That will result in it acting with pseudo random values based on cycle count
 // Allows you to test the feature without having to use actual sensors.
 struct gpio_sensor gv_sensor_register[] = {
-    { "Temp",  GP_SENS_TYPE_DHT, DHT21,     14, NULL, 0, 0 }, // Standard Sonoff spare GPIO 14
-    { "Fake",  GP_SENS_TYPE_DHT,     0, NO_PIN, NULL, 0, 0 }, // Fake DHT with no pin
-    { NULL,    GP_SENS_TYPE_NONE,    0,       0, NULL, 0, 0 }  // terminator.. never delete
+//    Name     Sensor Type        Variant     Pin     Void Ref  f1  f2
+    { "Temp",  GP_SENS_TYPE_DHT,  DHT21,      14,     NULL,     0,  0 }, // GPIO 14
+    { "Fake",  GP_SENS_TYPE_DHT,  0,          NO_PIN, NULL,     0,  0 }, // Fake DHT with no pin
+    { NULL,    GP_SENS_TYPE_NONE, 0,          0,      NULL,     0,  0 }  // terminator.. never delete
 };
 
 
