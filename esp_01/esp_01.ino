@@ -4,9 +4,12 @@
 // 
 // Cormac Long June 2017
 //
-// The defaults below will work with a ESP-8266 
-// ESP-01 module to use GPIO-0 set to a momentary switch
-// and GPIO-2 set to a DHT sensor
+// The defaults below will work with a ESP-01 module
+// GPIO-0 set to the momentary switch used 
+// at boot time to activate AP mode.
+// A single LED only switch is set to drive the 
+// Tx LED (GPIO-1) and tied to GPIO-0 for manual over-ride
+// GPIO-2 set to a DHT sensor 
 
 #include <EEPROM.h>
 #include <ESP8266WiFi.h>
@@ -24,7 +27,7 @@
 // to enter AP mode for configuration. Pin 0 seems the 
 // most compatible pin to use. It matches the Sonoff reset button
 // There's no fear here with this pin being used for the switch
-// array defined above. This boot function only applies at boot
+// array defined below. This boot function only applies at boot
 // time and the pin will be reset later on to the runtime
 // behaviour.
 int gv_boot_program_pin = 0;
@@ -32,8 +35,9 @@ int gv_boot_program_pin = 0;
 // LED indicator pin for AP and STA connect states
 // We use this LED to apply three flashing rates
 // for Boot, AP mode and the wifi connect state
-// This value matches the Rx pin of the UART
-int gv_wifi_led_pin = 3;
+// This value matches the Tx pin of the UART
+// Thats also the blue on-board LED for the ESP-01
+int gv_wifi_led_pin = 1;
 
 // Definition for the use of GPIO pins as 
 // switches where one pin can control a relay, another can
@@ -72,7 +76,9 @@ struct gpio_switch {
 // Excluding the last NULL entry, this number of entries 
 // in this array should not exceed MAX_SWITCHES
 struct gpio_switch gv_switch_register[] = {
-    { NULL,  NO_PIN, NO_PIN, NO_PIN, 0, 0 }  // terminator.. never delete this
+//    Name   Relay Pin   LED Pin     Manual Pin  Init State  Current state
+    { "A",   NO_PIN,     1,          0,          0,          0 },
+    { NULL,  NO_PIN,     NO_PIN,     NO_PIN,     0,          0 }  // terminator.. never delete this
 };
 
 // enum type for sensor types
@@ -107,9 +113,10 @@ struct gpio_sensor {
 // That will result in it acting with pseudo random values based on cycle count
 // Allows you to test the feature without having to use actual sensors.
 struct gpio_sensor gv_sensor_register[] = {
-    { "Temp",  GP_SENS_TYPE_DHT, DHT21,      2, NULL, 0, 0 }, // Standard Sonoff spare GPIO 14
-    { "Fake",  GP_SENS_TYPE_DHT,     0, NO_PIN, NULL, 0, 0 }, // Fake DHT with no pin
-    { NULL,    GP_SENS_TYPE_NONE,    0,       0, NULL, 0, 0 }  // terminator.. never delete
+//    Name     Sensor Type        Variant     Pin     Void Ref  f1  f2
+    { "Temp",  GP_SENS_TYPE_DHT,  DHT21,      2,      NULL,     0,  0 }, // GPIO 2
+    { "Fake",  GP_SENS_TYPE_DHT,  0,          NO_PIN, NULL,     0,  0 }, // Fake DHT with no pin
+    { NULL,    GP_SENS_TYPE_NONE, 0,          0,      NULL,     0,  0 }  // terminator.. never delete
 };
 
 
