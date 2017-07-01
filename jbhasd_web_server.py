@@ -22,21 +22,22 @@ from dateutil import tz
 from zeroconf import ServiceBrowser, Zeroconf
 from http.server import BaseHTTPRequestHandler,HTTPServer
 
-zeroconf_refresh_interval = 30
+zeroconf_refresh_interval = 60
 probe_refresh_interval = 10
+url_purge_timeout = 30
 web_port = 8080
 
 # Init dict of discovered device URLs
 # keyed on zeroconf name
-jbhasd_url_dict = {}
-
-# dict to count failed URL requests
-failed_url_dict = {}
+jbhasd_zconf_url_set = set()
 
 # dict of probed device status strings
-# keyed on device name (not same as zeroconf name)
+# keyed on url
 jbhasd_device_status_dict = {}
-jbhasd_device_url_dict = {}
+
+# timestamp of last stored status
+# keyed on url
+jbhasd_device_ts_dict = {}
 
 http_timeout_secs = 5
 
@@ -45,7 +46,8 @@ last_device_poll = -1
 
 class MyZeroConfListener(object):  
     def remove_service(self, zeroconf, type, name):
-        del jbhasd_url_dict[name]
+
+        return
 
     def add_service(self, zeroconf, type, name):
         info = zeroconf.get_service_info(type, name)
@@ -53,7 +55,9 @@ class MyZeroConfListener(object):
             address = socket.inet_ntoa(info.address)
             port = info.port
             url_str = "http://%s:%d/json" % (address, port)
-            jbhasd_url_dict[name] = url_str
+            jbhasd_zconf_url_set.add(url_str)
+
+        return
 
 
 def discover_devices():
@@ -70,44 +74,45 @@ def discover_devices():
 
 
 def probe_devices():
-    time.sleep(10)
     print("Probe started")
     # loop forever
     while (1):
-        device_url_list = list(jbhasd_url_dict)
-        for key in device_url_list:
+        # iterate set as snapshot list
+        # avoids issues if the set is updated mid-way
+        device_url_list = list(jbhasd_zconf_url_set)
+        for url in device_url_list:
             response = None
-            url = jbhasd_url_dict[key]
-            #print("Probing %s (%s)" % (key, url))
+            #print("Probing %s" % (url))
             try:
                 response = urllib.request.urlopen(url, 
                                                   timeout = http_timeout_secs)
             except:
-                if (url in failed_url_dict):
-                    failed_url_dict[url] += 1
-                else:
-                    failed_url_dict[url] = 1
-
-                print("\nError in urlopen (status check).. Name:%s URL:%s Failed Attempts:%d" % (key, 
-                                                                                                 url, 
-                                                                                                 failed_url_dict[url]))
-
-                if (failed_url_dict[url] >= 5):
-                    # take out URL
-                    print("Failed access to %s [%s] has reached 5 attempts.. deleting" % (key, url))
-                    del jbhasd_url_dict[key]
-                    del failed_url_dict[url]
+                print("\nError in urlopen (status check).. "
+                      "URL:%s" % (url))
 
             if (response is not None):
-                failed_url_dict[url] = 0 # reset any failed count
                 json_resp_str = response.read()
-                json_data = json.loads(json_resp_str.decode('utf-8'))
-                device_name = json_data['name']
-                jbhasd_device_status_dict[device_name] = json_resp_str
-                jbhasd_device_url_dict[device_name] = url
-                #print("Raw JSON data..\n%s" % (response_str))
+                jbhasd_device_status_dict[url] = json_resp_str
+                jbhasd_device_ts_dict[url] = int(time.time())
         
+        # Purge dead URLs
+        now = int(time.time())
+        # iterate the timestamps from same 
+        # snapshot list to avoid issues with parallel 
+        # access to the dicts
+        for url in device_url_list:
+            if url in jbhasd_device_ts_dict:
+                last_updated = now - jbhasd_device_ts_dict[url]
+                if last_updated >= url_purge_timeout:
+                    print("Device URL:%s last updated %d seconds ago.. purging" % (url,
+                                                                                   last_updated))
+                    del jbhasd_device_ts_dict[url]
+                    del jbhasd_device_status_dict[url]
+                    jbhasd_zconf_url_set.remove(url)
+
         time.sleep(probe_refresh_interval)
+
+    return
 
 
 def build_web_page():
@@ -118,7 +123,7 @@ def build_web_page():
     # to the same probe timer
     # of importance here is the refresh uses a directed
     # URL of / to ensure that ant GET args present from a button click
-    # do not become part of the refresh effectively repearing the ON/OFF
+    # do not become part of the refresh effectively repeating the ON/OFF
     # click over and over
     web_page_str = ('<head>'
                     '  <title>JBHASD Console</title>'
@@ -140,9 +145,12 @@ def build_web_page():
                      '<td></td>'
                      '</tr>')
 
-    for device_name in jbhasd_device_status_dict:
-        json_resp_str = jbhasd_device_status_dict[device_name]
+    # safe snapshot pf dict keys into list
+    url_list = list(jbhasd_device_status_dict)
+    for url in url_list:
+        json_resp_str = jbhasd_device_status_dict[url]
         json_data = json.loads(json_resp_str.decode('utf-8'))
+        device_name = json_data['name']
         zone_name = json_data['zone']
 
         for control in json_data['controls']:
@@ -156,19 +164,23 @@ def build_web_page():
                              '<td>%s</td>') % (zone_name,
                                                control_name,
                                                control_state)
-            web_page_str += ('<td><a href="/?device=%s&control=%s'
-                             '&state=1"><button>ON</button></a></td>') % (device_name,
-                                                                          control_name)
+            # prep args for transport
+            url_safe_url = urllib.parse.quote_plus(url)
+            url_safe_control = urllib.parse.quote_plus(control_name)
 
-            web_page_str += ('<td><a href="/?device=%s&control=%s'
-                             '&state=0"><button>OFF</button></a></td>') % (device_name,
-                                                                           control_name)
+            web_page_str += ('<td><a href="/?url=%s&control=%s'
+                             '&state=1"><button>ON</button></a></td>') % (url_safe_url,
+                                                                          url_safe_control)
+
+            web_page_str += ('<td><a href="/?url=%s&control=%s'
+                             '&state=0"><button>OFF</button></a></td>') % (url_safe_url,
+                                                                           url_safe_control)
             web_page_str += '</tr>'
 
     # white space
-    web_page_str += '<tr><td></td><td></td><td></td><td></td></tr>'
-    web_page_str += '<tr><td></td><td></td><td></td><td></td></tr>'
-    web_page_str += '<tr><td></td><td></td><td></td><td></td></tr>'
+    web_page_str += '<tr><td></td></tr>'
+    web_page_str += '<tr><td></td></tr>'
+    web_page_str += '<tr><td></td></tr>'
 
     # Sensors
     web_page_str += ('<tr>'
@@ -176,16 +188,18 @@ def build_web_page():
                      '<td><b>Temp</b></td><td><b>Humidity</b></td>'
                      '</tr>')
 
-    for device_name in jbhasd_device_status_dict:
-        json_resp_str = jbhasd_device_status_dict[device_name]
+    for url in url_list:
+        json_resp_str = jbhasd_device_status_dict[url]
         json_data = json.loads(json_resp_str.decode('utf-8'))
+        device_name = json_data['name']
         zone_name = json_data['zone']
 
         for sensor in json_data['sensors']:
             sensor_name = sensor['name']
             sensor_type = sensor['type']
 
-            if sensor_type == 'temp/humidity':
+            if (sensor_type == 'temp/humidity' and 
+                sensor_name == 'Temp'):
                 temp = sensor['temp']
                 humidity = sensor['humidity']
 
@@ -206,41 +220,36 @@ def process_get_params(path):
         # skip /? from path before parsing
         args_dict = urllib.parse.parse_qs(path[2:])
         #print(args_dict)
-        if ('device' in args_dict and
-            'control' in args_dict and
-            'state' in args_dict):
+        if 'url' in args_dict:
             # get args. but first instances only
             # as parse_qs gives us a dict of lists
-            device = args_dict['device'][0]
-            control = args_dict['control'][0]
-            state = args_dict['state'][0]
+            url = args_dict['url'][0]
 
-            if not device in jbhasd_device_url_dict:
-                print("Can't find device %s in URL dict" % (device))
-                return
+            # control + state combination
+            # for switch ON/OFF
+            if 'control' in args_dict:
+                control = args_dict['control'][0]
+                state = args_dict['state'][0]
 
-            url = jbhasd_device_url_dict[device]
-
-            # Format URL and pass control name  through quoting function
-            # Will handle any special character formatting for spaces
-            # etc
-            command_url = '%s?control=%s&state=%s' % (url,
-                                                      urllib.parse.quote_plus(control),
-                                                      state)
-
-
+                # Format URL and pass control name through quoting function
+                # Will handle any special character formatting for spaces
+                # etc
+                control_safe = urllib.parse.quote_plus(control)
+                command_url = '%s?control=%s&state=%s' % (url,
+                                                          control_safe,
+                                                          state)
             #print("Formatted command url:%s" % (command_url))
-            
+            response = None
             try:
                 response = urllib.request.urlopen(command_url, 
                                                   timeout = http_timeout_secs)
             except:
-                print("\nError in urlopen (command).. Name:%s URL:%s" % (device, 
-                                                                         command_url))
+                print("\nError in urlopen (command).. URL:%s" % (command_url))
             if (response is not None):
-                # update the state as returned
+                # update the status and ts as returned
                 json_resp_str = response.read()
-                jbhasd_device_status_dict[device] = json_resp_str
+                jbhasd_device_status_dict[url] = json_resp_str
+                jbhasd_device_ts_dict[url] = int(time.time())
     return
 
 #This class will handles any incoming request from
