@@ -10,7 +10,6 @@
 # Finally analytics from switches and sensors are written to 
 # analytics.csv after each probe
 
-
 import time
 import socket
 import struct
@@ -190,11 +189,12 @@ def fetch_url(url, url_timeout):
 
     #print("Fetching URL:%s, timeout:%d" % (url, url_timeout))
 
+    response = None
     try:
         response = urllib.request.urlopen(url,
                                           timeout = url_timeout)
     except:
-        print("Error in urlopen (sunrise/sunset check)")
+        print("Error in urlopen URL:%s" % (url))
  
     if response is not None:
         response_str = response.read()
