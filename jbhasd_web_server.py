@@ -26,6 +26,72 @@ from dateutil import tz
 from zeroconf import ServiceBrowser, Zeroconf
 from http.server import BaseHTTPRequestHandler,HTTPServer
 
+# Begin CSS ##################
+# Used checkbox example from 
+# https://www.w3schools.com/howto/tryit.asp?filename=tryhow_css_switch
+web_page_css = """
+
+* {font-family: arial}
+
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 60px;
+    height: 34px;
+}
+
+.switch input {display:none;}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    -webkit-transition: .4s;
+    transition: .4s;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 26px;
+    width: 26px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    -webkit-transition: .4s;
+    transition: .4s;
+}
+
+input:checked + .slider {
+    background-color: #2196F3;
+}
+
+input:focus + .slider {
+    box-shadow: 0 0 1px #2196F3;
+}
+
+input:checked + .slider:before {
+    -webkit-transform: translateX(26px);
+    -ms-transform: translateX(26px);
+    transform: translateX(26px);
+}
+
+/* Rounded sliders */
+.slider.round {
+    border-radius: 34px;
+}
+
+.slider.round:before {
+    border-radius: 50%;
+}
+"""
+# END CSS ##################
+
+
 # Discovery and probing of devices
 zeroconf_refresh_interval = 60
 probe_refresh_interval = 10
@@ -338,10 +404,8 @@ def build_web_page():
                     '  <title>JBHASD Console</title>'
                     '  <meta http-equiv="refresh" content="%d url=/">'
                     '  <meta id="META" name="viewport" content="width=device-width; initial-scale=1.0" >'
-                    '  <style type="text/css">'
-                    '    * {font-family: arial}'
-                    '  </style>'
-                    '</head>') % (probe_refresh_interval)
+                    '  <style type="text/css">%s</style>'
+                    '</head>') % (probe_refresh_interval, web_page_css)
 
     web_page_str += '<table border="0" padding="15">'
 
@@ -350,11 +414,9 @@ def build_web_page():
                      '<td><b>Zone</b></td>'
                      '<td><b>Switch</b></td>'
                      '<td><b>State</b></td>'
-                     '<td></td>'
-                     '<td></td>'
                      '</tr>')
 
-    # safe snapshot pf dict keys into list
+    # safe snapshot of dict keys into list
     url_list = list(jbhasd_device_status_dict)
     for url in url_list:
         json_resp_str = jbhasd_device_status_dict[url]
@@ -366,40 +428,42 @@ def build_web_page():
             control_name = control['name']
             control_type = control['type']
             control_state = int(control['state'])
+            alternate_state = (control_state + 1) % 2
 
             web_page_str += '<tr>'
             web_page_str += ('<td>%s</td>'
-                             '<td>%s</td>'
                              '<td>%s</td>') % (zone_name,
-                                               control_name,
-                                               control_state)
+                                               control_name)
             # prep args for transport
             url_safe_url = urllib.parse.quote_plus(url)
             url_safe_zone = urllib.parse.quote_plus(zone_name)
             url_safe_control = urllib.parse.quote_plus(control_name)
 
-            alternate_state = (control_state + 1) % 2
+            # href URL for generated html
+            href_url = ('/?url=%s'
+                        '&zone=%s'
+                        '&control=%s'
+                        '&state=%d' % (url_safe_url,
+                                         url_safe_zone,
+                                         url_safe_control,
+                                         alternate_state))
 
             if (alternate_state == 1):
-                button_text = 'Turn On'
+                checked_str = ""
             else:
-                button_text = 'Turn Off'
+                checked_str = "checked"
 
-            web_page_str += ('<td><a href="/?url=%s&zone=%s&control=%s'
-                             '&state=%d"><button>%s</button></a></td>') % (url_safe_url,
-                                                                           url_safe_zone,
-                                                                           url_safe_control,
-                                                                           alternate_state,
-                                                                           button_text)
-            #web_page_str += ('<td><a href="/?url=%s&zone=%s&control=%s'
-            #                 '&state=1"><button>ON</button></a></td>') % (url_safe_url,
-            #                                                              url_safe_zone,
-            #                                                              url_safe_control)
-
-            #web_page_str += ('<td><a href="/?url=%s&zone=%s&control=%s'
-            #                 '&state=0"><button>OFF</button></a></td>') % (url_safe_url,
-            #                                                               url_safe_zone,
-            #                                                               url_safe_control)
+            # format checkbox css slider in table cell
+            # with onclick action of the href url
+            # the checked_str also ensures the checkbox is 
+            # rendered in the current state
+            web_page_str += ('<td>'
+                             '<label class="switch">'
+                             '<input type="checkbox" onclick=\'window.location.assign("%s")\' %s>'
+                             '<div class="slider round"></div>'
+                             '</label>'
+                             '</td>' % (href_url,
+                                        checked_str))
             web_page_str += '</tr>'
 
     # white space
