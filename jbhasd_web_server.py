@@ -1,9 +1,14 @@
 # Cormac Long April 2017
 #
-# Simple basic webserver script
+# Simple webserver script
 # to detect specified on-network JBHASD devices
 # and present a crude web I/F for turning 
 # them off/on as required
+# It also uses a register of automated devices
+# and time parameters to use in automating the on and
+# off times for the devices.
+# Finally analytics from switches and sensors are written to 
+# analytics.csv after each probe
 
 
 import time
@@ -22,10 +27,18 @@ from dateutil import tz
 from zeroconf import ServiceBrowser, Zeroconf
 from http.server import BaseHTTPRequestHandler,HTTPServer
 
+# Discovery and probing of devices
 zeroconf_refresh_interval = 60
 probe_refresh_interval = 10
 url_purge_timeout = 30
 web_port = 8080
+
+# Sunset config
+# set with co-ords of Dublin Spire, Ireland
+sunset_url = 'http://api.sunrise-sunset.org/json?lat=53.349809&lng=-6.2624431&formatted=0'
+last_sunset_check = -1
+sunset_lights_on_offset = -3600
+sunset_on_time = "2000" # noddy default
 
 # Init dict of discovered device URLs
 # keyed on zeroconf name
@@ -41,12 +54,110 @@ jbhasd_device_ts_dict = {}
 
 http_timeout_secs = 5
 
-last_sunset_check = -1
-last_device_poll = -1
+# Zone Switchname
+switch_tlist = [
+#        Zone           Switch         On          Off       Override
+        ("Livingroom",  "Uplighter",   "sunset",   "0200",   "1200" ),
+        ("Playroom",    "Uplighter",   "sunset",   "0200",   "1200" ),
+
+        ("Attic",       "A",           "1200",     "1205",   "2359" ),
+        ("Attic",       "A",           "1230",     "1232",   "1200" ),
+        ("Attic",       "A",           "1330",     "1400",   "2359" ),
+        ("Attic",       "A",           "1500",     "1501",   "2359" ),
+
+        ("S20T1",       "Socket",      "1200",     "1202",   "2359" ),
+        ("S20T1",       "Green LED",   "1200",     "1210",   "2359" ),
+
+        ("S20T2",       "Socket",      "1120",     "1150",   "2359" ),
+        ("S20T2",       "Green LED",   "1125",     "1145",   "2359" ),
+
+        ("S20T3",       "Socket",      "1500",     "1600",   "1200" ),
+        ("S20T3",       "Green LED",   "1505",     "1510",   "1200" ),
+
+        ("S20T4",       "Socket",      "sunset",   "0200",   "1600" ),
+        ("S20T4",       "Green LED",   "sunset",   "0200",   "1600" ),
+        ]
+
+
+def sunset_api_time_to_epoch(time_str):
+    # decode UTC time from string, strip last 6 chars first
+    ts_datetime = datetime.datetime.strptime(time_str[:-6], 
+                                             '%Y-%m-%dT%H:%M:%S')
+    # Adjust for UTC source timezone (strp is local based)
+    from_zone = tz.tzutc()
+    ts_datetime = ts_datetime.replace(tzinfo=from_zone)
+
+    # Epoch extraction
+    epoch_time = time.mktime(ts_datetime.timetuple())
+
+    return epoch_time
+
+
+def check_switch(zone_name, 
+                 switch_name, 
+                 current_time, 
+                 control_state):
+
+    global sunset_on_time
+
+    # represents state of switch
+    # -1 do nothing.. not matched
+    # 0 off
+    # 1 on
+    desired_state = -1
+
+    for zone, switch, on_time, off_time, override_time in switch_tlist:
+        if zone == zone_name and switch == switch_name:
+            # have a match
+            # desired state will have a value now
+            # so we assume off initially
+            # but this only applies to the first 
+            # encounter
+            # that allows us to straddle several 
+            # events on the same switch and leave
+            # an overall on state fall-through
+            # in fact the logic of the decisions below are
+            # all about setting desired_state to 1 and 
+            # never to 0 for this very reason
+            if (desired_state == -1):
+                desired_state = 0
+
+            # sunset keyword replacemenet with
+            # dynamic sunset offset time
+            if (on_time == "sunset"):
+                on_time = sunset_on_time
+            else:
+                on_time = int(on_time)
+
+            off_time = int(off_time)
+            override_time = int(override_time)
+
+            if (on_time <= off_time):
+                if (current_time >= on_time and 
+                    current_time < off_time):
+                    desired_state = 1
+            else:
+                if (current_time > on_time):
+                    desired_state = 1
+                else:
+                    if (current_time < on_time and
+                        current_time < off_time):
+                        desired_state = 1
+
+            # override scenario turning on 
+            # before the scheduled on time
+            # stopping us turning off a switch
+            if (control_state == 1 and 
+                desired_state == 0 and
+                current_time < on_time and
+                current_time >= override_time):
+                desired_state = 1
+
+    return desired_state
+
 
 class MyZeroConfListener(object):  
     def remove_service(self, zeroconf, type, name):
-
         return
 
     def add_service(self, zeroconf, type, name):
@@ -68,31 +179,60 @@ def discover_devices():
         listener = MyZeroConfListener()  
         browser = ServiceBrowser(zeroconf, "_JBHASD._tcp.local.", listener)  
 
-        # loop interval
+        # loop interval sleep then 
+        # close zeroconf object
         time.sleep(zeroconf_refresh_interval)
         zeroconf.close()
 
 
+def fetch_url(url, url_timeout):
+    response_str = None
+
+    #print("Fetching URL:%s, timeout:%d" % (url, url_timeout))
+
+    try:
+        response = urllib.request.urlopen(url,
+                                          timeout = url_timeout)
+    except:
+        print("Error in urlopen (sunrise/sunset check)")
+ 
+    if response is not None:
+        response_str = response.read()
+        #print("Got response:\n%s" % (response_str))
+
+    return response_str
+     
+
 def probe_devices():
+    global last_sunset_check, sunset_lights_on_offset, sunset_on_time
+
     print("Probe started")
     # loop forever
     while (1):
-        # iterate set as snapshot list
+        # Sunset calculations
+        now = time.time()
+        if ((now - last_sunset_check) >= 6*60*60): # every 6 hours
+            # Re-calculate
+            print("Getting Sunset times..")
+            response_str = fetch_url(sunset_url, 20)
+            if response_str is not None:
+                json_data = json.loads(response_str.decode('utf-8'))
+                sunset_str = json_data['results']['sunset']
+                sunset_ts = sunset_api_time_to_epoch(sunset_str)
+                sunset_local_time = time.localtime(sunset_ts + sunset_lights_on_offset)
+                sunset_on_time = int(time.strftime("%H%M", sunset_local_time))
+                print("Sunset on time is %s (with offset of %d seconds)" % (sunset_on_time,
+                                                                            sunset_lights_on_offset))
+
+            last_sunset_check = now
+
+        # iterate set of discovered device URLs as snapshot list
         # avoids issues if the set is updated mid-way
         device_url_list = list(jbhasd_zconf_url_set)
         for url in device_url_list:
-            response = None
-            #print("Probing %s" % (url))
-            try:
-                response = urllib.request.urlopen(url, 
-                                                  timeout = http_timeout_secs)
-            except:
-                print("\nError in urlopen (status check).. "
-                      "URL:%s" % (url))
-
-            if (response is not None):
-                json_resp_str = response.read()
-                jbhasd_device_status_dict[url] = json_resp_str
+            response_str = fetch_url(url, http_timeout_secs)
+            if (response_str is not None):
+                jbhasd_device_status_dict[url] = response_str
                 jbhasd_device_ts_dict[url] = int(time.time())
         
         # Purge dead URLs
@@ -104,14 +244,83 @@ def probe_devices():
             if url in jbhasd_device_ts_dict:
                 last_updated = now - jbhasd_device_ts_dict[url]
                 if last_updated >= url_purge_timeout:
-                    print("Device URL:%s last updated %d seconds ago.. purging" % (url,
-                                                                                   last_updated))
+                    print("Purging URL:%s.. last updated %d seconds ago" % (url,
+                                                                            last_updated))
                     del jbhasd_device_ts_dict[url]
                     del jbhasd_device_status_dict[url]
                     jbhasd_zconf_url_set.remove(url)
 
-        time.sleep(probe_refresh_interval)
+        # Check for automated devices
+        # safe snapshot of dict keys into list
+        url_list = list(jbhasd_device_status_dict)
+        # get time in hhmm format
+        current_time = int(time.strftime("%H%M", time.localtime()))
+        for url in url_list:
+            json_resp_str = jbhasd_device_status_dict[url]
+            # use timestamp from ts dict as sample time
+            # for analytics
+            status_ts = jbhasd_device_ts_dict[url]
+            json_data = json.loads(json_resp_str.decode('utf-8'))
+            device_name = json_data['name']
+            zone_name = json_data['zone']
 
+            # Switch status check 
+            for control in json_data['controls']:
+                control_name = control['name']
+                control_type = control['type']
+                control_state = int(control['state'])
+                desired_state = check_switch(zone_name, 
+                                             control_name,
+                                             current_time,
+                                             control_state)
+ 
+                # Record analytics
+                csv_row = "%d,%d,%s,%s,%s,%s,%s,%d" % (2,
+                                                       status_ts, 
+                                                       zone_name, 
+                                                       device_name, 
+                                                       control_name, 
+                                                       "", 
+                                                       "",
+                                                       control_state)
+                analytics_file.write("%s\n" % (csv_row)) 
+                analytics_file.flush()
+
+                # If switch state not in desired state
+                # update and recache the status
+                if (desired_state != -1 and control_state != desired_state):
+                    print("Automatically setting zone:%s control:%s to state:%s on URL:%s" % (zone_name,
+                                                                                              control_name,
+                                                                                              desired_state,
+                                                                                              url))
+                    data = urllib.parse.urlencode({'control' : control_name, 'state'  : desired_state})
+                    post_data = data.encode('utf-8')
+                    req = urllib.request.Request(url, post_data)
+                    response_str = fetch_url(req, http_timeout_secs)
+                    if (response_str is not None):
+                        jbhasd_device_status_dict[url] = response_str
+                        jbhasd_device_ts_dict[url] = int(time.time())
+
+            # Iterate sensors and record analytics
+            for sensor in json_data['sensors']:
+                sensor_name = sensor['name']
+                sensor_type = sensor['type']
+                if sensor_type == "temp/humidity":
+                    temp = sensor['temp']
+                    humidity = sensor['humidity']
+                    csv_row = "%d,%d,%s,%s,%s,%s,%s,%d" % (1,
+                                                           status_ts, 
+                                                           zone_name, 
+                                                           device_name, 
+                                                           sensor_name, 
+                                                           temp, 
+                                                           humidity,
+                                                           0)
+                    analytics_file.write("%s\n" % (csv_row)) 
+                    analytics_file.flush()
+
+        # loop sleep interval
+        time.sleep(probe_refresh_interval)
     return
 
 
@@ -166,15 +375,31 @@ def build_web_page():
                                                control_state)
             # prep args for transport
             url_safe_url = urllib.parse.quote_plus(url)
+            url_safe_zone = urllib.parse.quote_plus(zone_name)
             url_safe_control = urllib.parse.quote_plus(control_name)
 
-            web_page_str += ('<td><a href="/?url=%s&control=%s'
-                             '&state=1"><button>ON</button></a></td>') % (url_safe_url,
-                                                                          url_safe_control)
+            alternate_state = (control_state + 1) % 2
 
-            web_page_str += ('<td><a href="/?url=%s&control=%s'
-                             '&state=0"><button>OFF</button></a></td>') % (url_safe_url,
-                                                                           url_safe_control)
+            if (alternate_state == 1):
+                button_text = 'Turn On'
+            else:
+                button_text = 'Turn Off'
+
+            web_page_str += ('<td><a href="/?url=%s&zone=%s&control=%s'
+                             '&state=%d"><button>%s</button></a></td>') % (url_safe_url,
+                                                                           url_safe_zone,
+                                                                           url_safe_control,
+                                                                           alternate_state,
+                                                                           button_text)
+            #web_page_str += ('<td><a href="/?url=%s&zone=%s&control=%s'
+            #                 '&state=1"><button>ON</button></a></td>') % (url_safe_url,
+            #                                                              url_safe_zone,
+            #                                                              url_safe_control)
+
+            #web_page_str += ('<td><a href="/?url=%s&zone=%s&control=%s'
+            #                 '&state=0"><button>OFF</button></a></td>') % (url_safe_url,
+            #                                                               url_safe_zone,
+            #                                                               url_safe_control)
             web_page_str += '</tr>'
 
     # white space
@@ -228,8 +453,13 @@ def process_get_params(path):
             # control + state combination
             # for switch ON/OFF
             if 'control' in args_dict:
+                zone = args_dict['zone'][0]
                 control = args_dict['control'][0]
                 state = args_dict['state'][0]
+                print("Manually setting zone:%s control:%s to state:%s on URL:%s" % (zone,
+                                                                                     control,
+                                                                                     state,
+                                                                                     url))
 
                 # Format URL and pass control name through quoting function
                 # Will handle any special character formatting for spaces
@@ -238,17 +468,12 @@ def process_get_params(path):
                 command_url = '%s?control=%s&state=%s' % (url,
                                                           control_safe,
                                                           state)
+
             #print("Formatted command url:%s" % (command_url))
-            response = None
-            try:
-                response = urllib.request.urlopen(command_url, 
-                                                  timeout = http_timeout_secs)
-            except:
-                print("\nError in urlopen (command).. URL:%s" % (command_url))
-            if (response is not None):
+            response_str = fetch_url(command_url, http_timeout_secs)
+            if (response_str is not None):
                 # update the status and ts as returned
-                json_resp_str = response.read()
-                jbhasd_device_status_dict[url] = json_resp_str
+                jbhasd_device_status_dict[url] = response_str
                 jbhasd_device_ts_dict[url] = int(time.time())
     return
 
@@ -274,6 +499,9 @@ def web_server():
     server.serve_forever()
 
 # main()
+
+# Analytics
+analytics_file = open("analytics.csv", "a")
 
 # device discovery thread
 dicover_t = threading.Thread(target = discover_devices)
