@@ -17,11 +17,15 @@ When you power up the device, the LED flashes at a medium speed and you have 5 s
 
 In AP mode, the device uses captive DNS, ensuring that once you connect to it from a mobile device or computer, you should be quickly directed to a landing page where you can set the config options. 
 
-On that AP landing page you configure the desired SSID, password, zone name, enable/disable OTA mode and set names for the associated switch relays and their initial power-up states. You can also set the names for any defined sensors. You click apply, it saves the config to eeprom and reboots. If the reboot is not interrupted with another button press, the device will start in WiFI STA mode after 5 seconds, connecting to the configured WiFI and registering for self discovery. The hardware button from then on only acts as a manual over-ride for the switch relay and will turn the LED on/off as you toggle between switch states.
+On that AP landing page you configure the desired SSID, password, zone name, enable/disable OTA mode and telnet loging mode and set names for the associated switch relays and their initial power-up states. You can also set the names for any defined sensors. You click apply, it saves the config to eeprom and reboots. If the reboot is not interrupted with another button press, the device will start in WiFI STA mode after 5 seconds, connecting to the configured WiFI and registering for self discovery. While connecting to WiFI, the LED flashes as a slower rate and then issues burst of quick flashes once it connect. The hardware button from then on only acts as a manual over-ride for the switch relay and will turn the LED on/off as you toggle between switch states.
 
 If you need to re-configure, just reset the mains and press the button within 5 seconds to get AP mode activated to let you jump in and edit settings. 
 
-Once the device is connected to your WiFI, you can discover it via zeroconf and access the JSON URL to see the device details. Then you can use GET or POST requests on that same URL to pass in the desired control and state you wish to turn on or off any given switch. The response each time will be the current overall state. An example of the JSON status string:
+The sketch also supports OTA updating once it gets into STA mode. This makes the task updating devices easier. I've only used the Arduino IDE for this but it discovers the devices without issue and lets you select the network port for flashing. This OTA updating can also be disabled in config.
+
+The telnet logging interface runs on telnet port 23 that acts as a debug feed from the device showing all logging messages to connected clients.
+
+Once the devices are connected to your WiFI, you can discover them via zeroconf and access their JSON URLs to see the device details. Then you can use GET or POST requests on that same URL to pass in the desired control and state you wish to turn on or off any given switch. The response each time will be the current overall state. An example of the JSON status string:
 
 ```
 $ curl 'http://192.168.12.165/json'
@@ -70,13 +74,11 @@ If you browse to the base URL on its own (minus the /json path) then you get a v
 
 The sonoff_basic.ino file in this repo is the basic firmware I wrote that should work on any Sonoff device and easily adapt to other ESP-8266 devices. You need to only correct the GPIO pin assignments as required for switches and LEDs and edit the in-memory array entries as required.
 
-Also included is a firmware for an ESP-01 device with momentary switch on GPIO-0 and DHT sensor on GPIO-2. ITs the exact code with the array defaults edited for the device variant.
+Also included is a firmware for an ESP-01 device with momentary switch on GPIO-0 and DHT sensor on GPIO-2. Its the exact code with the array defaults edited for the device variant. There is also a variant for the Sonoff S20 mains socket device.
 
-Python3 script zero_discover.py should aid in discovering your device after it attaches to your LAN. Script jbhasd_server.py is a very basic server I wrote that turns on two uplighter lights for me as a first stab at a working deployment of the firmware. The same script also reads temp and humidity from all sensors of type "temp/humidity" and saves these to a CSV file. I'll rework this example and add more sophisticated scripts as I grow the concept further.
+Python3 script zero_discover.py should aid in discovering your device after it attaches to your LAN. 
 
-The sketch also supports OTA updating once it gets into STA mode. This makes the task updating devices easier. I've only used the Arduino IDE for this but it discovers the devices without issue and lets you select the network port for flashing. This OTA updating can also be disabled in config.
-
-Also supported in STA mode is a telnet interface to port 23 that acts as a debug feed from the device showing all logging messages. 
+Script jbhasd_web_server.py is a simple web server running on port 8080 and acts a console for both seeing detected devices, controlling them manually and automatically. When you start up the script, it begins using zeroconf to discover the JBHASD devices and then probes their status URL to determine the capabilities. It will then render this list of devices on the web page but checkbox toggles for switches and temp/humidity shown for sensors. The web page refreshes every 10 seconds as does the background probe/re-probe of each detected devices. Devices that clock up 30+ seconds of no response are struck of the register. So it should react to devices appearing and disapearing. There is also an internal register of devices for automation and this simply turns on/off the desired switches at the appropriate time.
 
 A link to some photos of the prototypes and enclosures I've built to date..
 https://goo.gl/photos/uwRadttk9wY7vvGm6
