@@ -126,7 +126,7 @@ struct gpio_sensor gv_sensor_register[] = {
 #define MAX_FIELD_LEN 20
 #define MAX_SWITCHES 5
 #define MAX_SENSORS 5
-#define CFG_MARKER_VAL 0x0C
+#define CFG_MARKER_VAL 0x0D
 
 struct eeprom_config {
     unsigned char marker;
@@ -136,6 +136,7 @@ struct eeprom_config {
     char switch_names[MAX_SWITCHES][MAX_FIELD_LEN];
     unsigned char switch_initial_states[MAX_SWITCHES];
     char sensor_names[MAX_SENSORS][MAX_FIELD_LEN];
+    char temp_offset[MAX_FIELD_LEN];
     unsigned char ota_enabled;
     unsigned char telnet_enabled;
     unsigned char manual_switches_enabled;
@@ -594,7 +595,8 @@ void read_sensors()
     DHT *dhtp;
     float f1, f2;
 
-    log_message("read_sensors()\n");
+    log_message("read_sensors(temp_offset=%s)\n",
+                gv_config.temp_offset);
 
     i = 0;
     while(gv_sensor_register[i].name) {
@@ -606,18 +608,29 @@ void read_sensors()
                 if (gv_sensor_register[i].sensor_pin != NO_PIN) {
                     // Humidity
                     f1 = dhtp->readHumidity();
+                    if (isnan(f1)) {
+                        log_message("Humidity sensor read failed for %s\n", 
+                                    gv_sensor_register[i].name);
+                        f1 = -5000.0;
+                    }
+                    log_message("Humidity read from sensor %d.%02d\n",
+                                (int)f1,
+                                float_get_fp(f1, 2));
 
                     // Temp Celsius
                     f2 = dhtp->readTemperature();
+                    if (isnan(f2)) {
+                        log_message("Temperature sensor read failed for %s\n", 
+                                    gv_sensor_register[i].name);
+                        f2 = -5000.0;
+                    }
 
-                    if (isnan(f1) || isnan(f2)) {
-                        log_message("Sensor read failed for %s\n", 
-                                      gv_sensor_register[i].name);
-                    }
-                    else {
-                        gv_sensor_register[i].f1 = f1;
-                        gv_sensor_register[i].f2 = f2;
-                    }
+                    gv_sensor_register[i].f1 = f1;
+
+                    // record temp as read value offset
+                    // by temp_offset in config
+                    gv_sensor_register[i].f2 = f2 + 
+                        atof(gv_config.temp_offset);
                 }
                 else {
                     // fake the values
@@ -626,15 +639,14 @@ void read_sensors()
                                                  ESP.getFreeHeap()) % 100) + 0.25;
                 }
                 log_message("Sensor: %s Humidity: %d.%02d Temperature: %d.%02d\n",
-                              gv_sensor_register[i].name,
-                              (int)gv_sensor_register[i].f1,
-                              float_get_fp(gv_sensor_register[i].f1, 2),
-                              (int)gv_sensor_register[i].f2,
-                              float_get_fp(gv_sensor_register[i].f2, 2));
+                            gv_sensor_register[i].name,
+                            (int)gv_sensor_register[i].f1,
+                            float_get_fp(gv_sensor_register[i].f1, 2),
+                            (int)gv_sensor_register[i].f2,
+                            float_get_fp(gv_sensor_register[i].f2, 2));
                 break;
             }
         }
-
         i++;
     }
 }
@@ -716,7 +728,7 @@ const char *get_json_status()
 
     /*  JSON specification for the status string we return 
      *  { "name": "%s", "zone": "%s", "ota_enabled" : %d, "telnet_enabled" : %d, 
-     *  "manual_switches_enabled" : %d, 
+     *  "manual_switches_enabled" : %d, "temp_offset" : "%s",
      *  "controls": [%s], 
      *  "sensors": [%s], 
      *  "system" : { "reset_reason" : "%s", 
@@ -794,6 +806,7 @@ const char *get_json_status()
                 "\"ota_enabled\" : %u, "
                 "\"telnet_enabled\" : %u, "
                 "\"manual_switches_enabled\" : %u, "
+                "\"temp_offset\" : \"%s\", "
                 "\"controls\": [%s], "
                 "\"sensors\": [%s], "
                 "\"system\" : { \"reset_reason\" : \"%s\", \"free_heap\" : %u, "
@@ -804,6 +817,7 @@ const char *get_json_status()
                 gv_config.ota_enabled,
                 gv_config.telnet_enabled,
                 gv_config.manual_switches_enabled,
+                gv_config.temp_offset,
                 gv_small_buffer_1,
                 gv_small_buffer_2,
                 ESP.getResetReason().c_str(),
@@ -858,6 +872,11 @@ void load_config()
         // OTA defaults to Enabled
         gv_config.ota_enabled = 1;
 
+        // Temp offset set to 0
+        // this is a string field 
+        // because it can contain a float value
+        strcpy(gv_config.temp_offset, "0");
+
         // Telnet defaults to Enabled
         gv_config.telnet_enabled = 1;
 
@@ -875,6 +894,7 @@ void load_config()
                   "Wifi Password:%s\n"
                   "OTA Update:%u\n"
                   "Telnet:%u\n"
+                  "Temp Offset:%s\n"
                   "Manual switches:%u\n",
                   gv_config.marker,
                   gv_config.zone,
@@ -882,6 +902,7 @@ void load_config()
                   gv_config.wifi_password,
                   gv_config.ota_enabled,
                   gv_config.telnet_enabled,
+                  gv_config.temp_offset,
                   gv_config.manual_switches_enabled);
 
     // Print values of each switch name
@@ -925,6 +946,7 @@ void save_config(unsigned char marker = CFG_MARKER_VAL)
                   "Wifi Password:%s\n"
                   "OTA Update:%u\n"
                   "Telnet:%u\n"
+                  "Temp Offset:%s\n"
                   "Manual switches:%u\n",
                   gv_config.marker,
                   gv_config.zone,
@@ -932,6 +954,7 @@ void save_config(unsigned char marker = CFG_MARKER_VAL)
                   gv_config.wifi_password,
                   gv_config.ota_enabled,
                   gv_config.telnet_enabled,
+                  gv_config.temp_offset,
                   gv_config.manual_switches_enabled);
 
     // Print values of each switch name
@@ -990,6 +1013,10 @@ void ap_handle_root() {
 
         gv_config.manual_switches_enabled = atoi(gv_web_server.arg("manual_switches_enabled").c_str());
         log_message("Got Manual Switches Enabled: %u\n", gv_config.manual_switches_enabled);
+
+        strcpy(gv_config.temp_offset, 
+               gv_web_server.arg("temp_offset").c_str());
+        log_message("Got Temp Offset: %s\n", gv_config.temp_offset);
 
         for (i = 0; i < MAX_SWITCHES; i++) {
             log_message("Getting post args for switches %d/%d\n",
@@ -1206,6 +1233,10 @@ void start_ap_mode()
                 "    <input type=\"text\" value=\"%s\" maxlength=\"%d\" name=\"password\">"
                 "</div>"
                 "<div>"
+                "    <label>Temp Offset:</label>"
+                "    <input type=\"text\" value=\"%s\" maxlength=\"%d\" name=\"temp_offset\">"
+                "</div>"
+                "<div>"
                 "    <label>OTA Update:</label>"
                 "    <select name=\"ota_enabled\">"
                 "        <option value=\"1\" %s>Enabled</option>"
@@ -1232,6 +1263,8 @@ void start_ap_mode()
                 gv_config.wifi_ssid,
                 MAX_FIELD_LEN,
                 gv_config.wifi_password,
+                MAX_FIELD_LEN,
+                gv_config.temp_offset,
                 MAX_FIELD_LEN,
                 ota_on_selected,
                 ota_off_selected,
