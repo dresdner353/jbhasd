@@ -130,17 +130,14 @@ switch_tlist = [
         ("Attic",       "A",           "1330",     "1400",   "2359" ),
         ("Attic",       "A",           "1500",     "1501",   "2359" ),
 
-        ("S20T1",       "Socket",      "1200",     "1202",   "2359" ),
-        ("S20T1",       "Green LED",   "1200",     "1210",   "2359" ),
+        ("S20T2",      "Socket",      "1120",     "1150",   "2359" ),
+        ("S20T2",      "Green LED",   "1125",     "1145",   "2359" ),
 
-        ("S20T2",       "Socket",      "1120",     "1150",   "2359" ),
-        ("S20T2",       "Green LED",   "1125",     "1145",   "2359" ),
+        ("S20T3",      "Socket",      "1500",     "1600",   "1200" ),
+        ("S20T3",      "Green LED",   "1505",     "1510",   "1200" ),
 
-        ("S20T3",       "Socket",      "1500",     "1600",   "1200" ),
-        ("S20T3",       "Green LED",   "1505",     "1510",   "1200" ),
-
-        ("S20T4",       "Socket",      "sunset",   "0200",   "1600" ),
-        ("S20T4",       "Green LED",   "sunset",   "0200",   "1600" ),
+        ("S20T4",      "Socket",      "sunset",   "0200",   "1600" ),
+        ("S20T4",      "Green LED",   "sunset",   "0200",   "1600" ),
         ]
 
 
@@ -498,6 +495,28 @@ def build_web_page():
                 web_page_str += '<td>%sC</td><td>%s%%</td>' % (temp,
                                                                humidity)
                 web_page_str += '</tr>'
+
+    web_page_str += '<tr><td></td></tr>'
+    web_page_str += '<tr><td></td></tr>'
+    web_page_str += '<tr><td></td></tr>'
+
+    web_page_str += ('<tr>'
+                     '<td><b>Device</b></td>'
+                     '<td><b>Zone</b></td>'
+                     '<td><b>JSON</b></td>'
+                     '</tr>')
+
+    for url in url_list:
+        json_resp_str = jbhasd_device_status_dict[url]
+        json_data = json.loads(json_resp_str.decode('utf-8'))
+        device_name = json_data['name']
+        zone_name = json_data['zone']
+
+        web_page_str += '<tr>'
+        web_page_str += '<td>%s</td>' % (device_name)
+        web_page_str += '<td>%s</td>' % (zone_name)
+        web_page_str += '<td><a href="%s">JSON</a></td>' % (url) 
+        web_page_str += '</tr>'
        
     web_page_str += '</table>'
 
