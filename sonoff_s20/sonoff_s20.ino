@@ -611,26 +611,29 @@ void read_sensors()
                     if (isnan(f1)) {
                         log_message("Humidity sensor read failed for %s\n", 
                                     gv_sensor_register[i].name);
-                        f1 = -5000.0;
                     }
-                    log_message("Humidity read from sensor %d.%02d\n",
-                                (int)f1,
-                                float_get_fp(f1, 2));
+                    else {
+                        log_message("Humidity read from sensor %d.%02d\n",
+                                    (int)f1,
+                                    float_get_fp(f1, 2));
+                        gv_sensor_register[i].f1 = f1;
+                    }
 
                     // Temp Celsius
                     f2 = dhtp->readTemperature();
                     if (isnan(f2)) {
                         log_message("Temperature sensor read failed for %s\n", 
                                     gv_sensor_register[i].name);
-                        f2 = -5000.0;
                     }
-
-                    gv_sensor_register[i].f1 = f1;
-
-                    // record temp as read value offset
-                    // by temp_offset in config
-                    gv_sensor_register[i].f2 = f2 + 
-                        atof(gv_config.temp_offset);
+                    else {
+                        log_message("Temperature read from sensor %d.%02d\n",
+                                    (int)f2,
+                                    float_get_fp(f2, 2));
+                        // record temp as read value offset
+                        // by temp_offset in config
+                        gv_sensor_register[i].f2 = f2 + 
+                            atof(gv_config.temp_offset);
+                    }
                 }
                 else {
                     // fake the values
@@ -638,12 +641,13 @@ void read_sensors()
                     gv_sensor_register[i].f2 = ((ESP.getCycleCount() + 
                                                  ESP.getFreeHeap()) % 100) + 0.25;
                 }
-                log_message("Sensor: %s Humidity: %d.%02d Temperature: %d.%02d\n",
+                log_message("Sensor: %s Humidity: %d.%02d Temperature: %d.%02d (temp offset:%s)\n",
                             gv_sensor_register[i].name,
                             (int)gv_sensor_register[i].f1,
                             float_get_fp(gv_sensor_register[i].f1, 2),
                             (int)gv_sensor_register[i].f2,
-                            float_get_fp(gv_sensor_register[i].f2, 2));
+                            float_get_fp(gv_sensor_register[i].f2, 2),
+                            gv_config.temp_offset);
                 break;
             }
         }
