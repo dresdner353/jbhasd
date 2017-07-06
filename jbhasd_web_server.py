@@ -93,7 +93,7 @@ input:checked + .slider:before {
 
 
 # Discovery and probing of devices
-zeroconf_refresh_interval = 60
+zeroconf_refresh_interval = 300
 probe_refresh_interval = 10
 url_purge_timeout = 30
 web_port = 8080
@@ -117,7 +117,7 @@ jbhasd_device_status_dict = {}
 # keyed on url
 jbhasd_device_ts_dict = {}
 
-http_timeout_secs = 5
+http_timeout_secs = 10
 
 # Zone Switchname
 switch_tlist = [
@@ -224,11 +224,13 @@ class MyZeroConfListener(object):
 
     def add_service(self, zeroconf, type, name):
         info = zeroconf.get_service_info(type, name)
-        if info:
+        if info is not None:
             address = socket.inet_ntoa(info.address)
             port = info.port
-            url_str = "http://%s:%d/json" % (address, port)
-            jbhasd_zconf_url_set.add(url_str)
+            url = "http://%s:%d/json" % (address, port)
+            if not url in jbhasd_zconf_url_set:
+                jbhasd_zconf_url_set.add(url)
+                print("Discovered device..\n  name:%s \n  URL:%s" % (name, url))
 
         return
 
@@ -564,6 +566,11 @@ def process_get_params(path):
 #the browser 
 class myHandler(BaseHTTPRequestHandler):
         
+    def log_message(self, format, *args):
+        # over-ridden to supress stderr 
+        # logging of activity
+        pass
+
     #Handler for the GET requests
     def do_GET(self):
         process_get_params(self.path)
