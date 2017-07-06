@@ -34,7 +34,7 @@ class MyListener(object):
             response = urllib.request.urlopen(json_url, 
                                               timeout = http_timeout_secs)
         except:
-            print("Error in urlopen (status check)")
+            print("Error in urlopen (%s)" % (json_url))
 
         if response is not None:
             response_str = response.read()
