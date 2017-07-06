@@ -20,10 +20,11 @@ class MyListener(object):
 
     def add_service(self, zeroconf, type, name):
         info = zeroconf.get_service_info(type, name)
-        address = socket.inet_ntoa(info.address)
-        port = info.port
-        url = 'http://%s:%d' % (address, port)
-        url_set.add(url)
+        if info is not None:
+            address = socket.inet_ntoa(info.address)
+            port = info.port
+            url = 'http://%s:%d' % (address, port)
+            url_set.add(url)
         return
 
 zeroconf = Zeroconf()  
