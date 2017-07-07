@@ -109,7 +109,7 @@ sunset_on_time = "2000" # noddy default
 # keyed on zeroconf name
 jbhasd_zconf_url_set = set()
 
-# dict of probed device status strings
+# dict of probed device json data
 # keyed on url
 jbhasd_device_status_dict = {}
 
@@ -125,19 +125,19 @@ switch_tlist = [
         ("Livingroom",  "Uplighter",   "sunset",   "0200",   "1200" ),
         ("Playroom",    "Uplighter",   "sunset",   "0200",   "1200" ),
 
-        ("Attic",       "A",           "1200",     "1205",   "2359" ),
-        ("Attic",       "A",           "1230",     "1232",   "1200" ),
-        ("Attic",       "A",           "1330",     "1400",   "2359" ),
-        ("Attic",       "A",           "1500",     "1501",   "2359" ),
+        ("Attic",       "Sonoff Switch",           "1200",     "1205",   "2359" ),
+        ("Attic",       "Sonoff Switch",           "1230",     "1232",   "1200" ),
+        ("Attic",       "Sonoff Switch",           "1330",     "1400",   "2359" ),
+        ("Attic",       "Sonoff Switch",           "1500",     "1501",   "2359" ),
 
-        ("S20T2",      "Socket",      "1120",     "1150",   "2359" ),
-        ("S20T2",      "Green LED",   "1125",     "1145",   "2359" ),
+        ("Attic",      "Socket S2",      "1120",     "1150",   "2359" ),
+        ("Attic",      "Green LED 2",   "1125",     "1145",   "2359" ),
 
-        ("S20T3",      "Socket",      "1500",     "1600",   "1200" ),
-        ("S20T3",      "Green LED",   "1505",     "1510",   "1200" ),
+        ("Attic",      "Socket S3",      "1500",     "1600",   "1200" ),
+        ("Attic",      "Green LED 3",   "1505",     "1510",   "1200" ),
 
-        ("S20T4",      "Socket",      "sunset",   "0200",   "1600" ),
-        ("S20T4",      "Green LED",   "sunset",   "0200",   "1600" ),
+        ("Attic",      "Socket S4",      "sunset",   "0200",   "1600" ),
+        ("Attic",      "Green LED 4",   "sunset",   "0200",   "1600" ),
         ]
 
 
@@ -249,7 +249,7 @@ def discover_devices():
         zeroconf.close()
 
 
-def fetch_url(url, url_timeout):
+def fetch_url(url, url_timeout, parse_json):
     response_str = None
 
     #print("Fetching URL:%s, timeout:%d" % (url, url_timeout))
@@ -265,6 +265,16 @@ def fetch_url(url, url_timeout):
         response_str = response.read()
         #print("Got response:\n%s" % (response_str))
 
+        # parse and return json dict if requested
+        if parse_json:
+            try:
+                json_data = json.loads(response_str.decode('utf-8'))
+            except:
+                print("Error in JSON parse.. URL:%s Data:%s" % (url, 
+                                                                response_str))
+                return None
+            return json_data
+
     return response_str
      
 
@@ -279,9 +289,8 @@ def probe_devices():
         if ((now - last_sunset_check) >= 6*60*60): # every 6 hours
             # Re-calculate
             print("Getting Sunset times..")
-            response_str = fetch_url(sunset_url, 20)
-            if response_str is not None:
-                json_data = json.loads(response_str.decode('utf-8'))
+            json_data = fetch_url(sunset_url, 20, 1)
+            if json_data is not None:
                 sunset_str = json_data['results']['sunset']
                 sunset_ts = sunset_api_time_to_epoch(sunset_str)
                 sunset_local_time = time.localtime(sunset_ts + sunset_lights_on_offset)
@@ -295,9 +304,9 @@ def probe_devices():
         # avoids issues if the set is updated mid-way
         device_url_list = list(jbhasd_zconf_url_set)
         for url in device_url_list:
-            response_str = fetch_url(url, http_timeout_secs)
-            if (response_str is not None):
-                jbhasd_device_status_dict[url] = response_str
+            json_data = fetch_url(url, http_timeout_secs, 1)
+            if (json_data is not None):
+                jbhasd_device_status_dict[url] = json_data
                 jbhasd_device_ts_dict[url] = int(time.time())
         
         # Purge dead URLs
@@ -321,13 +330,13 @@ def probe_devices():
         # get time in hhmm format
         current_time = int(time.strftime("%H%M", time.localtime()))
         for url in url_list:
-            json_resp_str = jbhasd_device_status_dict[url]
+            json_data = jbhasd_device_status_dict[url]
+            device_name = json_data['name']
+            zone_name = json_data['zone']
+
             # use timestamp from ts dict as sample time
             # for analytics
             status_ts = jbhasd_device_ts_dict[url]
-            json_data = json.loads(json_resp_str.decode('utf-8'))
-            device_name = json_data['name']
-            zone_name = json_data['zone']
 
             # Switch status check 
             for control in json_data['controls']:
@@ -361,9 +370,9 @@ def probe_devices():
                     data = urllib.parse.urlencode({'control' : control_name, 'state'  : desired_state})
                     post_data = data.encode('utf-8')
                     req = urllib.request.Request(url, post_data)
-                    response_str = fetch_url(req, http_timeout_secs)
-                    if (response_str is not None):
-                        jbhasd_device_status_dict[url] = response_str
+                    json_data = fetch_url(req, http_timeout_secs, 1)
+                    if (json_data is not None):
+                        jbhasd_device_status_dict[url] = json_data
                         jbhasd_device_ts_dict[url] = int(time.time())
 
             # Iterate sensors and record analytics
@@ -399,6 +408,8 @@ def build_web_page():
     # URL of / to ensure that ant GET args present from a button click
     # do not become part of the refresh effectively repeating the ON/OFF
     # click over and over
+    # Ideally this needs an Ajax or jQuery/Angular type solution
+    # But for now a crude GET and refresh model will do
     web_page_str = ('<head>'
                     '  <title>JBHASD Console</title>'
                     '  <meta http-equiv="refresh" content="%d url=/">'
@@ -408,118 +419,102 @@ def build_web_page():
 
     web_page_str += '<table border="0" padding="15">'
 
-    # Controls
-    web_page_str += ('<tr>'
-                     '<td><b>Zone</b></td>'
-                     '<td><b>Switch</b></td>'
-                     '<td><b>State</b></td>'
-                     '</tr>')
-
     # safe snapshot of dict keys into list
     url_list = list(jbhasd_device_status_dict)
+
+    # Build a set of zones
+    zone_set = set()
     for url in url_list:
-        json_resp_str = jbhasd_device_status_dict[url]
-        json_data = json.loads(json_resp_str.decode('utf-8'))
-        device_name = json_data['name']
+        json_data = jbhasd_device_status_dict[url]
         zone_name = json_data['zone']
+        zone_set.add(zone_name)
 
-        for control in json_data['controls']:
-            control_name = control['name']
-            control_type = control['type']
-            control_state = int(control['state'])
-            alternate_state = (control_state + 1) % 2
-
-            web_page_str += '<tr>'
-            web_page_str += ('<td>%s</td>'
-                             '<td>%s</td>') % (zone_name,
-                                               control_name)
-            # prep args for transport
-            url_safe_url = urllib.parse.quote_plus(url)
-            url_safe_zone = urllib.parse.quote_plus(zone_name)
-            url_safe_control = urllib.parse.quote_plus(control_name)
-
-            # href URL for generated html
-            href_url = ('/?url=%s'
-                        '&zone=%s'
-                        '&control=%s'
-                        '&state=%d' % (url_safe_url,
-                                         url_safe_zone,
-                                         url_safe_control,
-                                         alternate_state))
-
-            if (alternate_state == 1):
-                checked_str = ""
-            else:
-                checked_str = "checked"
-
-            # format checkbox css slider in table cell
-            # with onclick action of the href url
-            # the checked_str also ensures the checkbox is 
-            # rendered in the current state
-            web_page_str += ('<td>'
-                             '<label class="switch">'
-                             '<input type="checkbox" onclick=\'window.location.assign("%s")\' %s>'
-                             '<div class="slider round"></div>'
-                             '</label>'
-                             '</td>' % (href_url,
-                                        checked_str))
-            web_page_str += '</tr>'
-
-    # white space
-    web_page_str += '<tr><td></td></tr>'
-    web_page_str += '<tr><td></td></tr>'
-    web_page_str += '<tr><td></td></tr>'
-
-    # Sensors
-    web_page_str += ('<tr>'
-                     '<td><b>Zone</b></td><td><b>Sensor</b></td>'
-                     '<td><b>Temp</b></td><td><b>Humidity</b></td>'
-                     '</tr>')
-
-    for url in url_list:
-        json_resp_str = jbhasd_device_status_dict[url]
-        json_data = json.loads(json_resp_str.decode('utf-8'))
-        device_name = json_data['name']
-        zone_name = json_data['zone']
-
-        for sensor in json_data['sensors']:
-            sensor_name = sensor['name']
-            sensor_type = sensor['type']
-
-            if (sensor_type == 'temp/humidity' and 
-                sensor_name == 'Temp'):
-                temp = sensor['temp']
-                humidity = sensor['humidity']
-
-                web_page_str += '<tr>'
-                web_page_str += '<td>%s</td><td>%s</td>' % (zone_name,
-                                                            sensor_name)
-                web_page_str += '<td>%sC</td><td>%s%%</td>' % (temp,
-                                                               humidity)
-                web_page_str += '</tr>'
-
-    web_page_str += '<tr><td></td></tr>'
-    web_page_str += '<tr><td></td></tr>'
-    web_page_str += '<tr><td></td></tr>'
-
-    web_page_str += ('<tr>'
-                     '<td><b>Device</b></td>'
-                     '<td><b>Zone</b></td>'
-                     '<td><b>JSON</b></td>'
-                     '</tr>')
-
-    for url in url_list:
-        json_resp_str = jbhasd_device_status_dict[url]
-        json_data = json.loads(json_resp_str.decode('utf-8'))
-        device_name = json_data['name']
-        zone_name = json_data['zone']
-
+    # Iterate zones
+    for zone in zone_set:
         web_page_str += '<tr>'
-        web_page_str += '<td>%s</td>' % (device_name)
-        web_page_str += '<td>%s</td>' % (zone_name)
-        web_page_str += '<td><a href="%s">JSON</a></td>' % (url) 
+        web_page_str += ('<td>%s</td>'
+                         '<td> </td>'
+                         '<td> </td>') % (zone)
         web_page_str += '</tr>'
-       
+
+        # Controls
+        for url in url_list:
+            json_data = jbhasd_device_status_dict[url]
+            zone_name = json_data['zone']
+
+            if (zone == zone_name):
+                # Controls
+                for control in json_data['controls']:
+                    control_name = control['name']
+                    control_type = control['type']
+                    control_state = int(control['state'])
+                    alternate_state = (control_state + 1) % 2
+
+                    # prep args for transport
+                    url_safe_url = urllib.parse.quote_plus(url)
+                    url_safe_zone = urllib.parse.quote_plus(zone_name)
+                    url_safe_control = urllib.parse.quote_plus(control_name)
+
+                    # href URL for generated html
+                    href_url = ('/?url=%s'
+                                '&zone=%s'
+                                '&control=%s'
+                                '&state=%d' % (url_safe_url,
+                                                 url_safe_zone,
+                                                 url_safe_control,
+                                                 alternate_state))
+
+                    if (alternate_state == 1):
+                        checked_str = ""
+                    else:
+                        checked_str = "checked"
+
+                    web_page_str += '<tr>'
+                    web_page_str += ('<td> </td>'
+                                     '<td>%s</td>') % (control_name)
+
+                    # format checkbox css slider in table cell
+                    # with onclick action of the href url
+                    # the checked_str also ensures the checkbox is 
+                    # rendered in the current state
+                    web_page_str += ('<td>'
+                                     '<label class="switch">'
+                                     '<input type="checkbox" onclick=\'window.location.assign("%s")\' %s>'
+                                     '<div class="slider round"></div>'
+                                     '</label>'
+                                     '</td>' % (href_url,
+                                                checked_str))
+                    web_page_str += '</tr>'
+
+        for url in url_list:
+            json_data = jbhasd_device_status_dict[url]
+            zone_name = json_data['zone']
+
+            if (zone == zone_name):
+                # Sensors
+                for sensor in json_data['sensors']:
+                    sensor_name = sensor['name']
+                    sensor_type = sensor['type']
+
+                    if (sensor_type == 'temp/humidity'):
+                        temp = sensor['temp']
+                        humidity = sensor['humidity']
+
+                        web_page_str += '<tr>'
+                        web_page_str += ('<td> </td>'
+                                         '<td>%s</td>') % (sensor_name)
+
+                        web_page_str += ('<td>%sC</td>'
+                                         '<td>%s%%</td>') % (temp,
+                                                             humidity)
+                        web_page_str += '</tr>'
+
+        # Zone row separators
+        web_page_str += '<tr><td></td></tr>'
+        web_page_str += '<tr><td></td></tr>'
+        web_page_str += '<tr><td></td></tr>'
+        web_page_str += '<tr><td></td></tr>'
+
     web_page_str += '</table>'
 
     return web_page_str
@@ -555,10 +550,10 @@ def process_get_params(path):
                                                           state)
 
             #print("Formatted command url:%s" % (command_url))
-            response_str = fetch_url(command_url, http_timeout_secs)
-            if (response_str is not None):
+            json_data = fetch_url(command_url, http_timeout_secs, 1)
+            if (json_data is not None):
                 # update the status and ts as returned
-                jbhasd_device_status_dict[url] = response_str
+                jbhasd_device_status_dict[url] = json_data
                 jbhasd_device_ts_dict[url] = int(time.time())
     return
 
