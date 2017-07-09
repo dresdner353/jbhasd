@@ -88,6 +88,49 @@ input:checked + .slider:before {
 .slider.round:before {
     border-radius: 50%;
 }
+
+.dash-title {
+    font-size: 20px;
+    }
+
+.dash-label {
+    font: normal 16px/1 Verdana, Geneva, sans-serif;
+    font-size: 15px;
+    color: rgba(255,255,255,1);
+}
+
+.dash-box {
+    display: inline;
+    -webkit-box-sizing: content-box;
+    -moz-box-sizing: content-box;
+    box-sizing: content-box;
+    float: left;
+    margin: 5px 5px 5px;
+    padding: 5px 5px 5px;
+    border: none;
+    -webkit-border-radius: 3px;
+    border-radius: 3px;
+    font: normal 16px/1 Verdana, Geneva, sans-serif;
+    color: rgba(255,255,255,1);
+    -o-text-overflow: ellipsis;
+    text-overflow: ellipsis;
+    background: -webkit-linear-gradient(-45deg, rgba(64,150,238,1) 0, rgba(14,90,255,1) 100%);
+    background: -moz-linear-gradient(135deg, rgba(64,150,238,1) 0, rgba(14,90,255,1) 100%);
+    background: linear-gradient(135deg, rgba(64,150,238,1) 0, rgba(14,90,255,1) 100%);
+    background-position: 50% 50%;
+    -webkit-background-origin: padding-box;
+    background-origin: padding-box;
+    -webkit-background-clip: border-box;
+    background-clip: border-box;
+    -webkit-background-size: auto auto;
+    background-size: auto auto;
+    -webkit-box-shadow: 3px 3px 4px 0 rgba(0,0,0,0.4) ;
+    box-shadow: 3px 3px 4px 0 rgba(0,0,0,0.4) ;
+    -webkit-transition: all 200ms cubic-bezier(0.42, 0, 0.58, 1) 10ms;
+    -moz-transition: all 200ms cubic-bezier(0.42, 0, 0.58, 1) 10ms;
+    -o-transition: all 200ms cubic-bezier(0.42, 0, 0.58, 1) 10ms;
+    transition: all 200ms cubic-bezier(0.42, 0, 0.58, 1) 10ms;
+}
 """
 # END CSS ##################
 
@@ -230,13 +273,14 @@ class MyZeroConfListener(object):
             url = "http://%s:%d/json" % (address, port)
             if not url in jbhasd_zconf_url_set:
                 jbhasd_zconf_url_set.add(url)
-                print("Discovered device..\n  name:%s \n  URL:%s" % (name, url))
+                print("%s Discovered device..\n  name:%s \n  URL:%s" % (time.asctime(),
+                                                                        name, 
+                                                                        url))
 
         return
 
 
 def discover_devices():
-    print("Discovery started")
     # loop forever 
     while (1):
         zeroconf = Zeroconf()
@@ -252,26 +296,27 @@ def discover_devices():
 def fetch_url(url, url_timeout, parse_json):
     response_str = None
 
-    #print("Fetching URL:%s, timeout:%d" % (url, url_timeout))
+    #print("%s Fetching URL:%s, timeout:%d" % (time.asctime(), url, url_timeout)) 
 
     response = None
     try:
         response = urllib.request.urlopen(url,
                                           timeout = url_timeout)
     except:
-        print("Error in urlopen URL:%s" % (url))
+        print("%s Error in urlopen URL:%s" % (time.asctime(), url))
  
     if response is not None:
         response_str = response.read()
-        #print("Got response:\n%s" % (response_str))
+        #print("%s Got response:\n%s" % (time.asctime(), response_str))
 
         # parse and return json dict if requested
         if parse_json:
             try:
                 json_data = json.loads(response_str.decode('utf-8'))
             except:
-                print("Error in JSON parse.. URL:%s Data:%s" % (url, 
-                                                                response_str))
+                print("%s Error in JSON parse.. URL:%s Data:%s" % (time.asctime(),
+                                                                   url, 
+                                                                   response_str))
                 return None
             return json_data
 
@@ -281,22 +326,22 @@ def fetch_url(url, url_timeout, parse_json):
 def probe_devices():
     global last_sunset_check, sunset_lights_on_offset, sunset_on_time
 
-    print("Probe started")
     # loop forever
     while (1):
         # Sunset calculations
         now = time.time()
         if ((now - last_sunset_check) >= 6*60*60): # every 6 hours
             # Re-calculate
-            print("Getting Sunset times..")
+            print("%s Getting Sunset times.." % (time.asctime()))
             json_data = fetch_url(sunset_url, 20, 1)
             if json_data is not None:
                 sunset_str = json_data['results']['sunset']
                 sunset_ts = sunset_api_time_to_epoch(sunset_str)
                 sunset_local_time = time.localtime(sunset_ts + sunset_lights_on_offset)
                 sunset_on_time = int(time.strftime("%H%M", sunset_local_time))
-                print("Sunset on time is %s (with offset of %d seconds)" % (sunset_on_time,
-                                                                            sunset_lights_on_offset))
+                print("%s Sunset on-time is %s (with offset of %d seconds)" % (time.asctime(),
+                                                                               sunset_on_time,
+                                                                               sunset_lights_on_offset))
 
             last_sunset_check = now
 
@@ -318,8 +363,9 @@ def probe_devices():
             if url in jbhasd_device_ts_dict:
                 last_updated = now - jbhasd_device_ts_dict[url]
                 if last_updated >= url_purge_timeout:
-                    print("Purging URL:%s.. last updated %d seconds ago" % (url,
-                                                                            last_updated))
+                    print("%s Purging URL:%s.. last updated %d seconds ago" % (time.asctime(),
+                                                                               url,
+                                                                               last_updated))
                     del jbhasd_device_ts_dict[url]
                     del jbhasd_device_status_dict[url]
                     jbhasd_zconf_url_set.remove(url)
@@ -363,10 +409,12 @@ def probe_devices():
                 # If switch state not in desired state
                 # update and recache the status
                 if (desired_state != -1 and control_state != desired_state):
-                    print("Automatically setting zone:%s control:%s to state:%s on URL:%s" % (zone_name,
-                                                                                              control_name,
-                                                                                              desired_state,
-                                                                                              url))
+                    print("%s Automatically setting zone:%s control:%s"
+                          "to state:%s on URL:%s" % (time.asctime(),
+                                                     zone_name,
+                                                     control_name,
+                                                     desired_state,
+                                                     url))
                     data = urllib.parse.urlencode({'control' : control_name, 'state'  : desired_state})
                     post_data = data.encode('utf-8')
                     req = urllib.request.Request(url, post_data)
@@ -417,8 +465,6 @@ def build_web_page():
                     '  <style type="text/css">%s</style>'
                     '</head>') % (probe_refresh_interval, web_page_css)
 
-    web_page_str += '<table border="0" padding="15">'
-
     # safe snapshot of dict keys into list
     url_list = list(jbhasd_device_status_dict)
 
@@ -431,11 +477,9 @@ def build_web_page():
 
     # Iterate zones
     for zone in zone_set:
-        web_page_str += '<tr>'
-        web_page_str += ('<td>%s</td>'
-                         '<td> </td>'
-                         '<td> </td>') % (zone)
-        web_page_str += '</tr>'
+        web_page_str += ('<div class="dash-box">'
+                        '<p class="dash-title">%s</p>'
+                        '<table border="0" padding="3">') % (zone)
 
         # Controls
         for url in url_list:
@@ -459,32 +503,35 @@ def build_web_page():
                     href_url = ('/?url=%s'
                                 '&zone=%s'
                                 '&control=%s'
-                                '&state=%d' % (url_safe_url,
-                                                 url_safe_zone,
-                                                 url_safe_control,
-                                                 alternate_state))
+                                '&state=%d') % (url_safe_url,
+                                                url_safe_zone,
+                                                url_safe_control,
+                                                alternate_state)
 
                     if (alternate_state == 1):
                         checked_str = ""
                     else:
                         checked_str = "checked"
 
-                    web_page_str += '<tr>'
-                    web_page_str += ('<td> </td>'
-                                     '<td>%s</td>') % (control_name)
-
                     # format checkbox css slider in table cell
                     # with onclick action of the href url
                     # the checked_str also ensures the checkbox is 
                     # rendered in the current state
-                    web_page_str += ('<td>'
+                    web_page_str += ('<tr>'
+                                     '<td class="dash-label">%s</td>'
+                                     '<td align="center">'
                                      '<label class="switch">'
                                      '<input type="checkbox" onclick=\'window.location.assign("%s")\' %s>'
                                      '<div class="slider round"></div>'
                                      '</label>'
-                                     '</td>' % (href_url,
-                                                checked_str))
-                    web_page_str += '</tr>'
+                                     '</td>'
+                                     '</tr>') % (control_name,
+                                                 href_url,
+                                                 checked_str)
+
+        web_page_str += '<tr><td></td></tr>'
+        web_page_str += '<tr><td></td></tr>'
+        web_page_str += '<tr><td></td></tr>'
 
         for url in url_list:
             json_data = jbhasd_device_status_dict[url]
@@ -500,22 +547,17 @@ def build_web_page():
                         temp = sensor['temp']
                         humidity = sensor['humidity']
 
-                        web_page_str += '<tr>'
-                        web_page_str += ('<td> </td>'
-                                         '<td>%s</td>') % (sensor_name)
+                        web_page_str += ('<tr>'
+                                         '<td class="dash-label">%s</td>'
+                                         '<td class="dash-label">%sC %s%%</td>'
+                                         '</tr>') % (sensor_name,
+                                                     temp,
+                                                     humidity)
+                        web_page_str += '<tr><td></td></tr>'
+                        web_page_str += '<tr><td></td></tr>'
 
-                        web_page_str += ('<td>%sC</td>'
-                                         '<td>%s%%</td>') % (temp,
-                                                             humidity)
-                        web_page_str += '</tr>'
-
-        # Zone row separators
-        web_page_str += '<tr><td></td></tr>'
-        web_page_str += '<tr><td></td></tr>'
-        web_page_str += '<tr><td></td></tr>'
-        web_page_str += '<tr><td></td></tr>'
-
-    web_page_str += '</table>'
+        # terminate the zone
+        web_page_str += '</table></div>'
 
     return web_page_str
 
@@ -536,10 +578,12 @@ def process_get_params(path):
                 zone = args_dict['zone'][0]
                 control = args_dict['control'][0]
                 state = args_dict['state'][0]
-                print("Manually setting zone:%s control:%s to state:%s on URL:%s" % (zone,
-                                                                                     control,
-                                                                                     state,
-                                                                                     url))
+                print("%s Manually setting zone:%s control:%s"
+                      "to state:%s on URL:%s" % (time.asctime(),
+                                                 zone,
+                                                 control,
+                                                 state,
+                                                 url))
 
                 # Format URL and pass control name through quoting function
                 # Will handle any special character formatting for spaces
@@ -581,7 +625,10 @@ def web_server():
     server = HTTPServer(('', web_port), myHandler)
     print("Started httpserver on port %d" % (web_port))
     
-    server.serve_forever()
+    try: 
+        server.serve_forever()
+    except:
+        sys.exit()
 
 # main()
 
