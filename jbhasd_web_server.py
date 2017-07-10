@@ -40,6 +40,13 @@ web_page_template = """
     $(document).ready(function(){
 __SWITCH_FUNCTIONS__
     });
+
+    setTimeout(function() {
+       $.get("/", function(data, status){
+            $("#dashboard").html(data);
+       });
+    }, __RELOAD__);
+
     </script>
 </head>
 <body>
@@ -175,7 +182,7 @@ input:checked + .slider:before {
 
 
 # Discovery and probing of devices
-zeroconf_refresh_interval = 300
+zeroconf_refresh_interval = 60
 probe_refresh_interval = 10
 url_purge_timeout = 30
 web_port = 8080
@@ -621,6 +628,7 @@ def build_web_page():
     web_page_str = web_page_str.replace("__CSS__", web_page_css)
     web_page_str = web_page_str.replace("__SWITCH_FUNCTIONS__", jquery_str)
     web_page_str = web_page_str.replace("__DASHBOARD__", dashboard_str)
+    web_page_str = web_page_str.replace("__RELOAD__", str(probe_refresh_interval * 1000))
 
     return web_page_str
 
