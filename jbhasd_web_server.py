@@ -26,6 +26,45 @@ from dateutil import tz
 from zeroconf import ServiceBrowser, Zeroconf
 from http.server import BaseHTTPRequestHandler,HTTPServer
 
+### Begin Web page template
+# Templated web page as the header section with CSS and jquery generated
+# code
+# The body section is a single div with the generated dashboard HTML
+web_page_template = """
+<head>
+    <title>JBHASD Console</title>
+    <meta id="META" name="viewport" content="width=device-width; initial-scale=1.0" >
+    <style type="text/css">__CSS__</style>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+    <script>
+    $(document).ready(function(){
+__SWITCH_FUNCTIONS__
+    });
+    </script>
+</head>
+<body>
+    <div id="dashboard">__DASHBOARD__</div>
+</body>
+"""
+### End Web page template
+
+# Begin switch on click function
+# The switch click template is the jquery code
+# used to drive the action taken when we click on a given 
+# switch checkbox. The action gets a given URL and replaces the 
+# dashboard content with the result
+# Its a tidier alternative to full on GET 
+# call to the webserver
+switch_click_template = """
+        $("#__ID__").click(function(){
+            $.get("__URL__", function(data, status){
+                $("#dashboard").html(data);
+            });
+        });
+"""
+### End switch on click template
+
+
 # Begin CSS ##################
 # Used checkbox example from 
 # https://www.w3schools.com/howto/tryit.asp?filename=tryhow_css_switch
@@ -306,9 +345,13 @@ def fetch_url(url, url_timeout, parse_json):
         print("%s Error in urlopen URL:%s" % (time.asctime(), url))
  
     if response is not None:
-        response_str = response.read()
-        #print("%s Got response:\n%s" % (time.asctime(), response_str))
+        try:
+            response_str = response.read()
+        except:
+            print("%s Error in response.read() URL:%s" % (time.asctime(), url))
+            return None
 
+        #print("%s Got response:\n%s" % (time.asctime(), response_str))
         # parse and return json dict if requested
         if parse_json:
             try:
@@ -409,7 +452,7 @@ def probe_devices():
                 # If switch state not in desired state
                 # update and recache the status
                 if (desired_state != -1 and control_state != desired_state):
-                    print("%s Automatically setting zone:%s control:%s"
+                    print("%s Automatically setting zone:%s control:%s "
                           "to state:%s on URL:%s" % (time.asctime(),
                                                      zone_name,
                                                      control_name,
@@ -448,25 +491,21 @@ def probe_devices():
 
 def build_web_page():
 
-    # webpage header and title
-    # CSS thrown in 
-    # and a little refresh timer matched 
-    # to the same probe timer
-    # of importance here is the refresh uses a directed
-    # URL of / to ensure that ant GET args present from a button click
-    # do not become part of the refresh effectively repeating the ON/OFF
-    # click over and over
-    # Ideally this needs an Ajax or jQuery/Angular type solution
-    # But for now a crude GET and refresh model will do
-    web_page_str = ('<head>'
-                    '  <title>JBHASD Console</title>'
-                    '  <meta http-equiv="refresh" content="%d url=/">'
-                    '  <meta id="META" name="viewport" content="width=device-width; initial-scale=1.0" >'
-                    '  <style type="text/css">%s</style>'
-                    '</head>') % (probe_refresh_interval, web_page_css)
-
     # safe snapshot of dict keys into list
     url_list = list(jbhasd_device_status_dict)
+
+    # We'll build two srings of data
+    # One for the html content drawing the
+    # widgets
+    # the other is the jquery code defining
+    # the clicking and load actions
+    # The switch_id number will be incremented
+    # as we define switches and matched between the 
+    # generated HTML for the switch and jquery
+    # code for the click action
+    jquery_str = ""
+    dashboard_str = ""
+    switch_id = 0
 
     # Build a set of zones
     zone_set = set()
@@ -477,9 +516,9 @@ def build_web_page():
 
     # Iterate zones
     for zone in zone_set:
-        web_page_str += ('<div class="dash-box">'
-                        '<p class="dash-title">%s</p>'
-                        '<table border="0" padding="3">') % (zone)
+        dashboard_str += ('<div class="dash-box">'
+                          '<p class="dash-title">%s</p>'
+                          '<table border="0" padding="3">') % (zone)
 
         # Controls
         for url in url_list:
@@ -500,6 +539,9 @@ def build_web_page():
                     url_safe_control = urllib.parse.quote_plus(control_name)
 
                     # href URL for generated html
+                    # This is a URL to the webserver
+                    # carrying the device URL and directives
+                    # to change the desired switch state
                     href_url = ('/?url=%s'
                                 '&zone=%s'
                                 '&control=%s'
@@ -514,24 +556,37 @@ def build_web_page():
                         checked_str = "checked"
 
                     # format checkbox css slider in table cell
-                    # with onclick action of the href url
+                    # with id set to the desired switch_id string
                     # the checked_str also ensures the checkbox is 
                     # rendered in the current state
-                    web_page_str += ('<tr>'
-                                     '<td class="dash-label">%s</td>'
-                                     '<td align="center">'
-                                     '<label class="switch">'
-                                     '<input type="checkbox" onclick=\'window.location.assign("%s")\' %s>'
-                                     '<div class="slider round"></div>'
-                                     '</label>'
-                                     '</td>'
-                                     '</tr>') % (control_name,
-                                                 href_url,
-                                                 checked_str)
+                    dashboard_str += ('<tr>'
+                                      '<td class="dash-label">%s</td>'
+                                      '<td align="center">'
+                                      '<label class="switch">'
+                                      '<input type="checkbox" id="switch%d" %s>'
+                                      '<div class="slider round"></div>'
+                                      '</label>'
+                                      '</td>'
+                                      '</tr>') % (control_name,
+                                                  switch_id,
+                                                  checked_str)
 
-        web_page_str += '<tr><td></td></tr>'
-        web_page_str += '<tr><td></td></tr>'
-        web_page_str += '<tr><td></td></tr>'
+                    # Jquery code for the click state
+                    # Generated with the same switch id
+                    # to match the ckick action to the related
+                    # url and checkbox switch
+                    switch_str = switch_click_template
+                    jquery_click_id = 'switch%d' % (switch_id)
+                    switch_str = switch_str.replace("__ID__", jquery_click_id)
+                    switch_str = switch_str.replace("__URL__", href_url)
+                    jquery_str += switch_str
+
+                    # increment for next switch         
+                    switch_id += 1
+
+        dashboard_str += '<tr><td></td></tr>'
+        dashboard_str += '<tr><td></td></tr>'
+        dashboard_str += '<tr><td></td></tr>'
 
         for url in url_list:
             json_data = jbhasd_device_status_dict[url]
@@ -547,17 +602,25 @@ def build_web_page():
                         temp = sensor['temp']
                         humidity = sensor['humidity']
 
-                        web_page_str += ('<tr>'
-                                         '<td class="dash-label">%s</td>'
-                                         '<td class="dash-label">%sC %s%%</td>'
-                                         '</tr>') % (sensor_name,
-                                                     temp,
-                                                     humidity)
-                        web_page_str += '<tr><td></td></tr>'
-                        web_page_str += '<tr><td></td></tr>'
+                        dashboard_str += ('<tr>'
+                                          '<td class="dash-label">%s</td>'
+                                          '<td class="dash-label">%sC %s%%</td>'
+                                          '</tr>') % (sensor_name,
+                                                      temp,
+                                                      humidity)
+                        dashboard_str += '<tr><td></td></tr>'
+                        dashboard_str += '<tr><td></td></tr>'
 
         # terminate the zone
-        web_page_str += '</table></div>'
+        dashboard_str += '</table></div>'
+
+    # Build and return the web page
+    # dropping in CSS, generated jquery code
+    # and dashboard
+    web_page_str = web_page_template
+    web_page_str = web_page_str.replace("__CSS__", web_page_css)
+    web_page_str = web_page_str.replace("__SWITCH_FUNCTIONS__", jquery_str)
+    web_page_str = web_page_str.replace("__DASHBOARD__", dashboard_str)
 
     return web_page_str
 
@@ -578,7 +641,7 @@ def process_get_params(path):
                 zone = args_dict['zone'][0]
                 control = args_dict['control'][0]
                 state = args_dict['state'][0]
-                print("%s Manually setting zone:%s control:%s"
+                print("%s Manually setting zone:%s control:%s "
                       "to state:%s on URL:%s" % (time.asctime(),
                                                  zone,
                                                  control,
@@ -635,20 +698,34 @@ def web_server():
 # Analytics
 analytics_file = open("analytics.csv", "a")
 
+thread_list = []
+
 # device discovery thread
-dicover_t = threading.Thread(target = discover_devices)
-dicover_t.daemon = True
-dicover_t.start()
+discover_t = threading.Thread(target = discover_devices)
+discover_t.daemon = True
+discover_t.start()
+thread_list.append(discover_t)
 
 # device probe thread
 probe_t = threading.Thread(target = probe_devices)
 probe_t.daemon = True
 probe_t.start()
+thread_list.append(probe_t)
 
 # Web server
 web_server_t = threading.Thread(target = web_server)
 web_server_t.daemon = True
 web_server_t.start()
+thread_list.append(web_server_t)
 
 while (1):
+    dead_threads = 0
+    for thread in thread_list:
+         if (not thread.isAlive()):
+             dead_threads += 1
+
+    if (dead_threads > 0):
+        print("Detected %d dead threads.. exiting" % (dead_threads))
+        sys.exit(-1);
+
     time.sleep(5)
