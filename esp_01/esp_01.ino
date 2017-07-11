@@ -1537,8 +1537,8 @@ void start_sta_mode()
     // before reboot
     connect_count = 0;
 
-    // 20 quick flashes to signal WIFI connected
-    for (i = 1; i <= 20; i++) {
+    // 50 quick flashes to signal WIFI connected
+    for (i = 1; i <= 50; i++) {
         toggle_wifi_led(50);
     }
 
@@ -1678,6 +1678,10 @@ void loop()
     // timer reset 
     // for preventing watchdog resets
     ESP.wdtFeed();
+
+    // wifi check interval
+    static unsigned long wifi_last_check = 0;
+    unsigned long now;
     
     switch (gv_mode) {
       case MODE_INIT:
@@ -1691,10 +1695,16 @@ void loop()
         break;
         
       case MODE_WIFI_STA:
-        // reconnect wifi repeatedly if not connected
-        if (WiFi.status() != WL_CONNECTED) {
-             log_message("Detected WiFI Down in main loop\n");
-             start_sta_mode();
+        // check wifi every 5s initiating 
+        // sta mode again if required
+        now = millis();
+        if (now - wifi_last_check >= 5000) {
+            wifi_last_check = now;
+            //log_message("Checking wifi status\n");
+            if (WiFi.status() != WL_CONNECTED) {
+                 log_message("Detected WiFI Down in main loop\n");
+                 start_sta_mode();
+            }
         }
         else {
             // normal STA mode loop handlers
