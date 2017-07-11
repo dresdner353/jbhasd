@@ -42,7 +42,7 @@ web_page_template = """
         __SWITCH_FUNCTIONS__
     });
 
-    var window_focus;
+    var window_focus = true;
 
     $(window).focus(function() {
         window_focus = true;
