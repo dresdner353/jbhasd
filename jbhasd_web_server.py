@@ -42,6 +42,8 @@ web_page_template = """
         __SWITCH_FUNCTIONS__
     });
 
+    // Window focus awareness
+    // for refresh page behaviour
     var window_focus = true;
 
     $(window).focus(function() {
@@ -50,12 +52,21 @@ web_page_template = """
         window_focus = false;
     });
 
-    var timer = setInterval(function() { myTimer() }, __RELOAD__);
 
-    function myTimer() {
+    // refresh timer and function
+    // We use an intervel refresh which will be called
+    // every __RELOAD__ msecs and will invoke a reload of 
+    // data into the dashboard div if the window is in focus
+    // If not, we will skip the reload.
+    // We also cancel the timer ahead of calling the reload to 
+    // avoid the reload stacking more timers on itself and 
+    // causing major issues
+    var refresh_timer = setInterval(refreshPage, __RELOAD__);
+
+    function refreshPage() {
         if (window_focus == true) {
-            clearInterval(timer);
             $.get("/", function(data, status){
+                clearInterval(refresh_timer);
                 $("#dashboard").html(data);
             });
         }
@@ -79,6 +90,9 @@ web_page_template = """
 switch_click_template = """
         $("#__ID__").click(function(){
             $.get("__URL__", function(data, status){
+                // clear refresh timer
+                // before reload
+                clearInterval(refresh_timer);
                 $("#dashboard").html(data);
             });
         });
@@ -233,14 +247,14 @@ switch_tlist = [
         ("Attic",       "Sonoff Switch",           "1330",     "1400",   "2359" ),
         ("Attic",       "Sonoff Switch",           "1500",     "1501",   "2359" ),
 
-        ("Attic",      "Socket S2",      "1120",     "1150",   "2359" ),
-        ("Attic",      "Green LED 2",   "1125",     "1145",   "2359" ),
+        ("Attic",      "Socket A",      "1120",     "1150",   "2359" ),
+        ("Attic",      "Green LED A",   "1125",     "1145",   "2359" ),
 
-        ("Attic",      "Socket S3",      "1500",     "1600",   "1200" ),
-        ("Attic",      "Green LED 3",   "1505",     "1510",   "1200" ),
+        ("Attic",      "Socket B",      "1500",     "1600",   "1200" ),
+        ("Attic",      "Green LED B",   "1505",     "1510",   "1200" ),
 
-        ("Attic",      "Socket S4",      "sunset",   "0200",   "1600" ),
-        ("Attic",      "Green LED 4",   "sunset",   "0200",   "1600" ),
+        ("Attic",      "Socket C",      "sunset",   "0200",   "1600" ),
+        ("Attic",      "Green LED C",   "sunset",   "0200",   "1600" ),
         ]
 
 
