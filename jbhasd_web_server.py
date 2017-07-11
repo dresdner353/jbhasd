@@ -141,11 +141,13 @@ web_page_css = """
 }
 
 input:checked + .slider {
-    background-color: #2196F3;
+    //background-color: #2196F3;
+    background-color: #40bc34;
 }
 
 input:focus + .slider {
-    box-shadow: 0 0 1px #2196F3;
+    //box-shadow: 0 0 1px #2196F3;
+    box-shadow: 0 0 1px #40bc34;
 }
 
 input:checked + .slider:before {
@@ -188,9 +190,12 @@ input:checked + .slider:before {
     color: rgba(255,255,255,1);
     -o-text-overflow: ellipsis;
     text-overflow: ellipsis;
-    background: -webkit-linear-gradient(-45deg, rgba(64,150,238,1) 0, rgba(14,90,255,1) 100%);
-    background: -moz-linear-gradient(135deg, rgba(64,150,238,1) 0, rgba(14,90,255,1) 100%);
-    background: linear-gradient(135deg, rgba(64,150,238,1) 0, rgba(14,90,255,1) 100%);
+    //background: -webkit-linear-gradient(-45deg, rgba(64,150,238,1) 0, rgba(14,90,255,1) 100%);
+    //background: -moz-linear-gradient(135deg, rgba(64,150,238,1) 0, rgba(14,90,255,1) 100%);
+    //background: linear-gradient(135deg, rgba(64,150,238,1) 0, rgba(14,90,255,1) 100%);
+    background: -webkit-linear-gradient(-45deg, rgba(101,169,237,1) 0, rgba(3,63,191,1) 100%);
+    background: -moz-linear-gradient(135deg, rgba(101,169,237,1) 0, rgba(3,63,191,1) 100%);
+    background: linear-gradient(135deg, rgba(101,169,237,1) 0, rgba(3,63,191,1) 100%);
     background-position: 50% 50%;
     -webkit-background-origin: padding-box;
     background-origin: padding-box;
@@ -238,24 +243,25 @@ http_timeout_secs = 10
 
 # Zone Switchname
 switch_tlist = [
-#        Zone           Switch         On          Off       Override
-        ("Livingroom",  "Uplighter",   "sunset",   "0200",   "1200" ),
-        ("Playroom",    "Uplighter",   "sunset",   "0200",   "1200" ),
+#        Zone           Switch              On          Off       Override
+        ("Livingroom",  "Uplighter",        "sunset",   "0200",   "1200" ),
+        ("Playroom",    "Uplighter",        "sunset",   "0200",   "1200" ),
+        ("Kitchen",     "Counter Lights",   "sunset",   "0200",   "1200" ),
 
-        ("Attic",       "Sonoff Switch",           "1200",     "1205",   "2359" ),
-        ("Attic",       "Sonoff Switch",           "1230",     "1232",   "1200" ),
-        ("Attic",       "Sonoff Switch",           "1330",     "1400",   "2359" ),
-        ("Attic",       "Sonoff Switch",           "1500",     "1501",   "2359" ),
+        ("Attic",       "Sonoff Switch",    "1200",     "1205",   "2359" ),
+        ("Attic",       "Sonoff Switch",    "1230",     "1232",   "1200" ),
+        ("Attic",       "Sonoff Switch",    "1330",     "1400",   "2359" ),
+        ("Attic",       "Sonoff Switch",    "1500",     "1501",   "2359" ),
 
-        ("Attic",      "Socket A",      "1120",     "1150",   "2359" ),
-        ("Attic",      "Green LED A",   "1125",     "1145",   "2359" ),
+        ("Attic",      "Socket A",          "1120",     "1150",   "2359" ),
+        ("Attic",      "Green LED A",       "1125",     "1145",   "2359" ),
 
-        ("Attic",      "Socket B",      "1500",     "1600",   "1200" ),
-        ("Attic",      "Green LED B",   "1505",     "1510",   "1200" ),
+        ("Attic",      "Socket B",          "1500",     "1600",   "1200" ),
+        ("Attic",      "Green LED B",       "1505",     "1510",   "1200" ),
 
-        ("Attic",      "Socket C",      "sunset",   "0200",   "1600" ),
-        ("Attic",      "Green LED C",   "sunset",   "0200",   "1600" ),
-        ]
+        ("Attic",      "Socket C",          "sunset",   "0200",   "1600" ),
+        ("Attic",      "Green LED C",       "sunset",   "0200",   "1600" ),
+]
 
 
 def sunset_api_time_to_epoch(time_str):
@@ -639,10 +645,15 @@ def build_web_page():
 
                         dashboard_str += ('<tr>'
                                           '<td class="dash-label">%s</td>'
-                                          '<td class="dash-label">%sC %s%%</td>'
+                                          '<td class="dash-label">'
+                                          '<table border="0">'
+                                          '<tr><td class="dash-label">&#127777; &nbsp;%s C</td></tr>'
+                                          '<tr><td class="dash-label">&#128167; &nbsp;%s %%</td></tr>'
+                                          '</table></td>'
                                           '</tr>') % (sensor_name,
                                                       temp,
                                                       humidity)
+
                         dashboard_str += '<tr><td></td></tr>'
                         dashboard_str += '<tr><td></td></tr>'
 
