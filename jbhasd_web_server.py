@@ -37,15 +37,29 @@ web_page_template = """
     <style type="text/css">__CSS__</style>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
     <script>
+
     $(document).ready(function(){
-__SWITCH_FUNCTIONS__
+        __SWITCH_FUNCTIONS__
     });
 
-    setTimeout(function() {
-       $.get("/", function(data, status){
-            $("#dashboard").html(data);
-       });
-    }, __RELOAD__);
+    var window_focus;
+
+    $(window).focus(function() {
+        window_focus = true;
+    }).blur(function() {
+        window_focus = false;
+    });
+
+    var timer = setInterval(function() { myTimer() }, __RELOAD__);
+
+    function myTimer() {
+        if (window_focus == true) {
+            clearInterval(timer);
+            $.get("/", function(data, status){
+                $("#dashboard").html(data);
+            });
+        }
+    }
 
     </script>
 </head>
@@ -683,6 +697,7 @@ class myHandler(BaseHTTPRequestHandler):
 
     #Handler for the GET requests
     def do_GET(self):
+        print("%s build_web_page() src:%s" % (time.asctime(), self.address_string()))
         process_get_params(self.path)
         self.send_response(200)
         self.send_header('Content-type','text/html')
