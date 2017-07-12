@@ -105,7 +105,14 @@ switch_click_template = """
 # https://www.w3schools.com/howto/tryit.asp?filename=tryhow_css_switch
 web_page_css = """
 
-* {font-family: arial}
+* {font-family: verdana}
+
+body {
+    background: -webkit-linear-gradient(-225deg, rgba(165,164,164,1) 0, rgba(53,53,53,1) 100%);
+    background: -moz-linear-gradient(315deg, rgba(165,164,164,1) 0, rgba(53,53,53,1) 100%);
+    background: linear-gradient(315deg, rgba(165,164,164,1) 0, rgba(53,53,53,1) 100%);
+    background-position: 50% 50%;
+}
 
 .switch {
     position: relative;
@@ -193,9 +200,12 @@ input:checked + .slider:before {
     //background: -webkit-linear-gradient(-45deg, rgba(64,150,238,1) 0, rgba(14,90,255,1) 100%);
     //background: -moz-linear-gradient(135deg, rgba(64,150,238,1) 0, rgba(14,90,255,1) 100%);
     //background: linear-gradient(135deg, rgba(64,150,238,1) 0, rgba(14,90,255,1) 100%);
-    background: -webkit-linear-gradient(-45deg, rgba(101,169,237,1) 0, rgba(3,63,191,1) 100%);
-    background: -moz-linear-gradient(135deg, rgba(101,169,237,1) 0, rgba(3,63,191,1) 100%);
-    background: linear-gradient(135deg, rgba(101,169,237,1) 0, rgba(3,63,191,1) 100%);
+    //background: -webkit-linear-gradient(-45deg, rgba(101,169,237,1) 0, rgba(3,63,191,1) 100%);
+    //background: -moz-linear-gradient(135deg, rgba(101,169,237,1) 0, rgba(3,63,191,1) 100%);
+    //background: linear-gradient(135deg, rgba(101,169,237,1) 0, rgba(3,63,191,1) 100%);
+    background: -webkit-linear-gradient(0deg, rgba(64,150,238,1) 0, rgba(8,51,142,1) 100%);
+    background: -moz-linear-gradient(90deg, rgba(64,150,238,1) 0, rgba(8,51,142,1) 100%);
+    background: linear-gradient(90deg, rgba(64,150,238,1) 0, rgba(8,51,142,1) 100%);
     background-position: 50% 50%;
     -webkit-background-origin: padding-box;
     background-origin: padding-box;
@@ -643,12 +653,14 @@ def build_web_page():
                         temp = sensor['temp']
                         humidity = sensor['humidity']
 
+                        # &#x1f321 thermometer temp
+                        # &#x1f322 droplet humidity
                         dashboard_str += ('<tr>'
                                           '<td class="dash-label">%s</td>'
                                           '<td class="dash-label">'
                                           '<table border="0">'
-                                          '<tr><td class="dash-label">&#127777; &nbsp;%s C</td></tr>'
-                                          '<tr><td class="dash-label">&#128167; &nbsp;%s %%</td></tr>'
+                                          '<tr><td class="dash-label">&#x263C; &nbsp;%s C</td></tr>'
+                                          '<tr><td class="dash-label">&#x1F4A7; &nbsp;%s %%</td></tr>'
                                           '</table></td>'
                                           '</tr>') % (sensor_name,
                                                       temp,
