@@ -659,8 +659,10 @@ def build_web_page():
                                           '<td class="dash-label">%s</td>'
                                           '<td class="dash-label">'
                                           '<table border="0">'
-                                          '<tr><td class="dash-label">&#x263C; &nbsp;%s C</td></tr>'
-                                          '<tr><td class="dash-label">&#x1F4A7; &nbsp;%s %%</td></tr>'
+                                          '<tr><td class="dash-label" align="center">&#x263C;</td>'
+                                          '<td class="dash-label" align="left">%s C</td></tr>'
+                                          '<tr><td class="dash-label" align="center">&#x1F4A7;</td>'
+                                          '<td class="dash-label" align="left">%s %%</td></tr>'
                                           '</table></td>'
                                           '</tr>') % (sensor_name,
                                                       temp,
@@ -734,7 +736,8 @@ class myHandler(BaseHTTPRequestHandler):
 
     #Handler for the GET requests
     def do_GET(self):
-        print("%s build_web_page() src:%s" % (time.asctime(), self.address_string()))
+        print("%s build_web_page() client:%s" % (time.asctime(), 
+                                                 self.address_string()))
         process_get_params(self.path)
         self.send_response(200)
         self.send_header('Content-type','text/html')
