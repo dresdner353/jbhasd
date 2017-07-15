@@ -22,6 +22,8 @@ import random
 import datetime
 import threading
 import os
+import sys
+import copy
 from dateutil import tz
 from zeroconf import ServiceBrowser, Zeroconf
 from http.server import BaseHTTPRequestHandler,HTTPServer
@@ -227,7 +229,7 @@ input:checked + .slider:before {
 # Discovery and probing of devices
 zeroconf_refresh_interval = 60
 probe_refresh_interval = 10
-url_purge_timeout = 30
+device_purge_timeout = 30
 web_port = 8080
 
 # Sunset config
@@ -241,15 +243,19 @@ sunset_on_time = "2000" # noddy default
 # keyed on zeroconf name
 jbhasd_zconf_url_set = set()
 
+# dict of urls
+#keyed on name
+jbhasd_device_url_dict = {}
+
 # dict of probed device json data
-# keyed on url
+# keyed on name
 jbhasd_device_status_dict = {}
 
 # timestamp of last stored status
-# keyed on url
+# keyed on name
 jbhasd_device_ts_dict = {}
 
-http_timeout_secs = 10
+http_timeout_secs = 5
 
 # Zone Switchname
 switch_tlist = [
@@ -445,38 +451,42 @@ def probe_devices():
         for url in device_url_list:
             json_data = fetch_url(url, http_timeout_secs, 1)
             if (json_data is not None):
-                jbhasd_device_status_dict[url] = json_data
-                jbhasd_device_ts_dict[url] = int(time.time())
+                device_name = json_data['name']
+                jbhasd_device_url_dict[device_name] = url
+                jbhasd_device_status_dict[device_name] = json_data
+                jbhasd_device_ts_dict[device_name] = int(time.time())
         
         # Purge dead URLs
         now = int(time.time())
         # iterate the timestamps from same 
         # snapshot list to avoid issues with parallel 
         # access to the dicts
-        for url in device_url_list:
-            if url in jbhasd_device_ts_dict:
-                last_updated = now - jbhasd_device_ts_dict[url]
-                if last_updated >= url_purge_timeout:
-                    print("%s Purging URL:%s.. last updated %d seconds ago" % (time.asctime(),
-                                                                               url,
-                                                                               last_updated))
-                    del jbhasd_device_ts_dict[url]
-                    del jbhasd_device_status_dict[url]
-                    jbhasd_zconf_url_set.remove(url)
+        for device_name in jbhasd_device_ts_dict:
+            url = jbhasd_device_url_dict[device_name]
+            last_updated = now - jbhasd_device_ts_dict[device_name]
+            if last_updated >= device_purge_timeout:
+                print("%s Purging Device:%s URL:%s.. last updated %d seconds ago" % (time.asctime(),
+                                                                                     device_name,
+                                                                                     url,
+                                                                                     last_updated))
+                del jbhasd_device_url_dict[device_name]
+                del jbhasd_device_ts_dict[device_name]
+                del jbhasd_device_status_dict[device_name]
+                jbhasd_zconf_url_set.remove(url)
 
         # Check for automated devices
         # safe snapshot of dict keys into list
-        url_list = list(jbhasd_device_status_dict)
+        device_list = list(jbhasd_device_status_dict)
         # get time in hhmm format
         current_time = int(time.strftime("%H%M", time.localtime()))
-        for url in url_list:
-            json_data = jbhasd_device_status_dict[url]
-            device_name = json_data['name']
+        for device_name in device_list:
+            json_data = jbhasd_device_status_dict[device_name]
             zone_name = json_data['zone']
+            url = jbhasd_device_url_dict[device_name]
 
             # use timestamp from ts dict as sample time
             # for analytics
-            status_ts = jbhasd_device_ts_dict[url]
+            status_ts = jbhasd_device_ts_dict[device_name]
 
             # Switch status check 
             for control in json_data['controls']:
@@ -503,19 +513,21 @@ def probe_devices():
                 # If switch state not in desired state
                 # update and recache the status
                 if (desired_state != -1 and control_state != desired_state):
-                    print("%s Automatically setting zone:%s control:%s "
-                          "to state:%s on URL:%s" % (time.asctime(),
-                                                     zone_name,
-                                                     control_name,
-                                                     desired_state,
-                                                     url))
-                    data = urllib.parse.urlencode({'control' : control_name, 'state'  : desired_state})
-                    post_data = data.encode('utf-8')
-                    req = urllib.request.Request(url, post_data)
-                    json_data = fetch_url(req, http_timeout_secs, 1)
+                    print("%s Automatically setting %s/%s to state:%s" % (time.asctime(),
+                                                                          zone_name,
+                                                                          control_name,
+                                                                          desired_state))
+                    control_safe = urllib.parse.quote_plus(control_name)
+                    command_url = '%s?control=%s&state=%s' % (url,
+                                                              control_safe,
+                                                              desired_state)
+                    print("%s Issuing command url:%s" % (time.asctime(),
+                                                         command_url))
+
+                    json_data = fetch_url(command_url, http_timeout_secs, 1)
                     if (json_data is not None):
-                        jbhasd_device_status_dict[url] = json_data
-                        jbhasd_device_ts_dict[url] = int(time.time())
+                        jbhasd_device_status_dict[device_name] = json_data
+                        jbhasd_device_ts_dict[device_name] = int(time.time())
 
             # Iterate sensors and record analytics
             for sensor in json_data['sensors']:
@@ -543,9 +555,10 @@ def probe_devices():
 def build_web_page():
 
     # safe snapshot of dict keys into list
-    url_list = list(jbhasd_device_status_dict)
+    device_list = list(jbhasd_device_status_dict)
+    url_dict_copy = copy.deepcopy(jbhasd_device_url_dict)
 
-    # We'll build two srings of data
+    # We'll build two strings of data
     # One for the html content drawing the
     # widgets
     # the other is the jquery code defining
@@ -560,8 +573,8 @@ def build_web_page():
 
     # Build a set of zones
     zone_set = set()
-    for url in url_list:
-        json_data = jbhasd_device_status_dict[url]
+    for device_name in device_list:
+        json_data = jbhasd_device_status_dict[device_name]
         zone_name = json_data['zone']
         zone_set.add(zone_name)
 
@@ -572,9 +585,10 @@ def build_web_page():
                           '<table border="0" padding="3">') % (zone)
 
         # Controls
-        for url in url_list:
-            json_data = jbhasd_device_status_dict[url]
+        for device_name in device_list:
+            json_data = jbhasd_device_status_dict[device_name]
             zone_name = json_data['zone']
+            url = url_dict_copy[device_name]
 
             if (zone == zone_name):
                 # Controls
@@ -585,7 +599,7 @@ def build_web_page():
                     alternate_state = (control_state + 1) % 2
 
                     # prep args for transport
-                    url_safe_url = urllib.parse.quote_plus(url)
+                    url_safe_device = urllib.parse.quote_plus(device_name)
                     url_safe_zone = urllib.parse.quote_plus(zone_name)
                     url_safe_control = urllib.parse.quote_plus(control_name)
 
@@ -593,10 +607,10 @@ def build_web_page():
                     # This is a URL to the webserver
                     # carrying the device URL and directives
                     # to change the desired switch state
-                    href_url = ('/?url=%s'
+                    href_url = ('/?device=%s'
                                 '&zone=%s'
                                 '&control=%s'
-                                '&state=%d') % (url_safe_url,
+                                '&state=%d') % (url_safe_device,
                                                 url_safe_zone,
                                                 url_safe_control,
                                                 alternate_state)
@@ -639,9 +653,10 @@ def build_web_page():
         dashboard_str += '<tr><td></td></tr>'
         dashboard_str += '<tr><td></td></tr>'
 
-        for url in url_list:
-            json_data = jbhasd_device_status_dict[url]
+        for device_name in device_list:
+            json_data = jbhasd_device_status_dict[device_name]
             zone_name = json_data['zone']
+            url = url_dict_copy[device_name]
 
             if (zone == zone_name):
                 # Sensors
@@ -691,38 +706,39 @@ def process_get_params(path):
         # skip /? from path before parsing
         args_dict = urllib.parse.parse_qs(path[2:])
         #print(args_dict)
-        if 'url' in args_dict:
+        if 'device' in args_dict:
             # get args. but first instances only
             # as parse_qs gives us a dict of lists
-            url = args_dict['url'][0]
+            device_name = args_dict['device'][0]
+            if device_name in jbhasd_device_url_dict:
+                url = jbhasd_device_url_dict[device_name]
 
-            # control + state combination
-            # for switch ON/OFF
-            if 'control' in args_dict:
-                zone = args_dict['zone'][0]
-                control = args_dict['control'][0]
-                state = args_dict['state'][0]
-                print("%s Manually setting zone:%s control:%s "
-                      "to state:%s on URL:%s" % (time.asctime(),
-                                                 zone,
-                                                 control,
-                                                 state,
-                                                 url))
+                # control + state combination
+                # for switch ON/OFF
+                if 'control' in args_dict:
+                    zone_name = args_dict['zone'][0]
+                    control_name = args_dict['control'][0]
+                    desired_state = args_dict['state'][0]
+                    print("%s Manually setting %s/%s to state:%s" % (time.asctime(),
+                                                                     zone_name,
+                                                                     control_name,
+                                                                     desired_state))
 
-                # Format URL and pass control name through quoting function
-                # Will handle any special character formatting for spaces
-                # etc
-                control_safe = urllib.parse.quote_plus(control)
-                command_url = '%s?control=%s&state=%s' % (url,
-                                                          control_safe,
-                                                          state)
+                    # Format URL and pass control name through quoting function
+                    # Will handle any special character formatting for spaces
+                    # etc
+                    control_safe = urllib.parse.quote_plus(control_name)
+                    command_url = '%s?control=%s&state=%s' % (url,
+                                                              control_safe,
+                                                              desired_state)
+                    print("%s Issuing command url:%s" % (time.asctime(),
+                                                         command_url))
 
-            #print("Formatted command url:%s" % (command_url))
-            json_data = fetch_url(command_url, http_timeout_secs, 1)
-            if (json_data is not None):
-                # update the status and ts as returned
-                jbhasd_device_status_dict[url] = json_data
-                jbhasd_device_ts_dict[url] = int(time.time())
+                    json_data = fetch_url(command_url, http_timeout_secs, 1)
+                    if (json_data is not None):
+                        # update the status and ts as returned
+                        jbhasd_device_status_dict[device_name] = json_data
+                        jbhasd_device_ts_dict[device_name] = int(time.time())
     return
 
 #This class will handles any incoming request from
