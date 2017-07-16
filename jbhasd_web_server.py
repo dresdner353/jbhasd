@@ -231,6 +231,7 @@ zeroconf_refresh_interval = 60
 probe_refresh_interval = 10
 device_purge_timeout = 30
 web_port = 8080
+web_ip = '127.0.0.1' # will be updated with get_ip() call
 
 # Sunset config
 # set with co-ords of Dublin Spire, Ireland
@@ -279,6 +280,18 @@ switch_tlist = [
         ("Attic",      "Green LED C",       "sunset",   "0200",   "1600" ),
 ]
 
+def get_ip():
+    # determine my default LAN IP
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # doesn't even have to be reachable
+        s.connect(('10.255.255.255', 1))
+        ip = s.getsockname()[0]
+    except:
+        ip = '127.0.0.1'
+    finally:
+        s.close()
+    return ip
 
 def sunset_api_time_to_epoch(time_str):
     # decode UTC time from string, strip last 6 chars first
@@ -448,11 +461,11 @@ def probe_devices():
         # iterate set of discovered device URLs as snapshot list
         # avoids issues if the set is updated mid-way
         device_url_list = list(jbhasd_zconf_url_set)
-        update_ip = '192.168.12.3'
-        update_ip_safe = urllib.parse.quote_plus(update_ip)
+        web_ip = get_ip()
+        web_ip_safe = urllib.parse.quote_plus(web_ip)
         for url in device_url_list:
             url_w_update = '%s?update_ip=%s&update_port=%d' % (url,
-                                                               update_ip_safe, 
+                                                               web_ip_safe, 
                                                                web_port)
             json_data = fetch_url(url_w_update, http_timeout_secs, 1)
             if (json_data is not None):
