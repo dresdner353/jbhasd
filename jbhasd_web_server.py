@@ -448,8 +448,13 @@ def probe_devices():
         # iterate set of discovered device URLs as snapshot list
         # avoids issues if the set is updated mid-way
         device_url_list = list(jbhasd_zconf_url_set)
+        update_ip = '192.168.12.3'
+        update_ip_safe = urllib.parse.quote_plus(update_ip)
         for url in device_url_list:
-            json_data = fetch_url(url, http_timeout_secs, 1)
+            url_w_update = '%s?update_ip=%s&update_port=%d' % (url,
+                                                               update_ip_safe, 
+                                                               web_port)
+            json_data = fetch_url(url_w_update, http_timeout_secs, 1)
             if (json_data is not None):
                 device_name = json_data['name']
                 jbhasd_device_url_dict[device_name] = url
@@ -461,7 +466,8 @@ def probe_devices():
         # iterate the timestamps from same 
         # snapshot list to avoid issues with parallel 
         # access to the dicts
-        for device_name in jbhasd_device_ts_dict:
+        device_ts_list = list(jbhasd_device_ts_dict)
+        for device_name in device_ts_list:
             url = jbhasd_device_url_dict[device_name]
             last_updated = now - jbhasd_device_ts_dict[device_name]
             if last_updated >= device_purge_timeout:
@@ -702,43 +708,75 @@ def build_web_page():
 
 
 def process_get_params(path):
-    if (len(path) > 2):
-        # skip /? from path before parsing
-        args_dict = urllib.parse.parse_qs(path[2:])
-        #print(args_dict)
-        if 'device' in args_dict:
-            # get args. but first instances only
-            # as parse_qs gives us a dict of lists
-            device_name = args_dict['device'][0]
-            if device_name in jbhasd_device_url_dict:
-                url = jbhasd_device_url_dict[device_name]
+    # separate out the args from the full path
+    # se we can parse into a dict using parse_qs
+    parsed_url = urllib.parse.urlparse(path)
+    args_dict = urllib.parse.parse_qs(parsed_url.query)
+    #print(args_dict)
 
-                # control + state combination
-                # for switch ON/OFF
-                if 'control' in args_dict:
-                    zone_name = args_dict['zone'][0]
-                    control_name = args_dict['control'][0]
-                    desired_state = args_dict['state'][0]
-                    print("%s Manually setting %s/%s to state:%s" % (time.asctime(),
-                                                                     zone_name,
-                                                                     control_name,
-                                                                     desired_state))
+    # test for combinations we'd expect
+    # for a given command
 
-                    # Format URL and pass control name through quoting function
-                    # Will handle any special character formatting for spaces
-                    # etc
-                    control_safe = urllib.parse.quote_plus(control_name)
-                    command_url = '%s?control=%s&state=%s' % (url,
-                                                              control_safe,
-                                                              desired_state)
-                    print("%s Issuing command url:%s" % (time.asctime(),
-                                                         command_url))
+    # Switch manual toggle from web console
+    if ('device' in args_dict and 
+        'zone' in args_dict and 
+        'control' in args_dict and 
+        'state' in args_dict):
+        # get args. but first instances only
+        # as parse_qs gives us a dict of lists
+        device_name = args_dict['device'][0]
+        if device_name in jbhasd_device_url_dict:
+            url = jbhasd_device_url_dict[device_name]
 
-                    json_data = fetch_url(command_url, http_timeout_secs, 1)
-                    if (json_data is not None):
-                        # update the status and ts as returned
-                        jbhasd_device_status_dict[device_name] = json_data
-                        jbhasd_device_ts_dict[device_name] = int(time.time())
+            # control + state combination
+            # for switch ON/OFF
+            if 'control' in args_dict:
+                zone_name = args_dict['zone'][0]
+                control_name = args_dict['control'][0]
+                desired_state = args_dict['state'][0]
+                print("%s Manually setting %s/%s to state:%s" % (time.asctime(),
+                                                                 zone_name,
+                                                                 control_name,
+                                                                 desired_state))
+
+                # Format URL and pass control name through quoting function
+                # Will handle any special character formatting for spaces
+                # etc
+                control_safe = urllib.parse.quote_plus(control_name)
+                command_url = '%s?control=%s&state=%s' % (url,
+                                                          control_safe,
+                                                          desired_state)
+                print("%s Issuing command url:%s" % (time.asctime(),
+                                                     command_url))
+
+                json_data = fetch_url(command_url, http_timeout_secs, 1)
+                if (json_data is not None):
+                    # update the status and ts as returned
+                    jbhasd_device_status_dict[device_name] = json_data
+                    jbhasd_device_ts_dict[device_name] = int(time.time())
+    return
+
+def process_post_params(body):
+    # parse post body into args
+    args_dict = urllib.parse.parse_qs(body)
+    #print(args_dict)
+
+    # status push from device
+    if ('update' in args_dict):
+        device_name = args_dict['update'][0]
+        if device_name in jbhasd_device_url_dict:
+            url = jbhasd_device_url_dict[device_name]
+            json_data = fetch_url(url, http_timeout_secs, 1)
+            if (json_data is not None):
+                #print("Updated status for %s URL:%s" % (device_name, url))
+                device_name = json_data['name']
+                jbhasd_device_url_dict[device_name] = url
+                jbhasd_device_status_dict[device_name] = json_data
+                jbhasd_device_ts_dict[device_name] = int(time.time())
+        else:
+            print("%s Cant match push for %s to URL" % (time.asctime(),
+                                                        device_name))
+ 
     return
 
 #This class will handles any incoming request from
@@ -752,14 +790,34 @@ class myHandler(BaseHTTPRequestHandler):
 
     #Handler for the GET requests
     def do_GET(self):
-        print("%s build_web_page() client:%s" % (time.asctime(), 
-                                                 self.address_string()))
+        print("%s GET(%s) client:%s" % (time.asctime(), 
+                                        self.path,
+                                        self.address_string()))
         process_get_params(self.path)
         self.send_response(200)
         self.send_header('Content-type','text/html')
         self.end_headers()
-        # Send the html message
+
+        # Send the console web page
         self.wfile.write(bytes(build_web_page(), 
+                               "utf-8"))
+        return
+
+    def do_POST(self):
+        content_length = int(self.headers['Content-Length'])
+        post_body = self.rfile.read(content_length).decode('utf-8')
+        print("%s POST(%s) client:%s" % (time.asctime(),
+                                         post_body,
+                                         self.address_string()))
+        process_post_params(post_body)
+
+        self.send_response(200)
+        self.send_header('Content-type','text/html')
+        self.end_headers()
+
+        # Send noddy html message
+        # the client here is a device
+        self.wfile.write(bytes("Thank you", 
                                "utf-8"))
         return
 
