@@ -8,6 +8,7 @@
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
 #include <ESP8266WebServer.h>
+#include <ESP8266HTTPClient.h>
 #include <ESP8266mDNS.h>
 #include <DNSServer.h>
 #include <ESP8266mDNS.h>
@@ -205,6 +206,9 @@ IPAddress gv_ap_ip(192, 168, 1, 1);
 IPAddress gv_sta_ip;
 DNSServer gv_dns_server;
 char gv_mdns_hostname[MAX_FIELD_LEN + MAX_FIELD_LEN];
+
+char gv_push_ip[MAX_FIELD_LEN];
+int gv_push_port;
 
 // Output buffers
 // In an effort to keep the RAM usage low
@@ -495,6 +499,8 @@ void check_manual_switches()
     int button_state;
     int delay_msecs = 500;
     int took_action = 0;
+    WiFiClient wifi_client;
+    int rc;
 
     //disabled to keep the serial activity quiet
     //log_message("check_manual_switches()\n");
@@ -534,6 +540,41 @@ void check_manual_switches()
         // protect against a 2nd press detection of any of the switches
         // with a short delay
         delay(delay_msecs);
+
+        // Send update push
+        if (strlen(gv_push_ip) > 0) {
+            
+            // straight connection
+            // Tried the http object
+            // for GET and PUSH and just got
+            // grief from the python web server
+
+            log_message("pushing update request to host:%s port:%d\n", gv_push_ip,
+                                                                       gv_push_port);
+
+            ets_sprintf(gv_small_buffer_1,
+                       "update=%s",
+                       gv_mdns_hostname);
+            
+            if (!wifi_client.connect(gv_push_ip, 
+                                     gv_push_port)) {
+                log_message("connection failed\n");
+            }
+            else {
+                wifi_client.println("POST / HTTP/1.1");
+                wifi_client.println("Host: server_name");
+                wifi_client.println("Accept: */*");
+                wifi_client.println("Content-Type: application/x-www-form-urlencoded");
+                wifi_client.print("Content-Length: ");
+                wifi_client.println(strlen(gv_small_buffer_1));
+                wifi_client.println();
+                wifi_client.print(gv_small_buffer_1);
+                delay(500);
+                if (wifi_client.connected()) { 
+                    wifi_client.stop();
+                }
+            }
+        }
     }
 }
 
@@ -1611,6 +1652,15 @@ void sta_handle_json() {
         set_switch_state(gv_small_buffer_1, -1, switch_state); // specifying name only
     }
 
+    // Set PUSH url for status updates
+    if (gv_web_server.hasArg("update_ip") &&
+        gv_web_server.hasArg("update_port")) {
+        strcpy(gv_push_ip, gv_web_server.arg("update_ip").c_str());
+        gv_push_port = atoi(gv_web_server.arg("update_port").c_str());
+        log_message("Set push IP:port to %s:%d\n", gv_push_ip,
+                                                   gv_push_port);
+    }
+
     // Return current status as standard
     gv_web_server.send(200, "text/html", get_json_status());
 
@@ -1764,6 +1814,9 @@ void setup()
                 "esp8266-%d-%s",
                 ESP.getChipId(),
                 gv_config.zone);
+
+    // Init Push IP
+    gv_push_ip[0] = '\0';
     
     // Activate switches
     // will perform full setup
