@@ -92,8 +92,9 @@ def change_controls():
 zeroconf = Zeroconf()
 my_ip = get_ip()
 
+# more involved start of cherrypy as we 
+# want to have multiple separate ports, one per device
 cherrypy.tree.mount(device_web_server(), '/json')
-
 cherrypy.server.unsubscribe()
 server_list = []
 num_states = len(us_states_list)
