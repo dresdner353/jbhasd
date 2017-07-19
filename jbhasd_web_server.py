@@ -26,7 +26,7 @@ import sys
 import copy
 from dateutil import tz
 from zeroconf import ServiceBrowser, Zeroconf
-from http.server import BaseHTTPRequestHandler,HTTPServer
+import cherrypy
 
 ### Begin Web page template
 # Templated web page as the header section with CSS and jquery generated
@@ -41,7 +41,6 @@ web_page_template = """
     <script>
 
     $(document).ready(function(){
-        //pollServer();
         __SWITCH_FUNCTIONS__
 
     });
@@ -55,26 +54,6 @@ web_page_template = """
     }).blur(function() {
         window_focus = false;
     });
-
-    //function pollServer()
-    //{
-    //    window.setTimeout(function () {
-    //        $.ajax({
-    //            url: "http://192.168.12.3:8081",
-    //            type: "GET",
-    //            success: function (result) {
-    //                //SUCCESS LOGIC
-    //                $.get("/", function(data, status){
-    //                    $("#dashboard").html(data);
-    //                });
-    //                pollServer();
-    //            },
-    //            error: function () {
-    //                //ERROR HANDLING
-    //                pollServer();
-    //            }});
-    //    }, 60000);
-    //}
 
     // refresh timer and function
     // We use an intervel refresh which will be called
@@ -113,8 +92,7 @@ web_page_template = """
 switch_click_template = """
         $("#__ID__").click(function(){
             $.get("__URL__", function(data, status){
-                // clear refresh timer
-                // before reload
+                // clear refresh timer before reload
                 clearInterval(refresh_timer);
                 $("#dashboard").html(data);
             });
@@ -248,47 +226,46 @@ input:checked + .slider:before {
 
 
 # Discovery and probing of devices
-zeroconf_refresh_interval = 60
-probe_refresh_interval = 10
-device_purge_timeout = 30
-web_port = 8080
-web_poll_port = web_port + 1
-web_ip = '127.0.0.1' # will be updated with get_ip() call
+gv_zeroconf_refresh_interval = 60
+gv_probe_refresh_interval = 10
+gv_device_purge_timeout = 30
+gv_web_port = 8080
+gv_web_ip = '127.0.0.1' # will be updated with get_ip() call
 
 # Sunset config
 # set with co-ords of Dublin Spire, Ireland
-sunset_url = 'http://api.sunrise-sunset.org/json?lat=53.349809&lng=-6.2624431&formatted=0'
-last_sunset_check = -1
-sunset_lights_on_offset = -3600
-sunset_on_time = "2000" # noddy default
+gv_sunset_url = 'http://api.sunrise-sunset.org/json?lat=53.349809&lng=-6.2624431&formatted=0'
+gv_last_sunset_check = -1
+gv_sunset_lights_on_offset = -3600
+gv_sunset_on_time = "2000" # noddy default
 
 # Init dict of discovered device URLs
 # keyed on zeroconf name
-jbhasd_zconf_url_set = set()
+gv_jbhasd_zconf_url_set = set()
 
 # dict of urls
 #keyed on name
-jbhasd_device_url_dict = {}
+gv_jbhasd_device_url_dict = {}
 
 # dict of probed device json data
 # keyed on name
-jbhasd_device_status_dict = {}
+gv_jbhasd_device_status_dict = {}
 
 # timestamp of last stored status
 # keyed on name
-jbhasd_device_ts_dict = {}
+gv_jbhasd_device_ts_dict = {}
 
 # timeout for all fetch calls
-http_timeout_secs = 5
+gv_http_timeout_secs = 5
 
 # Long poll timestamp
 # this will set to current epoch
 # everytime we perform a full probe
 # or any time we get a push
-poll_timestamp = 0
+gv_poll_timestamp = 0
 
 # Zone Switchname
-switch_tlist = [
+gv_switch_tlist = [
 #        Zone           Switch              On          Off       Override
         ("Livingroom",  "Uplighter",        "sunset",   "0100",   "1200" ),
         ("Playroom",    "Uplighter",        "sunset",   "0100",   "1200" ),
@@ -322,6 +299,7 @@ def get_ip():
         s.close()
     return ip
 
+
 def sunset_api_time_to_epoch(time_str):
     # decode UTC time from string, strip last 6 chars first
     ts_datetime = datetime.datetime.strptime(time_str[:-6], 
@@ -341,7 +319,7 @@ def check_switch(zone_name,
                  current_time, 
                  control_state):
 
-    global sunset_on_time
+    global gv_sunset_on_time
 
     # represents state of switch
     # -1 do nothing.. not matched
@@ -349,7 +327,7 @@ def check_switch(zone_name,
     # 1 on
     desired_state = -1
 
-    for zone, switch, on_time, off_time, override_time in switch_tlist:
+    for zone, switch, on_time, off_time, override_time in gv_switch_tlist:
         if zone == zone_name and switch == switch_name:
             # have a match
             # desired state will have a value now
@@ -368,7 +346,7 @@ def check_switch(zone_name,
             # sunset keyword replacemenet with
             # dynamic sunset offset time
             if (on_time == "sunset"):
-                on_time = sunset_on_time
+                on_time = gv_sunset_on_time
             else:
                 on_time = int(on_time)
 
@@ -404,13 +382,15 @@ class MyZeroConfListener(object):
         return
 
     def add_service(self, zeroconf, type, name):
+        # extract dns-sd info, build URL
+        # and store in set
         info = zeroconf.get_service_info(type, name)
         if info is not None:
             address = socket.inet_ntoa(info.address)
             port = info.port
             url = "http://%s:%d/json" % (address, port)
-            if not url in jbhasd_zconf_url_set:
-                jbhasd_zconf_url_set.add(url)
+            if not url in gv_jbhasd_zconf_url_set:
+                gv_jbhasd_zconf_url_set.add(url)
                 print("%s Discovered device..\n  name:%s \n  URL:%s" % (time.asctime(),
                                                                         name, 
                                                                         url))
@@ -427,11 +407,14 @@ def discover_devices():
 
         # loop interval sleep then 
         # close zeroconf object
-        time.sleep(zeroconf_refresh_interval)
+        time.sleep(gv_zeroconf_refresh_interval)
         zeroconf.close()
 
 
 def fetch_url(url, url_timeout, parse_json):
+    # General purpoe URL fetcher
+    # return contents of page and parsed as json
+    # if the parse_json arg is 1
     response_str = None
 
     #print("%s Fetching URL:%s, timeout:%d" % (time.asctime(), url, url_timeout)) 
@@ -466,42 +449,46 @@ def fetch_url(url, url_timeout, parse_json):
      
 
 def probe_devices():
-    global last_sunset_check, sunset_lights_on_offset, sunset_on_time, poll_timestamp
+    # iterate set of discovered device URLs
+    # and probe their status values, storing in a dictionary
+    # Also calculate sunset time every 6 hours as part of automated 
+    # management of devices
+    global gv_last_sunset_check, gv_sunset_lights_on_offset, gv_sunset_on_time, gv_poll_timestamp
 
     # loop forever
     while (1):
         # Sunset calculations
         now = time.time()
-        if ((now - last_sunset_check) >= 6*60*60): # every 6 hours
+        if ((now - gv_last_sunset_check) >= 6*60*60): # every 6 hours
             # Re-calculate
             print("%s Getting Sunset times.." % (time.asctime()))
-            json_data = fetch_url(sunset_url, 20, 1)
+            json_data = fetch_url(gv_sunset_url, 20, 1)
             if json_data is not None:
                 sunset_str = json_data['results']['sunset']
                 sunset_ts = sunset_api_time_to_epoch(sunset_str)
-                sunset_local_time = time.localtime(sunset_ts + sunset_lights_on_offset)
-                sunset_on_time = int(time.strftime("%H%M", sunset_local_time))
+                sunset_local_time = time.localtime(sunset_ts + gv_sunset_lights_on_offset)
+                gv_sunset_on_time = int(time.strftime("%H%M", sunset_local_time))
                 print("%s Sunset on-time is %s (with offset of %d seconds)" % (time.asctime(),
-                                                                               sunset_on_time,
-                                                                               sunset_lights_on_offset))
+                                                                               gv_sunset_on_time,
+                                                                               gv_sunset_lights_on_offset))
 
-            last_sunset_check = now
+            gv_last_sunset_check = now
 
         # iterate set of discovered device URLs as snapshot list
         # avoids issues if the set is updated mid-way
-        device_url_list = list(jbhasd_zconf_url_set)
-        web_ip = get_ip()
-        web_ip_safe = urllib.parse.quote_plus(web_ip)
+        device_url_list = list(gv_jbhasd_zconf_url_set)
+        gv_web_ip = get_ip()
+        gv_web_ip_safe = urllib.parse.quote_plus(gv_web_ip)
         for url in device_url_list:
             url_w_update = '%s?update_ip=%s&update_port=%d' % (url,
-                                                               web_ip_safe, 
-                                                               web_port)
-            json_data = fetch_url(url_w_update, http_timeout_secs, 1)
+                                                               gv_web_ip_safe, 
+                                                               gv_web_port)
+            json_data = fetch_url(url_w_update, gv_http_timeout_secs, 1)
             if (json_data is not None):
                 device_name = json_data['name']
-                jbhasd_device_url_dict[device_name] = url
-                jbhasd_device_status_dict[device_name] = json_data
-                jbhasd_device_ts_dict[device_name] = int(time.time())
+                gv_jbhasd_device_url_dict[device_name] = url
+                gv_jbhasd_device_status_dict[device_name] = json_data
+                gv_jbhasd_device_ts_dict[device_name] = int(time.time())
             else:
                 print("Failed to get status on %s" % (url))
         
@@ -515,8 +502,8 @@ def probe_devices():
         # and remove all urls from the snapshot set
         # The remaining URLs are then the duds
         device_url_set = set(device_url_list)
-        for device_name in jbhasd_device_url_dict:
-            url = jbhasd_device_url_dict[device_name]
+        for device_name in gv_jbhasd_device_url_dict:
+            url = gv_jbhasd_device_url_dict[device_name]
             if url in device_url_set:
                 device_url_set.remove(url)
 
@@ -526,41 +513,41 @@ def probe_devices():
                                                      url,
                                                      reason))
 
-            if url in jbhasd_zconf_url_set:
-                jbhasd_zconf_url_set.remove(url)
+            if url in gv_jbhasd_zconf_url_set:
+                gv_jbhasd_zconf_url_set.remove(url)
 
         # iterate the known devices with status values 
         # that were previously recorded. 
         # Check for expired timestamps and purge
-        device_name_list = list(jbhasd_device_status_dict)
+        device_name_list = list(gv_jbhasd_device_status_dict)
         for device_name in device_name_list:
-            url = jbhasd_device_url_dict[device_name]
+            url = gv_jbhasd_device_url_dict[device_name]
 
-            last_updated = now - jbhasd_device_ts_dict[device_name]
-            if last_updated >= device_purge_timeout:
+            last_updated = now - gv_jbhasd_device_ts_dict[device_name]
+            if last_updated >= gv_device_purge_timeout:
                 reason = "expired last updated %d seconds ago" % (last_updated)
                 print("%s Purging Device:%s URL:%s.. reason:%s" % (time.asctime(),
                                                                    device_name,
                                                                    url,
                                                                    reason))
-                del jbhasd_device_url_dict[device_name]
-                del jbhasd_device_ts_dict[device_name]
-                del jbhasd_device_status_dict[device_name]
-                jbhasd_zconf_url_set.remove(url)
+                del gv_jbhasd_device_url_dict[device_name]
+                del gv_jbhasd_device_ts_dict[device_name]
+                del gv_jbhasd_device_status_dict[device_name]
+                gv_jbhasd_zconf_url_set.remove(url)
 
         # Check for automated devices
         # safe snapshot of dict keys into list
-        device_list = list(jbhasd_device_status_dict)
+        device_list = list(gv_jbhasd_device_status_dict)
         # get time in hhmm format
         current_time = int(time.strftime("%H%M", time.localtime()))
         for device_name in device_list:
-            json_data = jbhasd_device_status_dict[device_name]
+            json_data = gv_jbhasd_device_status_dict[device_name]
             zone_name = json_data['zone']
-            url = jbhasd_device_url_dict[device_name]
+            url = gv_jbhasd_device_url_dict[device_name]
 
             # use timestamp from ts dict as sample time
             # for analytics
-            status_ts = jbhasd_device_ts_dict[device_name]
+            status_ts = gv_jbhasd_device_ts_dict[device_name]
 
             # Switch status check 
             for control in json_data['controls']:
@@ -598,10 +585,10 @@ def probe_devices():
                     print("%s Issuing command url:%s" % (time.asctime(),
                                                          command_url))
 
-                    json_data = fetch_url(command_url, http_timeout_secs, 1)
+                    json_data = fetch_url(command_url, gv_http_timeout_secs, 1)
                     if (json_data is not None):
-                        jbhasd_device_status_dict[device_name] = json_data
-                        jbhasd_device_ts_dict[device_name] = int(time.time())
+                        gv_jbhasd_device_status_dict[device_name] = json_data
+                        gv_jbhasd_device_ts_dict[device_name] = int(time.time())
 
             # Iterate sensors and record analytics
             for sensor in json_data['sensors']:
@@ -623,19 +610,19 @@ def probe_devices():
 
         # update poll timestamp to drive 
         # long poll reaction
-        poll_timestamp = time.time()
-        #print("Updated poll_timestamp to %d (probe refresh)" % (poll_timestamp))
+        gv_poll_timestamp = time.time()
+        #print("Updated gv_poll_timestamp to %d (probe refresh)" % (gv_poll_timestamp))
 
         # loop sleep interval
-        time.sleep(probe_refresh_interval)
+        time.sleep(gv_probe_refresh_interval)
     return
 
 
 def build_web_page():
 
     # safe snapshot of dict keys into list
-    device_list = list(jbhasd_device_status_dict)
-    url_dict_copy = copy.deepcopy(jbhasd_device_url_dict)
+    device_list = list(gv_jbhasd_device_status_dict)
+    url_dict_copy = copy.deepcopy(gv_jbhasd_device_url_dict)
 
     # We'll build two strings of data
     # One for the html content drawing the
@@ -653,7 +640,7 @@ def build_web_page():
     # Build a set of zones
     zone_set = set()
     for device_name in device_list:
-        json_data = jbhasd_device_status_dict[device_name]
+        json_data = gv_jbhasd_device_status_dict[device_name]
         zone_name = json_data['zone']
         zone_set.add(zone_name)
 
@@ -665,7 +652,7 @@ def build_web_page():
 
         # Controls
         for device_name in device_list:
-            json_data = jbhasd_device_status_dict[device_name]
+            json_data = gv_jbhasd_device_status_dict[device_name]
             zone_name = json_data['zone']
             url = url_dict_copy[device_name]
 
@@ -733,7 +720,7 @@ def build_web_page():
         dashboard_str += '<tr><td></td></tr>'
 
         for device_name in device_list:
-            json_data = jbhasd_device_status_dict[device_name]
+            json_data = gv_jbhasd_device_status_dict[device_name]
             zone_name = json_data['zone']
             url = url_dict_copy[device_name]
 
@@ -775,187 +762,99 @@ def build_web_page():
     web_page_str = web_page_str.replace("__CSS__", web_page_css)
     web_page_str = web_page_str.replace("__SWITCH_FUNCTIONS__", jquery_str)
     web_page_str = web_page_str.replace("__DASHBOARD__", dashboard_str)
-    web_page_str = web_page_str.replace("__RELOAD__", str(probe_refresh_interval * 1000))
+    web_page_str = web_page_str.replace("__RELOAD__", str(gv_probe_refresh_interval * 1000))
 
     return web_page_str
 
 
-def process_get_params(path):
-    # separate out the args from the full path
-    # se we can parse into a dict using parse_qs
-    parsed_url = urllib.parse.urlparse(path)
-    args_dict = urllib.parse.parse_qs(parsed_url.query)
-    #print(args_dict)
+def process_get_params(device, zone, control, state):
 
-    # test for combinations we'd expect
-    # for a given command
+    if (device is not None and
+        zone is not None and
+        control is not None and
+        state is not None):
 
-    # Switch manual toggle from web console
-    if ('device' in args_dict and 
-        'zone' in args_dict and 
-        'control' in args_dict and 
-        'state' in args_dict):
-        # get args. but first instances only
-        # as parse_qs gives us a dict of lists
-        device_name = args_dict['device'][0]
-        if device_name in jbhasd_device_url_dict:
-            url = jbhasd_device_url_dict[device_name]
+        if device in gv_jbhasd_device_url_dict:
+            url = gv_jbhasd_device_url_dict[device]
 
-            # control + state combination
-            # for switch ON/OFF
-            if 'control' in args_dict:
-                zone_name = args_dict['zone'][0]
-                control_name = args_dict['control'][0]
-                desired_state = args_dict['state'][0]
-                print("%s Manually setting %s/%s to state:%s" % (time.asctime(),
-                                                                 zone_name,
-                                                                 control_name,
-                                                                 desired_state))
+            print("%s Manually setting %s/%s to state:%s" % (time.asctime(),
+                                                             zone,
+                                                             control,
+                                                             state))
 
-                # Format URL and pass control name through quoting function
-                # Will handle any special character formatting for spaces
-                # etc
-                control_safe = urllib.parse.quote_plus(control_name)
-                command_url = '%s?control=%s&state=%s' % (url,
-                                                          control_safe,
-                                                          desired_state)
-                print("%s Issuing command url:%s" % (time.asctime(),
-                                                     command_url))
+            # Format URL and pass control name through quoting function
+            # Will handle any special character formatting for spaces
+            # etc
+            control_safe = urllib.parse.quote_plus(control)
+            command_url = '%s?control=%s&state=%s' % (url,
+                                                      control_safe,
+                                                      state)
+            print("%s Issuing command url:%s" % (time.asctime(),
+                                                 command_url))
 
-                json_data = fetch_url(command_url, http_timeout_secs, 1)
-                if (json_data is not None):
-                    # update the status and ts as returned
-                    jbhasd_device_status_dict[device_name] = json_data
-                    jbhasd_device_ts_dict[device_name] = int(time.time())
+            json_data = fetch_url(command_url, gv_http_timeout_secs, 1)
+            if (json_data is not None):
+                # update the status and ts as returned
+                gv_jbhasd_device_status_dict[device] = json_data
+                gv_jbhasd_device_ts_dict[device] = int(time.time())
     return
 
-def process_post_params(body):
-    # parse post body into args
-    args_dict = urllib.parse.parse_qs(body)
-    #print(args_dict)
 
-    # status push from device
-    if ('update' in args_dict):
-        device_name = args_dict['update'][0]
-        if device_name in jbhasd_device_url_dict:
-            url = jbhasd_device_url_dict[device_name]
-            json_data = fetch_url(url, http_timeout_secs, 1)
+def process_post_params(update):
+    if (update is not None):
+        device_name = update
+        if device_name in gv_jbhasd_device_url_dict:
+            url = gv_jbhasd_device_url_dict[device_name]
+            json_data = fetch_url(url, gv_http_timeout_secs, 1)
             if (json_data is not None):
                 #print("Updated status for %s URL:%s" % (device_name, url))
                 device_name = json_data['name']
-                jbhasd_device_url_dict[device_name] = url
-                jbhasd_device_status_dict[device_name] = json_data
-                jbhasd_device_ts_dict[device_name] = int(time.time())
+                gv_jbhasd_device_url_dict[device_name] = url
+                gv_jbhasd_device_status_dict[device_name] = json_data
+                gv_jbhasd_device_ts_dict[device_name] = int(time.time())
         else:
             print("%s Cant match push for %s to URL" % (time.asctime(),
                                                         device_name))
  
     return
 
-#This class will handles any incoming request from
-#the browser 
-class web_console_handler(BaseHTTPRequestHandler):
-        
-    def log_message(self, format, *args):
-        # over-ridden to supress stderr 
-        # logging of activity
-        pass
+#This class will handle any incoming request from
+#the browser or devices
+class web_console_handler(object):
+    @cherrypy.expose()
 
-    #Handler for the GET requests
-    def do_GET(self):
-        print("%s Console GET(%s) client:%s" % (time.asctime(), 
-                                                self.path,
-                                                self.address_string()))
-        process_get_params(self.path)
-        self.send_response(200)
-        self.send_header('Content-type','text/html')
-        self.end_headers()
+    def index(self, update=None, device=None, zone=None, control=None, state=None):
 
-        # Send the console web page
-        self.wfile.write(bytes(build_web_page(), 
-                               "utf-8"))
-        return
+        if update is not None:
+            process_post_params(update)
+            gv_poll_timestamp = time.time()
+            return "Thank You"
+        else:
+            process_get_params(device, zone, control, state)
+            return build_web_page()
 
-    def do_POST(self):
-        global poll_timestamp
+    # Force trailling slash off on called URL
+    index._cp_config = {'tools.trailing_slash.on': False}
 
-        content_length = int(self.headers['Content-Length'])
-        post_body = self.rfile.read(content_length).decode('utf-8')
-        print("%s POST(%s) client:%s" % (time.asctime(),
-                                         post_body,
-                                         self.address_string()))
-        process_post_params(post_body)
-
-        self.send_response(200)
-        self.send_header('Content-type','text/html')
-        self.end_headers()
-
-        # Send noddy html message
-        # the client here is a device
-        self.wfile.write(bytes("Thank you", 
-                               "utf-8"))
-
-        # update poll timestamp to drive 
-        # long poll reaction
-        poll_timestamp = time.time()
-        #print("Updated poll_timestamp to %d (device push)" % (poll_timestamp))
-
-        return
 
 def web_server():
-    global poll_timestamp
-
-    server = HTTPServer(('', web_port), web_console_handler)
-    print("Started console httpserver on port %d" % (web_port))
+    global gv_poll_timestamp
 
     # init poll timestamp
-    poll_timestamp = time.time()
-    
-    try: 
-        server.serve_forever()
-    except:
-        sys.exit()
+    gv_poll_timestamp = time.time()
 
-class web_poll_handler(BaseHTTPRequestHandler):
-        
-    def log_message(self, format, *args):
-        # over-ridden to supress stderr 
-        # logging of activity
-        pass
+    print("Starting console web server on port %d" % (gv_web_port))
+    # Logging off
+    cherrypy.config.update({'log.screen': False,
+                            'log.access_file': '',
+                            'log.error_file': ''})
 
-    #Handler for the GET requests
-    def do_GET(self):
-        global poll_timestamp
+    # Listen on our port on any IF
+    cherrypy.server.socket_host = '0.0.0.0'
+    cherrypy.server.socket_port = gv_web_port
 
-        print("%s Poll GET(%s) client:%s" % (time.asctime(), 
-                                             self.path,
-                                             self.address_string()))
-        poll_ts_checkpoint = poll_timestamp
-        print("pollhandler read checkpoint as %d" % (poll_ts_checkpoint))
-
-        self.send_response(200)
-        self.send_header('Content-type','text/html')
-        self.end_headers()
-
-        # long poll
-        while (poll_ts_checkpoint == poll_timestamp):
-            self.wfile.write(bytes("*", "utf-8"))
-            print("pollhandler checkpoint:%d actual:%d" % (poll_ts_checkpoint,
-                                                           poll_timestamp))
-            time.sleep(2)
-
-        # Send the console web page
-        self.wfile.write(bytes("Ready", "utf-8"))
-        return
-
-def web_poll_server():
-    server = HTTPServer(('', web_poll_port), web_poll_handler)
-    print("Started poll httpserver on port %d" % (web_poll_port))
-
-    try: 
-        server.serve_forever()
-    except:
-        sys.exit()
+    # Cherrypy main loop
+    cherrypy.quickstart(web_console_handler())
 
 # main()
 
