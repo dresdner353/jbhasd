@@ -41,7 +41,9 @@ web_page_template = """
     <script>
 
     $(document).ready(function(){
+        //pollServer();
         __SWITCH_FUNCTIONS__
+
     });
 
     // Window focus awareness
@@ -54,6 +56,25 @@ web_page_template = """
         window_focus = false;
     });
 
+    //function pollServer()
+    //{
+    //    window.setTimeout(function () {
+    //        $.ajax({
+    //            url: "http://192.168.12.3:8081",
+    //            type: "GET",
+    //            success: function (result) {
+    //                //SUCCESS LOGIC
+    //                $.get("/", function(data, status){
+    //                    $("#dashboard").html(data);
+    //                });
+    //                pollServer();
+    //            },
+    //            error: function () {
+    //                //ERROR HANDLING
+    //                pollServer();
+    //            }});
+    //    }, 60000);
+    //}
 
     // refresh timer and function
     // We use an intervel refresh which will be called
@@ -231,6 +252,7 @@ zeroconf_refresh_interval = 60
 probe_refresh_interval = 10
 device_purge_timeout = 30
 web_port = 8080
+web_poll_port = web_port + 1
 web_ip = '127.0.0.1' # will be updated with get_ip() call
 
 # Sunset config
@@ -256,14 +278,21 @@ jbhasd_device_status_dict = {}
 # keyed on name
 jbhasd_device_ts_dict = {}
 
+# timeout for all fetch calls
 http_timeout_secs = 5
+
+# Long poll timestamp
+# this will set to current epoch
+# everytime we perform a full probe
+# or any time we get a push
+poll_timestamp = 0
 
 # Zone Switchname
 switch_tlist = [
 #        Zone           Switch              On          Off       Override
-        ("Livingroom",  "Uplighter",        "sunset",   "0200",   "1200" ),
-        ("Playroom",    "Uplighter",        "sunset",   "0200",   "1200" ),
-        ("Kitchen",     "Counter Lights",   "sunset",   "0200",   "1200" ),
+        ("Livingroom",  "Uplighter",        "sunset",   "0100",   "1200" ),
+        ("Playroom",    "Uplighter",        "sunset",   "0100",   "1200" ),
+        ("Kitchen",     "Counter Lights",   "sunset",   "0100",   "1200" ),
 
         ("Attic",       "Sonoff Switch",    "1200",     "1205",   "2359" ),
         ("Attic",       "Sonoff Switch",    "1230",     "1232",   "1200" ),
@@ -276,8 +305,8 @@ switch_tlist = [
         ("Attic",      "Socket B",          "1500",     "1600",   "1200" ),
         ("Attic",      "Green LED B",       "1505",     "1510",   "1200" ),
 
-        ("Attic",      "Socket C",          "sunset",   "0200",   "1600" ),
-        ("Attic",      "Green LED C",       "sunset",   "0200",   "1600" ),
+        ("Attic",      "Socket C",          "sunset",   "0100",   "1600" ),
+        ("Attic",      "Green LED C",       "sunset",   "0100",   "1600" ),
 ]
 
 def get_ip():
@@ -437,7 +466,7 @@ def fetch_url(url, url_timeout, parse_json):
      
 
 def probe_devices():
-    global last_sunset_check, sunset_lights_on_offset, sunset_on_time
+    global last_sunset_check, sunset_lights_on_offset, sunset_on_time, poll_timestamp
 
     # loop forever
     while (1):
@@ -473,21 +502,47 @@ def probe_devices():
                 jbhasd_device_url_dict[device_name] = url
                 jbhasd_device_status_dict[device_name] = json_data
                 jbhasd_device_ts_dict[device_name] = int(time.time())
+            else:
+                print("Failed to get status on %s" % (url))
         
-        # Purge dead URLs
+        # Purge dead devices and URLs
         now = int(time.time())
-        # iterate the timestamps from same 
-        # snapshot list to avoid issues with parallel 
-        # access to the dicts
-        device_ts_list = list(jbhasd_device_ts_dict)
-        for device_name in device_ts_list:
+
+        # Iterate known URLs and seek out URLs with no 
+        # recorded status. These would probaby be duds
+        # We do this with a set snapshot from the same list
+        # we iterated above . Then we iterate the device url dict
+        # and remove all urls from the snapshot set
+        # The remaining URLs are then the duds
+        device_url_set = set(device_url_list)
+        for device_name in jbhasd_device_url_dict:
             url = jbhasd_device_url_dict[device_name]
+            if url in device_url_set:
+                device_url_set.remove(url)
+
+        for url in device_url_set:
+            reason = "never got a valid status response" 
+            print("%s Purging URL:%s.. reason:%s" % (time.asctime(),
+                                                     url,
+                                                     reason))
+
+            if url in jbhasd_zconf_url_set:
+                jbhasd_zconf_url_set.remove(url)
+
+        # iterate the known devices with status values 
+        # that were previously recorded. 
+        # Check for expired timestamps and purge
+        device_name_list = list(jbhasd_device_status_dict)
+        for device_name in device_name_list:
+            url = jbhasd_device_url_dict[device_name]
+
             last_updated = now - jbhasd_device_ts_dict[device_name]
             if last_updated >= device_purge_timeout:
-                print("%s Purging Device:%s URL:%s.. last updated %d seconds ago" % (time.asctime(),
-                                                                                     device_name,
-                                                                                     url,
-                                                                                     last_updated))
+                reason = "expired last updated %d seconds ago" % (last_updated)
+                print("%s Purging Device:%s URL:%s.. reason:%s" % (time.asctime(),
+                                                                   device_name,
+                                                                   url,
+                                                                   reason))
                 del jbhasd_device_url_dict[device_name]
                 del jbhasd_device_ts_dict[device_name]
                 del jbhasd_device_status_dict[device_name]
@@ -565,6 +620,11 @@ def probe_devices():
                                                            0)
                     analytics_file.write("%s\n" % (csv_row)) 
                     analytics_file.flush()
+
+        # update poll timestamp to drive 
+        # long poll reaction
+        poll_timestamp = time.time()
+        #print("Updated poll_timestamp to %d (probe refresh)" % (poll_timestamp))
 
         # loop sleep interval
         time.sleep(probe_refresh_interval)
@@ -794,7 +854,7 @@ def process_post_params(body):
 
 #This class will handles any incoming request from
 #the browser 
-class myHandler(BaseHTTPRequestHandler):
+class web_console_handler(BaseHTTPRequestHandler):
         
     def log_message(self, format, *args):
         # over-ridden to supress stderr 
@@ -803,9 +863,9 @@ class myHandler(BaseHTTPRequestHandler):
 
     #Handler for the GET requests
     def do_GET(self):
-        print("%s GET(%s) client:%s" % (time.asctime(), 
-                                        self.path,
-                                        self.address_string()))
+        print("%s Console GET(%s) client:%s" % (time.asctime(), 
+                                                self.path,
+                                                self.address_string()))
         process_get_params(self.path)
         self.send_response(200)
         self.send_header('Content-type','text/html')
@@ -817,6 +877,8 @@ class myHandler(BaseHTTPRequestHandler):
         return
 
     def do_POST(self):
+        global poll_timestamp
+
         content_length = int(self.headers['Content-Length'])
         post_body = self.rfile.read(content_length).decode('utf-8')
         print("%s POST(%s) client:%s" % (time.asctime(),
@@ -832,12 +894,64 @@ class myHandler(BaseHTTPRequestHandler):
         # the client here is a device
         self.wfile.write(bytes("Thank you", 
                                "utf-8"))
+
+        # update poll timestamp to drive 
+        # long poll reaction
+        poll_timestamp = time.time()
+        #print("Updated poll_timestamp to %d (device push)" % (poll_timestamp))
+
         return
 
 def web_server():
-    server = HTTPServer(('', web_port), myHandler)
-    print("Started httpserver on port %d" % (web_port))
+    global poll_timestamp
+
+    server = HTTPServer(('', web_port), web_console_handler)
+    print("Started console httpserver on port %d" % (web_port))
+
+    # init poll timestamp
+    poll_timestamp = time.time()
     
+    try: 
+        server.serve_forever()
+    except:
+        sys.exit()
+
+class web_poll_handler(BaseHTTPRequestHandler):
+        
+    def log_message(self, format, *args):
+        # over-ridden to supress stderr 
+        # logging of activity
+        pass
+
+    #Handler for the GET requests
+    def do_GET(self):
+        global poll_timestamp
+
+        print("%s Poll GET(%s) client:%s" % (time.asctime(), 
+                                             self.path,
+                                             self.address_string()))
+        poll_ts_checkpoint = poll_timestamp
+        print("pollhandler read checkpoint as %d" % (poll_ts_checkpoint))
+
+        self.send_response(200)
+        self.send_header('Content-type','text/html')
+        self.end_headers()
+
+        # long poll
+        while (poll_ts_checkpoint == poll_timestamp):
+            self.wfile.write(bytes("*", "utf-8"))
+            print("pollhandler checkpoint:%d actual:%d" % (poll_ts_checkpoint,
+                                                           poll_timestamp))
+            time.sleep(2)
+
+        # Send the console web page
+        self.wfile.write(bytes("Ready", "utf-8"))
+        return
+
+def web_poll_server():
+    server = HTTPServer(('', web_poll_port), web_poll_handler)
+    print("Started poll httpserver on port %d" % (web_poll_port))
+
     try: 
         server.serve_forever()
     except:
@@ -867,6 +981,11 @@ web_server_t = threading.Thread(target = web_server)
 web_server_t.daemon = True
 web_server_t.start()
 thread_list.append(web_server_t)
+
+#web_poll_server_t = threading.Thread(target = web_poll_server)
+#web_poll_server_t.daemon = True
+#web_poll_server_t.start()
+#thread_list.append(web_poll_server_t)
 
 while (1):
     dead_threads = 0
