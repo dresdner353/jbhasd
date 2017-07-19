@@ -931,8 +931,9 @@ void reset_config()
     // memset to 0, empty strings galore
     memset(&gv_config, 0, sizeof(gv_config));
 
-    // Set to first profile in register
-    strcpy(gv_config.profile, gv_profile_register[0].name);
+    // clear profile name but
+    // set profile pointer to first profile
+    gv_config.profile[0] = '\0';
     gv_profile = &(gv_profile_register[0]);
 
     // populate switch defaults from in-memory array
@@ -977,7 +978,7 @@ void reset_config()
 // if we fail to find the named profile
 // Otherwise, we asign the global profile pointer to the matched
 // profile and set its name in config
-void apply_config_profile(char *profile)
+void apply_config_profile(const char *profile)
 {
     int i = 0;
 
@@ -1136,112 +1137,111 @@ void ap_handle_root() {
 
     log_message("ap_handle_root()\n");
 
-    // check for post
-    if (gv_web_server.hasArg("zone")) {
-        // assume we're going to store config
+    // check for post args
+
+    if (gv_web_server.hasArg("reset") &&
+        atoi(gv_web_server.arg("reset").c_str()) == 1) {
+        // reset arg set to 1
+        // wipe and restart ap mode
+        // will default back to profile selection
+        store_config = 0;
+        reset_config();
+        start_ap_mode();
+    } 
+    else if (gv_web_server.hasArg("profile")) {
+        // profile selection.. post from profile config
+        // apply profile and restart ap mode
+        store_config = 0;
+        apply_config_profile(gv_web_server.arg("profile").c_str());
+        start_ap_mode();
+    }
+    else if (gv_web_server.hasArg("zone")) {
+        // actual normal config saving
+        // just store
         store_config = 1;
 
-        // Check for profile change
-        // apply if different and disable the store
-        // config directive
-        // we re-call start_ap_mode() also which 
-        // will rebuild the config form based on the new
-        // profiles defaults.
-        if (strcmp(gv_config.profile, 
-                   gv_web_server.arg("profile").c_str()) != 0) {
-            log_message("Detected profile change from %s to %s\n",
-                        gv_config.profile, 
-                        gv_web_server.arg("profile").c_str());
-            apply_config_profile((char*)gv_web_server.arg("profile").c_str());
-            store_config = 0;
-            start_ap_mode();
-        }
+        strcpy(gv_config.zone, 
+               gv_web_server.arg("zone").c_str());
+        log_message("Got Zone: %s\n", gv_config.zone);
 
-        // only apply actual config update if profile didnt change
-        if (store_config) {
-            strcpy(gv_config.zone, 
-                   gv_web_server.arg("zone").c_str());
-            log_message("Got Zone: %s\n", gv_config.zone);
+        strcpy(gv_config.wifi_ssid, 
+               gv_web_server.arg("ssid").c_str());
+        log_message("Got WiFI SSID: %s\n", gv_config.wifi_ssid);
 
-            strcpy(gv_config.wifi_ssid, 
-                   gv_web_server.arg("ssid").c_str());
-            log_message("Got WiFI SSID: %s\n", gv_config.wifi_ssid);
+        strcpy(gv_config.wifi_password, 
+               gv_web_server.arg("password").c_str());
+        log_message("Got WiFI Password: %s\n", gv_config.wifi_password);
 
-            strcpy(gv_config.wifi_password, 
-                   gv_web_server.arg("password").c_str());
-            log_message("Got WiFI Password: %s\n", gv_config.wifi_password);
+        gv_config.ota_enabled = atoi(gv_web_server.arg("ota_enabled").c_str());
+        log_message("Got OTA Enabled: %u\n", gv_config.ota_enabled);
 
-            gv_config.ota_enabled = atoi(gv_web_server.arg("ota_enabled").c_str());
-            log_message("Got OTA Enabled: %u\n", gv_config.ota_enabled);
+        gv_config.telnet_enabled = atoi(gv_web_server.arg("telnet_enabled").c_str());
+        log_message("Got Telnet Enabled: %u\n", gv_config.telnet_enabled);
 
-            gv_config.telnet_enabled = atoi(gv_web_server.arg("telnet_enabled").c_str());
-            log_message("Got Telnet Enabled: %u\n", gv_config.telnet_enabled);
+        gv_config.manual_switches_enabled = atoi(gv_web_server.arg("manual_switches_enabled").c_str());
+        log_message("Got Manual Switches Enabled: %u\n", gv_config.manual_switches_enabled);
 
-            gv_config.manual_switches_enabled = atoi(gv_web_server.arg("manual_switches_enabled").c_str());
-            log_message("Got Manual Switches Enabled: %u\n", gv_config.manual_switches_enabled);
+        strcpy(gv_config.temp_offset, 
+               gv_web_server.arg("temp_offset").c_str());
+        log_message("Got Temp Offset: %s\n", gv_config.temp_offset);
 
-            strcpy(gv_config.temp_offset, 
-                   gv_web_server.arg("temp_offset").c_str());
-            log_message("Got Temp Offset: %s\n", gv_config.temp_offset);
-
-            for (i = 0; i < MAX_SWITCHES; i++) {
-                log_message("Getting post args for switches %d/%d\n",
-                            i, MAX_SWITCHES - 1);
-                // format switch arg name
-                ets_sprintf(gv_small_buffer_1,
-                            "switch%d",
-                            i);
-                // Retrieve if present
-                if (gv_web_server.hasArg(gv_small_buffer_1)) {
-                    // Be careful here. Had to strcpy against
-                    // the address of the first char of the string array
-                    // just using gv_config.switch_names[i] on its own
-                    // caused exceptions so it needed to be clearly spelled 
-                    // out in terms of address
-                    strcpy(&(gv_config.switch_names[i][0]), 
-                           gv_web_server.arg(gv_small_buffer_1).c_str());
-                    log_message("Got:%s:%s\n", 
-                                gv_small_buffer_1,
-                                gv_config.switch_names[i]);
-                }
-
-                // format state arg name
-                ets_sprintf(gv_small_buffer_1,
-                            "state%d",
-                            i);
-                // Retrieve if present
-                if (gv_web_server.hasArg(gv_small_buffer_1)) {
-                    log_message("Arg %s present\n",
-                                gv_small_buffer_1);
-
-                    gv_config.switch_initial_states[i] =
-                        atoi(gv_web_server.arg(gv_small_buffer_1).c_str());
-                    log_message("Got:%s:%d\n", 
-                                gv_small_buffer_1, 
-                                gv_config.switch_initial_states[i]);
-                }
+        for (i = 0; i < MAX_SWITCHES; i++) {
+            log_message("Getting post args for switches %d/%d\n",
+                        i, MAX_SWITCHES - 1);
+            // format switch arg name
+            ets_sprintf(gv_small_buffer_1,
+                        "switch%d",
+                        i);
+            // Retrieve if present
+            if (gv_web_server.hasArg(gv_small_buffer_1)) {
+                // Be careful here. Had to strcpy against
+                // the address of the first char of the string array
+                // just using gv_config.switch_names[i] on its own
+                // caused exceptions so it needed to be clearly spelled 
+                // out in terms of address
+                strcpy(&(gv_config.switch_names[i][0]), 
+                       gv_web_server.arg(gv_small_buffer_1).c_str());
+                log_message("Got:%s:%s\n", 
+                            gv_small_buffer_1,
+                            gv_config.switch_names[i]);
             }
 
-            for (i = 0; i < MAX_SENSORS; i++) {
-                log_message("Getting post args for sensors %d/%d\n",
-                            i, MAX_SENSORS - 1);
-                // format sensor arg name
-                ets_sprintf(gv_small_buffer_1,
-                            "sensor%d",
-                            i);
-                // Retrieve if present
-                if (gv_web_server.hasArg(gv_small_buffer_1)) {
-                    // Be careful here. Had to strcpy against
-                    // the address of the first char of the string array
-                    // just using gv_config.switch_names[i] on its own
-                    // caused exceptions so it needed to be clearly spelled 
-                    // out in terms of address
-                    strcpy(&(gv_config.sensor_names[i][0]), 
-                           gv_web_server.arg(gv_small_buffer_1).c_str());
-                    log_message("Got:%s:%s\n", 
-                                gv_small_buffer_1,
-                                gv_config.sensor_names[i]);
-                }
+            // format state arg name
+            ets_sprintf(gv_small_buffer_1,
+                        "state%d",
+                        i);
+            // Retrieve if present
+            if (gv_web_server.hasArg(gv_small_buffer_1)) {
+                log_message("Arg %s present\n",
+                            gv_small_buffer_1);
+
+                gv_config.switch_initial_states[i] =
+                    atoi(gv_web_server.arg(gv_small_buffer_1).c_str());
+                log_message("Got:%s:%d\n", 
+                            gv_small_buffer_1, 
+                            gv_config.switch_initial_states[i]);
+            }
+        }
+
+        for (i = 0; i < MAX_SENSORS; i++) {
+            log_message("Getting post args for sensors %d/%d\n",
+                        i, MAX_SENSORS - 1);
+            // format sensor arg name
+            ets_sprintf(gv_small_buffer_1,
+                        "sensor%d",
+                        i);
+            // Retrieve if present
+            if (gv_web_server.hasArg(gv_small_buffer_1)) {
+                // Be careful here. Had to strcpy against
+                // the address of the first char of the string array
+                // just using gv_config.switch_names[i] on its own
+                // caused exceptions so it needed to be clearly spelled 
+                // out in terms of address
+                strcpy(&(gv_config.sensor_names[i][0]), 
+                       gv_web_server.arg(gv_small_buffer_1).c_str());
+                log_message("Got:%s:%s\n", 
+                            gv_small_buffer_1,
+                            gv_config.sensor_names[i]);
             }
         }
     }
@@ -1355,188 +1355,209 @@ void start_ap_mode()
     char *ota_on_selected, *ota_off_selected;
     char *telnet_on_selected, *telnet_off_selected;
     char *manual_on_selected, *manual_off_selected;
-    char *selected_profile;
 
-    // combi state for OTA 
-    if (gv_config.ota_enabled) {
-        ota_on_selected = combi_selected;
-        ota_off_selected = combi_not_selected;
-    }
-    else {
-        ota_on_selected = combi_not_selected;
-        ota_off_selected = combi_selected;
-    }
-    
-    // combi state for Telnet
-    if (gv_config.telnet_enabled) {
-        telnet_on_selected = combi_selected;
-        telnet_off_selected = combi_not_selected;
-    }
-    else {
-        telnet_on_selected = combi_not_selected;
-        telnet_off_selected = combi_selected;
-    }
-    // combi state for Manual switches
-    if (gv_config.manual_switches_enabled) {
-        manual_on_selected = combi_selected;
-        manual_off_selected = combi_not_selected;
-    }
-    else {
-        manual_on_selected = combi_not_selected;
-        manual_off_selected = combi_selected;
-    }
-
-    // combi state selected for profile
-    // here we build a set of values for the combi
-    // based on each profile in the register
-    // we also set the selected profile based 
-    // on the one we match to current config
-    i = 0;
-    gv_small_buffer_1[0] = '\0';
-    while(gv_profile_register[i].name != NULL) {
-        if (strcmp(gv_profile_register[i].name, 
-                   gv_config.profile) == 0) {
-            selected_profile = combi_selected;
-        }
-        else {
-            selected_profile = combi_not_selected;
-        }
-        ets_sprintf(gv_small_buffer_2,
-                    "        <option value=\"%s\" %s>%s</option>",
-                    gv_profile_register[i].name,
-                    selected_profile,
-                    gv_profile_register[i].name);
-        i++;
-        strcat(gv_small_buffer_1, gv_small_buffer_2);
-    }
-
-    // format the main part of the form 
-    ets_sprintf(gv_large_buffer,
-                "<h2>%s Setup</h2>"
-                "<form action=\"/\" method=\"post\">"
-                "<div>"
-                "    <label>Profile:</label>"
-                "    <select name=\"profile\">%s</select>"
-                "</div>"
-                "<div>"
-                "    <label>Zone:</label>"
-                "    <input type=\"text\" value=\"%s\" maxlength=\"%d\" name=\"zone\">"
-                "</div>"
-                "<div>"
-                "    <label>WIFI SSID:</label>"
-                "    <input type=\"text\" value=\"%s\" maxlength=\"%d\" name=\"ssid\">"
-                "</div>"
-                "<div>"
-                "    <label>WIFI Password:</label>"
-                "    <input type=\"text\" value=\"%s\" maxlength=\"%d\" name=\"password\">"
-                "</div>"
-                "<div>"
-                "    <label>Temp Offset:</label>"
-                "    <input type=\"text\" value=\"%s\" maxlength=\"%d\" name=\"temp_offset\">"
-                "</div>"
-                "<div>"
-                "    <label>OTA Update:</label>"
-                "    <select name=\"ota_enabled\">"
-                "        <option value=\"1\" %s>Enabled</option>"
-                "        <option value=\"0\" %s>Disabled</option>"
-                "    </select>"
-                "</div>"
-                "<div>"
-                "    <label>Telnet:</label>"
-                "    <select name=\"telnet_enabled\">"
-                "        <option value=\"1\" %s>Enabled</option>"
-                "        <option value=\"0\" %s>Disabled</option>"
-                "    </select>"
-                "</div>"
-                "<div>"
-                "    <label>Manual Switches:</label>"
-                "    <select name=\"manual_switches_enabled\">"
-                "        <option value=\"1\" %s>Enabled</option>"
-                "        <option value=\"0\" %s>Disabled</option>"
-                "    </select>"
-                "</div>",
-                gv_mdns_hostname,
-                gv_small_buffer_1,
-                gv_config.zone, 
-                MAX_FIELD_LEN,
-                gv_config.wifi_ssid,
-                MAX_FIELD_LEN,
-                gv_config.wifi_password,
-                MAX_FIELD_LEN,
-                gv_config.temp_offset,
-                MAX_FIELD_LEN,
-                ota_on_selected,
-                ota_off_selected,
-                telnet_on_selected,
-                telnet_off_selected,
-                manual_on_selected,
-                manual_off_selected);
-
-    // append name entries for switches    
-    i = 0;
-    while (gv_profile->switch_register[i].name) {
-
-        // Set the initial state combi selected strings
-        // the one set to "selected" will force the combi
-        // to the current value as stored in config
-        if (gv_config.switch_initial_states[i] == 1) {
-            switch_initial_on_selected = combi_selected;
-            switch_initial_off_selected = combi_not_selected;
-        }
-        else {
-            switch_initial_on_selected = combi_not_selected;
-            switch_initial_off_selected = combi_selected;
+    if (strlen(gv_config.profile) == 0) {
+        // combi for profile selection
+        // here we build a set of values for the combi
+        // based on each profile in the register
+        i = 0;
+        gv_small_buffer_1[0] = '\0';
+        while(gv_profile_register[i].name != NULL) {
+            ets_sprintf(gv_small_buffer_2,
+                        "        <option value=\"%s\">%s</option>",
+                        gv_profile_register[i].name,
+                        gv_profile_register[i].name);
+            i++;
+            strcat(gv_small_buffer_1, gv_small_buffer_2);
         }
 
-        // Formt the Switch config segment
-        ets_sprintf(gv_small_buffer_2,
+        // format the main part of the form 
+        ets_sprintf(gv_large_buffer,
+                    "<h2>%s Setup</h2>"
+                    "<form action=\"/\" method=\"post\">"
+                    "<div><p>Select desired device profile</p></div>"
                     "<div>"
-                    "    <label>Switch %d</label>"
-                    "    <input type=\"text\" value=\"%s\" maxlength=\"%d\" name=\"switch%d\">"
-                    "    <select name=\"state%d\">"
-                    "        <option value=\"1\" %s>On</option>"
-                    "        <option value=\"0\" %s>Off</option>"
+                    "    <label>Profile:</label>"
+                    "    <select name=\"profile\">%s</select>"
+                    "</div>",
+                    gv_mdns_hostname,
+                    gv_small_buffer_1);
+
+
+        // Terminate form with post button and </form>
+        strcat(gv_large_buffer, 
+               "<br><br>"
+               "<div>"
+               "    <button>Apply Profile</button>"
+               "</div>"
+               "</form>");
+    }
+    else {
+        // combi state for OTA 
+        if (gv_config.ota_enabled) {
+            ota_on_selected = combi_selected;
+            ota_off_selected = combi_not_selected;
+        }
+        else {
+            ota_on_selected = combi_not_selected;
+            ota_off_selected = combi_selected;
+        }
+
+        // combi state for Telnet
+        if (gv_config.telnet_enabled) {
+            telnet_on_selected = combi_selected;
+            telnet_off_selected = combi_not_selected;
+        }
+        else {
+            telnet_on_selected = combi_not_selected;
+            telnet_off_selected = combi_selected;
+        }
+        // combi state for Manual switches
+        if (gv_config.manual_switches_enabled) {
+            manual_on_selected = combi_selected;
+            manual_off_selected = combi_not_selected;
+        }
+        else {
+            manual_on_selected = combi_not_selected;
+            manual_off_selected = combi_selected;
+        }
+
+
+        // format the main part of the form 
+        ets_sprintf(gv_large_buffer,
+                    "<h2>%s Setup</h2>"
+                    "<form action=\"/\" method=\"post\">"
+                    "<div>"
+                    "    <label>Reset Defaults</label>"
+                    "    <select name=\"reset\">"
+                    "        <option value=\"0\" selected>No</option>"
+                    "        <option value=\"1\" >Yes</option>"
+                    "    </select>"
+                    "</div>"
+                    "<div>"
+                    "    <label>Profile: %s</label>"
+                    "</div>"
+                    "<div>"
+                    "    <label>Zone:</label>"
+                    "    <input type=\"text\" value=\"%s\" maxlength=\"%d\" name=\"zone\">"
+                    "</div>"
+                    "<div>"
+                    "    <label>WIFI SSID:</label>"
+                    "    <input type=\"text\" value=\"%s\" maxlength=\"%d\" name=\"ssid\">"
+                    "</div>"
+                    "<div>"
+                    "    <label>WIFI Password:</label>"
+                    "    <input type=\"text\" value=\"%s\" maxlength=\"%d\" name=\"password\">"
+                    "</div>"
+                    "<div>"
+                    "    <label>Temp Offset:</label>"
+                    "    <input type=\"text\" value=\"%s\" maxlength=\"%d\" name=\"temp_offset\">"
+                    "</div>"
+                    "<div>"
+                    "    <label>OTA Update:</label>"
+                    "    <select name=\"ota_enabled\">"
+                    "        <option value=\"1\" %s>Enabled</option>"
+                    "        <option value=\"0\" %s>Disabled</option>"
+                    "    </select>"
+                    "</div>"
+                    "<div>"
+                    "    <label>Telnet:</label>"
+                    "    <select name=\"telnet_enabled\">"
+                    "        <option value=\"1\" %s>Enabled</option>"
+                    "        <option value=\"0\" %s>Disabled</option>"
+                    "    </select>"
+                    "</div>"
+                    "<div>"
+                    "    <label>Manual Switches:</label>"
+                    "    <select name=\"manual_switches_enabled\">"
+                    "        <option value=\"1\" %s>Enabled</option>"
+                    "        <option value=\"0\" %s>Disabled</option>"
                     "    </select>"
                     "</div>",
-                    i + 1,
-                    gv_config.switch_names[i],
-                    MAX_FIELD_LEN,
-                    i,
-                    i,
-                    switch_initial_on_selected,
-                    switch_initial_off_selected);
+            gv_mdns_hostname,
+            gv_config.profile, 
+            gv_config.zone, 
+            MAX_FIELD_LEN,
+            gv_config.wifi_ssid,
+            MAX_FIELD_LEN,
+            gv_config.wifi_password,
+            MAX_FIELD_LEN,
+            gv_config.temp_offset,
+            MAX_FIELD_LEN,
+            ota_on_selected,
+            ota_off_selected,
+            telnet_on_selected,
+            telnet_off_selected,
+            manual_on_selected,
+            manual_off_selected);
 
-        // append to the larger form
-        strcat(gv_large_buffer, gv_small_buffer_2);
-        i++; // to the next entry in register
+        // append name entries for switches    
+        i = 0;
+        while (gv_profile->switch_register[i].name) {
+
+            // Set the initial state combi selected strings
+            // the one set to "selected" will force the combi
+            // to the current value as stored in config
+            if (gv_config.switch_initial_states[i] == 1) {
+                switch_initial_on_selected = combi_selected;
+                switch_initial_off_selected = combi_not_selected;
+            }
+            else {
+                switch_initial_on_selected = combi_not_selected;
+                switch_initial_off_selected = combi_selected;
+            }
+
+            // Formt the Switch config segment
+            ets_sprintf(gv_small_buffer_2,
+                        "<div>"
+                        "    <label>Switch %d</label>"
+                        "    <input type=\"text\" value=\"%s\" maxlength=\"%d\" name=\"switch%d\">"
+                        "    <select name=\"state%d\">"
+                        "        <option value=\"1\" %s>On</option>"
+                        "        <option value=\"0\" %s>Off</option>"
+                        "    </select>"
+                        "</div>",
+                        i + 1,
+                        gv_config.switch_names[i],
+                        MAX_FIELD_LEN,
+                        i,
+                        i,
+                        switch_initial_on_selected,
+                        switch_initial_off_selected);
+
+            // append to the larger form
+            strcat(gv_large_buffer, gv_small_buffer_2);
+            i++; // to the next entry in register
+        }
+
+        // append name entries for sensors    
+        i = 0;
+        while (gv_profile->sensor_register[i].name) {
+
+            // Formt the sensor config segment
+            ets_sprintf(gv_small_buffer_2,
+                        "<div>"
+                        "    <label>Sensor %d</label>"
+                        "    <input type=\"text\" value=\"%s\" maxlength=\"%d\" name=\"sensor%d\">"
+                        "</div>",
+                        i + 1,
+                        gv_config.sensor_names[i],
+                        MAX_FIELD_LEN,
+                        i);
+
+            // append to the larger form
+            strcat(gv_large_buffer, gv_small_buffer_2);
+            i++; // to the next entry in register
+        }
+
+        // Terminate form with post button and </form>
+        strcat(gv_large_buffer,
+               "<br><br>" 
+               "<div>"
+               "    <button>Apply Settings</button>"
+               "</div>"
+               "</form>");
     }
-
-    // append name entries for sensors    
-    i = 0;
-    while (gv_profile->sensor_register[i].name) {
-
-        // Formt the sensor config segment
-        ets_sprintf(gv_small_buffer_2,
-                    "<div>"
-                    "    <label>Sensor %d</label>"
-                    "    <input type=\"text\" value=\"%s\" maxlength=\"%d\" name=\"sensor%d\">"
-                    "</div>",
-                    i + 1,
-                    gv_config.sensor_names[i],
-                    MAX_FIELD_LEN,
-                    i);
-
-        // append to the larger form
-        strcat(gv_large_buffer, gv_small_buffer_2);
-        i++; // to the next entry in register
-    }
-
-    // Terminate form with post button and </form>
-    strcat(gv_large_buffer, 
-           "<div>"
-           "    <button>Apply</button>"
-           "</div>"
-           "</form>");
 
     // Activate AP mode
     WiFi.disconnect();
