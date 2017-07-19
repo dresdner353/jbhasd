@@ -3,17 +3,17 @@ JSON-Based Home Automation with Service Discovery
 
 Just a pet project to go and build some home automation devices, turn on and off appliances, read a few sensors, have some fun and learn something along the way. 
 
-The main objective of the project is to create firmware sketches for ESP-8266 devices that enables the devices to be easily configured on a WiFI network and automatically discovered by a server running on a networked computer or even Raspberry Pi.
+The main objective of the project is to create firmware sketches for ESP-8266 devices that enables the devices to be easily configured on a WiFI network and then automatically discovered by a server running on a networked computer or even Raspberry Pi.
 
-There's some great existing options for home automation stacks out there and protocols such as MQTT. There are also some very powerful firmware sketches and LUA/Node-MCU scripts for the ESP-8266. However I wanted to build a lean simplified model that made it easier to manage during setup.
+There's some great existing options for home automation stacks out there and protocols such as MQTT. There are also some very powerful firmware sketches and LUA/Node-MCU scripts for the ESP-8266. However I wanted to build a lean simplified model that made it easier to manage during setup. The objective was that the devices should use a means of presenting their capabilities in a format that is understood by other servers, scripts etc. That means of capability discovery is driven using a JSON sntax.
 
 The esp8266_generic folder contains an Arduino sketch you can flash to and ESP-8266 device. It has 3 profiles built in for ESP-01, Sonoff Basic and Sonoff S20 devices and you can easily edit the fletch to define additonal profiles based around your devices. All these profiles are doing is defining the pin assignments in terms of switches, LEDS, and also for sensors. 
 
-Flash this sketch to your ESP-8266 using your preferred method. I only use the Arduino IDE for this. 
+Flash this sketch to your ESP-8266 using your preferred method. 
 
 When you power up the device, the LED flashes at a medium speed and you have 5 seconds to press the hardware button to put it into a config mode where it then acts as an open wireless AP. The LED will start flashing at a fast rate once the device enters this AP mode.
 
-Note: For a first-time flash, the device will detect no config present and automatically enter this AP mode. Note also that depending on the device in use, its possible you will not see any LED flashing at this stage simply because the profile is not yet set and the correct LED GPIO is not set. If you search for wifi SSIDs, you should see "esp-8266-ddddddd-Unknown". Select and you should get directed to an initial setup screen.
+Note: For a first-time flash, the device will detect no config present and automatically enter this AP mode. Note also that depending on the device in use, its possible you will not see any LED flashing at this stage simply because the required profile is not yet set and the correct LED GPIO is therefore not applied. If you search for wifi SSIDs, you should see "esp-8266-ddddddd-Unknown". Select and you should get directed to an initial setup screen.
 
 The initial config is to select the desired device profile, click apply and then you are shown the config options for that profile. You configure the desired SSID, password, zone name, enable/disable OTA mode and telnet loging mode and set names for the associated switch relays and their initial power-up states. You can also set the names for any defined sensors. You click apply, it saves the config to eeprom and reboots. If the reboot is not interrupted with another button press, the device will start in WiFI STA mode after 5 seconds, connecting to the configured WiFI and registering for self discovery. While connecting to WiFI, the LED flashes as a slower rate and then issues burst of quick flashes once it connects to WiFI. The hardware button from then on only acts as a manual over-ride for the switch relay and will turn the LED on/off as you toggle between switch states.
 
@@ -21,7 +21,7 @@ If you need to re-configure, just reset the mains and press the button (or groun
 
 The sketch also supports OTA updating once it gets into STA mode. This makes the task of updating firmware much easier. I've only used the Arduino IDE for this but it discovers the devices without issue and lets you select the network port for flashing. This OTA updating can also be disabled in config.
 
-The telnet logging interface runs on telnet port 23 that acts as a debug feed from the device showing all logging messages to connected clients. This activates after the device has connected to WiFI. Up to that point, logging is performed via the serial interface. You can also disable telnet in AP mode. 
+The telnet logging interface runs on telnet port 23 that acts as a debug feed from the device showing all logging messages to connected clients. This activates after the device has connected to WiFI. Up to that point, logging is performed via the serial interface. You can also disable telnet logging in AP mode. 
 
 Once the devices are connected to your WiFI, you can discover them via the included zeroconf script and access their JSON URLs to see the device details. Then you can use GET or POST requests on that same URL to pass in the desired control and state you wish to turn on or off any given switch. The response each time will be the current overall state. An example of the JSON status string:
 
