@@ -7,25 +7,23 @@ The main objective of the project is to create firmware sketches for ESP-8266 de
 
 There's some great existing options for home automation stacks out there and protocols such as MQTT. There are also some very powerful firmware sketches and LUA/Node-MCU scripts for the ESP-8266. However I wanted to build a lean simplified model that made it easier to manage during setup.
 
-The basic principle for the ESP-8266 device would be that it registers on the WiFI network and registers on MDNS. Then the server self-discovers the device and uses a URL request to determine the capabilities of the device that it discovered. The objective being that I could introduce a new device onto the network and immediately have a server understand what the new device can do. 
+The esp8266_generic folder contains an Arduino sketch you can flash to and ESP-8266 device. It has 3 profiles built in for ESP-01, Sonoff Basic and Sonoff S20 devices and you can easily edit the fletch to define additonal profiles based around your devices. All these profiles are doing is defining the pin assignments in terms of switches, LEDS, and also for sensors. 
 
-So first up, JSON was going to feature in this.. when the device is probed, it responds with a JSON string defining its identity, capabilities and state. Then the server imparts commands to the device in the form of GET or POST requests where it simply passes the name of the control it wants to change and the desired state.
-
-Now onto the ESP-8266 sketch itself. Here I wanted to flash the sketch onto an ESP-8266 device such as a Sonoff or any of the break-out variations you can get. The intention was to have the device inside a safe housing and have it fitted with all necessary cabling for mains supply and then feature a single button and LED indicator on the housing itself.
+Flash this sketch to your ESP-8266 using your preferred method. I only use the Arduino IDE for this. 
 
 When you power up the device, the LED flashes at a medium speed and you have 5 seconds to press the hardware button to put it into a config mode where it then acts as an open wireless AP. The LED will start flashing at a fast rate once the device enters this AP mode.
 
-In AP mode, the device uses captive DNS, ensuring that once you connect to it from a mobile device or computer, you should be quickly directed to a landing page where you can set the config options. 
+Note: For a first-time flash, the device will detect no config present and automatically enter this AP mode. Note also that depending on the device in use, its possible you will not see any LED flashing at this stage simply because the profile is not yet set and the correct LED GPIO is not set. If you search for wifi SSIDs, you should see "esp-8266-ddddddd-Unknown". Select and you should get directed to an initial setup screen.
 
-On that AP landing page you configure the desired SSID, password, zone name, enable/disable OTA mode and telnet loging mode and set names for the associated switch relays and their initial power-up states. You can also set the names for any defined sensors. You click apply, it saves the config to eeprom and reboots. If the reboot is not interrupted with another button press, the device will start in WiFI STA mode after 5 seconds, connecting to the configured WiFI and registering for self discovery. While connecting to WiFI, the LED flashes as a slower rate and then issues burst of quick flashes once it connect. The hardware button from then on only acts as a manual over-ride for the switch relay and will turn the LED on/off as you toggle between switch states.
+The initial config is to select the desired device profile, click apply and then you are shown the config options for that profile. You configure the desired SSID, password, zone name, enable/disable OTA mode and telnet loging mode and set names for the associated switch relays and their initial power-up states. You can also set the names for any defined sensors. You click apply, it saves the config to eeprom and reboots. If the reboot is not interrupted with another button press, the device will start in WiFI STA mode after 5 seconds, connecting to the configured WiFI and registering for self discovery. While connecting to WiFI, the LED flashes as a slower rate and then issues burst of quick flashes once it connects to WiFI. The hardware button from then on only acts as a manual over-ride for the switch relay and will turn the LED on/off as you toggle between switch states.
 
-If you need to re-configure, just reset the mains and press the button within 5 seconds to get AP mode activated to let you jump in and edit settings. 
+If you need to re-configure, just reset the mains and press the button (or ground GPIO-0) within 5 seconds to get AP mode activated to let you jump in and edit settings. 
 
-The sketch also supports OTA updating once it gets into STA mode. This makes the task updating devices easier. I've only used the Arduino IDE for this but it discovers the devices without issue and lets you select the network port for flashing. This OTA updating can also be disabled in config.
+The sketch also supports OTA updating once it gets into STA mode. This makes the task of updating firmware much easier. I've only used the Arduino IDE for this but it discovers the devices without issue and lets you select the network port for flashing. This OTA updating can also be disabled in config.
 
-The telnet logging interface runs on telnet port 23 that acts as a debug feed from the device showing all logging messages to connected clients.
+The telnet logging interface runs on telnet port 23 that acts as a debug feed from the device showing all logging messages to connected clients. This activates after the device has connected to WiFI. Up to that point, logging is performed via the serial interface. You can also disable telnet in AP mode. 
 
-Once the devices are connected to your WiFI, you can discover them via zeroconf and access their JSON URLs to see the device details. Then you can use GET or POST requests on that same URL to pass in the desired control and state you wish to turn on or off any given switch. The response each time will be the current overall state. An example of the JSON status string:
+Once the devices are connected to your WiFI, you can discover them via the included zeroconf script and access their JSON URLs to see the device details. Then you can use GET or POST requests on that same URL to pass in the desired control and state you wish to turn on or off any given switch. The response each time will be the current overall state. An example of the JSON status string:
 
 ```
 $ curl 'http://192.168.12.165/json'
@@ -72,13 +70,13 @@ The examples above are all GET-based but the ESP8266 webserver supports GET and 
 
 If you browse to the base URL on its own (minus the /json path) then you get a very primitive web page with details on sensors and simple buttons to toggle the switches on/off.
 
-The sonoff_basic.ino file in this repo is the basic firmware I wrote that should work on any Sonoff device and easily adapt to other ESP-8266 devices. You need to only correct the GPIO pin assignments as required for switches and LEDs and edit the in-memory array entries as required.
-
-Also included is a firmware for an ESP-01 device with momentary switch on GPIO-0 and DHT sensor on GPIO-2. Its the exact code with the array defaults edited for the device variant. There is also a variant for the Sonoff S20 mains socket device.
-
 Python3 script zero_discover.py should aid in discovering your device after it attaches to your LAN. 
 
-Script jbhasd_web_server.py is a simple web server running on port 8080 and acts a console for both seeing detected devices, controlling them manually and automatically. When you start up the script, it begins using zeroconf to discover the JBHASD devices and then probes their status URL to determine the capabilities. It will then render this list of devices on the web page but checkbox toggles for switches and temp/humidity shown for sensors. The web page refreshes every 10 seconds as does the background probe/re-probe of each detected devices. Devices that clock up 30+ seconds of no response are struck of the register. So it should react to devices appearing and disapearing. There is also an internal register of devices for automation and this simply turns on/off the desired switches at the appropriate time.
+Python3 script jbhasd_web_server.py is a simple web server running on port 8080 and acts a console for both seeing detected devices, controlling them manually and automatically. When you start up the script, it begins using zeroconf to discover the JBHASD devices and then probes their status URL to determine the capabilities. It will then render this list of devices on the web page with fancy CSS checkbox toggles for switches and temp/humidity details shown for sensors. The web page refreshes every 10 seconds as does the background probe/re-probe of each detected devices. Devices that clock up 30+ seconds of no response are struck of the register. So it should react to devices appearing and disapearing. There is also an internal register of devices for automation and this simply turns on/off the desired switches at the appropriate time.The web engine is using cherrypy and also using jquery for background reloading etc.
+
+Script jbhasd_device_sim.py can be used to simulate a set of fake JBHASD devices. So if you want to test out the basic idea on its own even without an actual ESP-8266 device, download and run both the web server and device sim scripts on the same LAN. You will need python3, and handful of packages added such as zeroconf & cherrypy. The scripts can be run on the same machine or on different machines. Then on the webserver machine http://ip:8080 you should see a dashboard of detected devices using names from US states and switch names for Irish counties. The switch states will update at random as the simulator is randomly changing states which are then detected by the web server. If you kill the simulator script, you will see the webserver report probe failures and within 30 seconds purge all devices that are no longer responding. 
+
+The web server script also has an in-memory register of zones and switch names you can use to automate on/off times for named devices. 
 
 A link to some photos of the prototypes and enclosures I've built to date..
 https://goo.gl/photos/uwRadttk9wY7vvGm6
