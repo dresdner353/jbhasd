@@ -116,7 +116,7 @@ struct gpio_switch gv_switch_register_sonoff_s20[] = {
 
 struct gpio_sensor gv_sensor_register_sonoff_s20[] = {
 //    Name     Sensor Type        Variant     Pin     Void Ref  f1  f2
-    { "Fake",  GP_SENS_TYPE_DHT,  0,          NO_PIN, NULL,     0,  0 }, // Fake DHT with no pin
+    { "Temp",  GP_SENS_TYPE_DHT,  DHT21,      1,      NULL,     0,  0 }, // DHT21 on Tx Pin
     { NULL,    GP_SENS_TYPE_NONE, 0,          0,      NULL,     0,  0 }  // terminator.. never delete
 };
 
