@@ -219,7 +219,7 @@ input:checked + .slider:before {
 # Discovery and probing of devices
 gv_zeroconf_refresh_interval = 60
 gv_probe_refresh_interval = 10
-gv_device_purge_timeout = 30
+gv_device_purge_timeout = 60
 gv_web_port = 8080
 gv_web_ip = '127.0.0.1' # will be updated with get_ip() call
 
@@ -257,24 +257,21 @@ gv_poll_timestamp = 0
 
 # Zone Switchname
 gv_switch_tlist = [
-#        Zone           Switch              On          Off       Override
-        ("Livingroom",  "Uplighter",        "sunset",   "0100",   "1200" ),
-        ("Playroom",    "Uplighter",        "sunset",   "0100",   "1200" ),
-        ("Kitchen",     "Counter Lights",   "sunset",   "0100",   "1200" ),
+#   Zone                 Switch              On          Off       Override
+    ("Livingroom",       "Uplighter",        "sunset",   "0100",   "1200" ),
+    ("Playroom",         "Uplighter",        "sunset",   "0100",   "1200" ),
+    ("Kitchen",          "Counter Lights",   "sunset",   "0100",   "1200" ),
 
-        ("Attic",       "Sonoff Switch",    "1200",     "1205",   "2359" ),
-        ("Attic",       "Sonoff Switch",    "1230",     "1232",   "1200" ),
-        ("Attic",       "Sonoff Switch",    "1330",     "1400",   "2359" ),
-        ("Attic",       "Sonoff Switch",    "1500",     "1501",   "2359" ),
+    ("Attic Prototype",  "Sonoff Switch",    "1200",     "1205",   "2359" ),
+    ("Attic Prototype",  "Sonoff Switch",    "1230",     "1232",   "1200" ),
+    ("Attic Prototype",  "Sonoff Switch",    "1330",     "1400",   "2359" ),
+    ("Attic Prototype",  "Sonoff Switch",    "1500",     "1501",   "2359" ),
 
-        ("Attic",      "Socket A",          "1120",     "1150",   "2359" ),
-        ("Attic",      "Green LED A",       "1125",     "1145",   "2359" ),
+    ("Attic Sonoff",     "Socket A",         "1120",     "1150",   "2359" ),
+    ("Attic Sonoff",     "Green LED A",      "1125",     "1145",   "2359" ),
 
-        ("Attic",      "Socket B",          "1500",     "1600",   "1200" ),
-        ("Attic",      "Green LED B",       "1505",     "1510",   "1200" ),
-
-        ("Attic",      "Socket C",          "sunset",   "0100",   "1600" ),
-        ("Attic",      "Green LED C",       "sunset",   "0100",   "1600" ),
+    ("Attic Sonoff",     "Socket B",         "1500",     "1600",   "1200" ),
+    ("Attic Sonoff",     "Green LED B",      "1505",     "1510",   "1200" ),
 ]
 
 def get_ip():
@@ -636,7 +633,8 @@ def build_web_page():
     # generated HTML for the switch and jquery
     # code for the click action
     jquery_str = ""
-    dashboard_str = ""
+    dashboard_str = '<div class="timestamp" align="center">Last updated %s</div>' % (time.asctime())
+    dashboard_str += '<table border="0"><tr><td>' # single cell table for widgets
     switch_id = 0
 
     # Build a set of zones
@@ -756,6 +754,8 @@ def build_web_page():
 
         # terminate the zone
         dashboard_str += '</table></div>'
+
+    dashboard_str += '</td></tr></table>'
 
     # Build and return the web page
     # dropping in CSS, generated jquery code
