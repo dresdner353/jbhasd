@@ -478,6 +478,9 @@ def probe_devices():
         # avoids issues if the set is updated mid-way
         device_url_list = list(gv_jbhasd_zconf_url_set)
         gv_web_ip = get_ip()
+        successful_probes = 0
+        failed_probes = 0
+        purged_urls = 0
         gv_web_ip_safe = urllib.parse.quote_plus(gv_web_ip)
         for url in device_url_list:
             url_w_update = '%s?update_ip=%s&update_port=%d' % (url,
@@ -489,8 +492,10 @@ def probe_devices():
                 gv_jbhasd_device_url_dict[device_name] = url
                 gv_jbhasd_device_status_dict[device_name] = json_data
                 gv_jbhasd_device_ts_dict[device_name] = int(time.time())
+                successful_probes += 1
             else:
                 print("Failed to get status on %s" % (url))
+                failed_probes += 1
         
         # Purge dead devices and URLs
         now = int(time.time())
@@ -514,6 +519,7 @@ def probe_devices():
                                                      reason))
 
             if url in gv_jbhasd_zconf_url_set:
+                purged_urls += 1
                 gv_jbhasd_zconf_url_set.remove(url)
 
         # iterate the known devices with status values 
@@ -525,6 +531,7 @@ def probe_devices():
 
             last_updated = now - gv_jbhasd_device_ts_dict[device_name]
             if last_updated >= gv_device_purge_timeout:
+                purged_urls += 1
                 reason = "expired last updated %d seconds ago" % (last_updated)
                 print("%s Purging Device:%s URL:%s.. reason:%s" % (time.asctime(),
                                                                    device_name,
@@ -612,6 +619,10 @@ def probe_devices():
         # long poll reaction
         gv_poll_timestamp = time.time()
         #print("Updated gv_poll_timestamp to %d (probe refresh)" % (gv_poll_timestamp))
+        print("%s Probe.. successful:%d failed:%d purged:%d" % (time.asctime(),
+                                                               successful_probes,
+                                                               failed_probes,
+                                                               purged_urls))
 
         # loop sleep interval
         time.sleep(gv_probe_refresh_interval)
