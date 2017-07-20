@@ -44,12 +44,16 @@ class device_web_server(object):
     @cherrypy.expose()
 
     def index(self, update_ip=None, update_port=None, control=None, state=None):
-        print("Called %s" % (cherrypy.url()))
-
         # determine port of called URL 
         parsed_url = urllib.parse.urlparse(cherrypy.url())
-        url_port = parsed_url.port
         json_data = json_status_dict[url_port]
+        device_name = json_data['name']
+        url_port = parsed_url.port
+
+        print("%s port:%d device:%s params:%s" % (time.asctime(),
+                                                  url_port,
+                                                  device_name,
+                                                  cherrypy.request.params))
 
         if (control is not None and 
             state is not None):
