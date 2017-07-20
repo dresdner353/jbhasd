@@ -50,10 +50,9 @@ behaviour gives the devices an IP and port to use for push requests in the oppos
 If device contact is lost >= 30 seconds, the URL is removed from the set of discovered URLs.
 
 Manage:
-The web server used by the script (cherrypy) then iterates the dictionary of discovered devices and 
-renders a web page of CSS widge panels, one per device with toggle switches for each switch and 
-also temp/humidity details on the device sensors. This acts as a dashboard of the current status
-of all devices.
+The script iterates the dictionary of discovered devices and  renders a web page of CSS widget
+panels, one per device with toggle switches for each switch and also temp/humidity details 
+on the device sensors. This acts as a dashboard of the current status of all devices.
 
 If you click on a dashboard switch to toggle, a background GET passes the device name, switch 
 name and desired state to the webserver which looks up the device URL and then issues 
