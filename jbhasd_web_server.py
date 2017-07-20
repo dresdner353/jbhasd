@@ -56,7 +56,7 @@ web_page_template = """
     });
 
     // refresh timer and function
-    // We use an intervel refresh which will be called
+    // We use an interval refresh which will be called
     // every __RELOAD__ msecs and will invoke a reload of 
     // data into the dashboard div if the window is in focus
     // If not, we will skip the reload.
@@ -87,8 +87,7 @@ web_page_template = """
 # used to drive the action taken when we click on a given 
 # switch checkbox. The action gets a given URL and replaces the 
 # dashboard content with the result
-# Its a tidier alternative to full on GET 
-# call to the webserver
+# Its a tidier alternative to page refreshes
 switch_click_template = """
         $("#__ID__").click(function(){
             $.get("__URL__", function(data, status){
@@ -149,12 +148,10 @@ body {
 }
 
 input:checked + .slider {
-    //background-color: #2196F3;
     background-color: #40bc34;
 }
 
 input:focus + .slider {
-    //box-shadow: 0 0 1px #2196F3;
     box-shadow: 0 0 1px #40bc34;
 }
 
@@ -198,12 +195,6 @@ input:checked + .slider:before {
     color: rgba(255,255,255,1);
     -o-text-overflow: ellipsis;
     text-overflow: ellipsis;
-    //background: -webkit-linear-gradient(-45deg, rgba(64,150,238,1) 0, rgba(14,90,255,1) 100%);
-    //background: -moz-linear-gradient(135deg, rgba(64,150,238,1) 0, rgba(14,90,255,1) 100%);
-    //background: linear-gradient(135deg, rgba(64,150,238,1) 0, rgba(14,90,255,1) 100%);
-    //background: -webkit-linear-gradient(-45deg, rgba(101,169,237,1) 0, rgba(3,63,191,1) 100%);
-    //background: -moz-linear-gradient(135deg, rgba(101,169,237,1) 0, rgba(3,63,191,1) 100%);
-    //background: linear-gradient(135deg, rgba(101,169,237,1) 0, rgba(3,63,191,1) 100%);
     background: -webkit-linear-gradient(0deg, rgba(64,150,238,1) 0, rgba(8,51,142,1) 100%);
     background: -moz-linear-gradient(90deg, rgba(64,150,238,1) 0, rgba(8,51,142,1) 100%);
     background: linear-gradient(90deg, rgba(64,150,238,1) 0, rgba(8,51,142,1) 100%);
@@ -778,7 +769,7 @@ def build_web_page():
     return web_page_str
 
 
-def process_get_params(device, zone, control, state):
+def process_console_action(device, zone, control, state):
 
     if (device is not None and
         zone is not None and
@@ -811,7 +802,7 @@ def process_get_params(device, zone, control, state):
     return
 
 
-def process_post_params(update):
+def process_device_update(update):
     if (update is not None):
         device_name = update
         if device_name in gv_jbhasd_device_url_dict:
@@ -836,12 +827,16 @@ class web_console_handler(object):
 
     def index(self, update=None, device=None, zone=None, control=None, state=None):
 
+        print("%s client:%s params:%s" % (time.asctime(),
+                                          cherrypy.request.remote.ip,
+                                          cherrypy.request.params))
         if update is not None:
-            process_post_params(update)
+            process_device_update(update)
             gv_poll_timestamp = time.time()
             return "Thank You"
+
         else:
-            process_get_params(device, zone, control, state)
+            process_console_action(device, zone, control, state)
             return build_web_page()
 
     # Force trailling slash off on called URL
