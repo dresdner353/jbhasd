@@ -35,6 +35,7 @@ The console of each run script provides logging detail that should help understa
 what is then happening. 
 
 How it Works:
+
 The web server script is split into several separate threads that each perform a given function. 
 
 Discovery:
