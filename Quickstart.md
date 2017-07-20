@@ -34,8 +34,7 @@ port >= 9000 .. the ports are incremeneted as each new device is created.
 The console of each run script provides logging detail that should help understand 
 what is then happening. 
 
-The basic synopsis:
-
+How it Works:
 The web server script is split into several separate threads that each perform a given function. 
 
 Discovery:
