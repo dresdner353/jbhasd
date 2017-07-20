@@ -46,9 +46,9 @@ class device_web_server(object):
     def index(self, update_ip=None, update_port=None, control=None, state=None):
         # determine port of called URL 
         parsed_url = urllib.parse.urlparse(cherrypy.url())
+        url_port = parsed_url.port
         json_data = json_status_dict[url_port]
         device_name = json_data['name']
-        url_port = parsed_url.port
 
         print("%s port:%d device:%s params:%s" % (time.asctime(),
                                                   url_port,
