@@ -40,7 +40,7 @@ The web server script is split into several separate threads that each perform a
 
 Discovery:
 The script uses zeroconf to discover the devices by their common "JBHASD" type attribute. 
-It then establishes the URL by compining IP, advertised port and /json to form http://ip:port/json. 
+It then establishes the URL by combining IP, advertised port and "/json" to form http://ip:port/json. 
 This URL is added to a global set of discovered URLs.
 
 Probe:
