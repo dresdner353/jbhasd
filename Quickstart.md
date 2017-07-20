@@ -2,7 +2,7 @@ Here is a quick start guide to getting the webserver and device simulator runnin
 
 You can run these scripts on a Linux environment or even a Raspberry Pi. You may also be able to get it working on OSX and Windows with the related installs of python etc. 
 
-Prerequisites installed components:
+Prerequisite installed components:
 
 OS package for Python3
 gcc (may be used by pip3 when installing packages)
