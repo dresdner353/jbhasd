@@ -114,6 +114,12 @@ body {
     background-position: 50% 50%;
 }
 
+.timestamp {
+    font: normal 16px/1 Verdana, Geneva, sans-serif;
+    font-size: 15px;
+    color: rgba(255,255,255,1);
+}
+
 .switch {
     position: relative;
     display: inline-block;
@@ -633,19 +639,35 @@ def build_web_page():
     # generated HTML for the switch and jquery
     # code for the click action
     jquery_str = ""
-    dashboard_str = '<div class="timestamp" align="center">Last updated %s</div>' % (time.asctime())
+    dashboard_str = '<div class="timestamp" align="right">Updated %s</div>' % (time.asctime())
     dashboard_str += '<table border="0"><tr><td>' # single cell table for widgets
     switch_id = 0
 
-    # Build a set of zones
-    zone_set = set()
+    # Track the size of each zone in terms of number
+    # of controls and sensors
+    zone_size_dict = {}
     for device_name in device_list:
         json_data = gv_jbhasd_device_status_dict[device_name]
+        device_name = json_data['name']
         zone_name = json_data['zone']
-        zone_set.add(zone_name)
+        device_size = len(json_data['controls']) + len(json_data['sensors'])
+
+        if (zone_name in zone_size_dict):
+            zone_size_dict[zone_name] += device_size
+        else:
+            zone_size_dict[zone_name] = device_size
+
+    # sort on value in reverse
+    # return list of keys
+    #sorted_zone_list = sorted(zone_size_dict, 
+    #                          key=lambda k: (-zone_size_dict[k], 
+    #                                        k))
+
+    # Alphabetic name sort for now
+    sorted_zone_list = sorted(zone_size_dict.keys())
 
     # Iterate zones
-    for zone in zone_set:
+    for zone in sorted_zone_list:
         dashboard_str += ('<div class="dash-box">'
                           '<p class="dash-title">%s</p>'
                           '<table border="0" padding="3">') % (zone)
