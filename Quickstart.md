@@ -49,23 +49,42 @@ and capture the JSON status of the device. This is the capability discovery at w
 behaviour gives the devices an IP and port to use for push requests in the opposite direction (see below).
 If device contact is lost >= 30 seconds, the URL is removed from the set of discovered URLs.
 
-Manage:
-The script iterates the dictionary of discovered devices and  renders a web page of CSS widget
-panels, one per device with toggle switches for each switch and also temp/humidity details 
-on the device sensors. This acts as a dashboard of the current status of all devices.
+Webserver:
+When the main console page is accesses (IP:8080) the script iterates the dictionary of discovered 
+devices and generates a list of zones. For each zone, it then rescans the discovered devices
+and organises all controls and sensors into a set per zone. The end result is that we 
+render a widget on the web page per zone with all switches and sensors for that zone 
+in the one place. So this is our dashboard. The approach to organising controls/sensors 
+per zone is probably the most logical way to do this as we deploy with zone names like 
+Livingroom, Kitchen and then place as many devices as required in a given zone. The control 
+and sensor naming can then be as specific as required to put sense on the whole thing onces
+rendered as a single widget per zone.
 
-If you click on a dashboard switch to toggle, a background GET passes the device name, switch 
-name and desired state to the webserver which looks up the device URL and then issues 
-a GET request to the actual device performing the desired on/off action. It captures the 
-JSON response from the device and updates its register of JSON details. Finally it rebuilds the web page 
-with updated state details and returns it to the browser which uses its jquery/Javascript 
-to seamlessly update the dashboard. So you should see switches toggle on/off as clicked and 
-what is really happening is that your dashboard is being redrawn from the updated JSON status 
-that is captured after the given switch change is applied.
+The dashboard is all generated code, CSS-based and templated. There is also jquery and 
+Javascript code being generated to make the click and refresh magic to its thing.
+
+If you click on a dashboard switch to toggle, javascript code reacts to an onclick() event and 
+issues a background GET passing the device name, switch name and desired state to the 
+webserver. When the webserver detects the presence of these paramaters, it looks up the 
+device to get its URL and then issues a GET request to the actual device performing the 
+desired on/off action. It captures the JSON response from the device and updates its register 
+of JSON details. 
+
+Finally it does the normal refresh behaviour and rebuilds the dashboard web page with updated 
+state details and returns it to the browser. 
+
+The browser has called this background GET using a javascript call. So now it uses its 
+jquery/Javascript to seamlessly update the dashboard. So you should see switches toggle on/off 
+as clicked and what is really happening is that your dashboard is being redrawn from the 
+updated JSON status that is captured after the given switch change is applied.
+
+The rendered web page also uses a timed background refresh that refreshes the page seamlessly
+every 10 seconds. It uses the same jquery javascript approach to this so content just 
+updates itself.
 
 If devices change their own state by means of physical button pushes, they will issue push messages 
-to the webserver. Thats achieved by the probe stage where the webserver gave the device an IP and 
+to the webserver. That's achieved by the probe stage where the webserver gave the device an IP and 
 port to use for push notifications. When the device issues the push, it merely gives its device 
 name and the webserver then looks that up in the register and performs an immediate fetch of 
-the JSON status, updating the internal register. This will be reworked a bit more eventually to use 
-long polling on the client web side and have instant dahboard updates based on these push requests.
+the JSON URL, updating the internal register. This will be reworked a bit more eventually to use 
+long polling on the client web side and have instant dashboard updates based on these push requests.
