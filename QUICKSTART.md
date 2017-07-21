@@ -20,15 +20,15 @@ git clone https://github.com/dresdner353/jbhasd.git
 python3 jbhasd/jbhasd_web_server.py
 
 .. if it works, point your browser as localhost:8080 or your machines IP:8080. If its working, 
-you should see a page with a gray gradient background.
+you should see a page with a gray gradient background with a timestamp top-right.
 
 Then start the simulator:
 python3 jbhasd/jbhasd_device_sim.py
 
 You can run the simulator on the same machine as the webserver or on a separate machine. This will 
 start registering a fake device per US state with randomly added switches and sensors to each device.
-It will then advertise the fake devices on MDNS and DNS-SD. Your webserver page should refresh with 
-widget panels displayed for each discovered device. Each device uses a webserver on 
+It will then advertise the fake devices on MDNS and DNS-SD. The webserver script will detect these simulated devices via zeroconf and start probing them. The web console page should refresh with 
+widget panels being added for each discovered device. Each device uses a webserver on 
 port >= 9000 .. the ports are incremeneted as each new device is created. 
 
 The console of each run script provides logging detail that should help understand 
@@ -50,23 +50,25 @@ behaviour gives the devices an IP and port to use for push requests in the oppos
 If device contact is lost >= 30 seconds, the URL is removed from the set of discovered URLs.
 
 Webserver:
-When the main console page is accesses (IP:8080) the script iterates the dictionary of discovered 
+When the main console page is accessed (IP:8080) the script iterates the dictionary of discovered 
 devices and generates a list of zones. For each zone, it then rescans the discovered devices
 and organises all controls and sensors into a set per zone. The end result is that we 
-render a widget on the web page per zone with all switches and sensors for that zone 
-in the one place. So this is our dashboard. The approach to organising controls/sensors 
+render a widget on the web page per zone. Each zone widget shows all switches and sensors for that 
+zone. 
+
+So this is our dashboard. The approach to organising controls/sensors 
 per zone is probably the most logical way to do this as we deploy with zone names like 
 Livingroom, Kitchen and then place as many devices as required in a given zone. The control 
-and sensor naming can then be as specific as required to put sense on the whole thing onces
+and sensor naming can then be as specific as required to put sense on the whole thing once
 rendered as a single widget per zone.
 
 The dashboard is all generated code, CSS-based and templated. There is also jquery and 
-Javascript code being generated to make the click and refresh magic to its thing.
+Javascript code being generated to make the click and refresh magic do its thing.
 
-If you click on a dashboard switch to toggle, javascript code reacts to an onclick() event and 
-issues a background GET passing the device name, switch name and desired state to the 
-webserver. When the webserver detects the presence of these paramaters, it looks up the 
-device to get its URL and then issues a GET request to the actual device performing the 
+If you click on a dashboard switch to toggle state, javascript code reacts to an onclick() 
+event and issues a background GET passing the device name, switch name and desired state 
+to the webserver. When the webserver detects the presence of these paramaters, it looks up 
+the device to get its URL and then issues a GET request to the actual device performing the 
 desired on/off action. It captures the JSON response from the device and updates its register 
 of JSON details. 
 
@@ -80,7 +82,7 @@ updated JSON status that is captured after the given switch change is applied.
 
 The rendered web page also uses a timed background refresh that refreshes the page seamlessly
 every 10 seconds. It uses the same jquery javascript approach to this so content just 
-updates itself.
+updates itself with no old-style page reload.
 
 If devices change their own state by means of physical button pushes, they will issue push messages 
 to the webserver. That's achieved by the probe stage where the webserver gave the device an IP and 
@@ -88,3 +90,4 @@ port to use for push notifications. When the device issues the push, it merely g
 name and the webserver then looks that up in the register and performs an immediate fetch of 
 the JSON URL, updating the internal register. This will be reworked a bit more eventually to use 
 long polling on the client web side and have instant dashboard updates based on these push requests.
+
