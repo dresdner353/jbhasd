@@ -677,16 +677,19 @@ def build_web_page(num_cols):
 
     # For HTML content, its a list of columns
     # initialised to blank strings
+    # also init size dict to 0 for each column
     dashboard_col_list = []
+    dashboard_col_size_dict = {}
     for i in range(0, num_cols):
         dashboard_col_list.append("")
+        dashboard_col_size_dict[i] = 0
 
     switch_id = 0
 
     # Track the size of each zone in terms of number
     # of controls and sensors
-    # will use this to evebtually control a better 
-    # distribution of widgets
+    # will use this to then to control a balanced 
+    # distribution of widgets into vertical columns
     zone_size_dict = {}
     for device_name in device_list:
         json_data = gv_jbhasd_device_status_dict[device_name]
@@ -699,27 +702,33 @@ def build_web_page(num_cols):
         else:
             zone_size_dict[zone_name] = device_size
 
-    # sort on value in reverse
-    # return list of keys
-    #sorted_zone_list = sorted(zone_size_dict, 
-    #                          key=lambda k: (-zone_size_dict[k], 
-    #                                        k))
-
-    # Alphabetic name sort for now
+    # Alphabetic name sort to begin
     sorted_zone_list = sorted(zone_size_dict.keys())
 
-    # Iterate zones we'll number each zone
-    # and use mod on num_cols to select
-    # the column list entry to use
-    zone_num = 0
     for zone in sorted_zone_list:
-        # column formatting for widgets
-        col_index = zone_num % num_cols
+        # determine col_index
+        # based on smallest accumulated size of 
+        # existing columns
+        col_index = 0
+        smallest_col_size = 0
+        for i in range (0, num_cols):
+            # find smallest column
+            # defaulting with first
+            if i == 0 or dashboard_col_size_dict[i] < smallest_col_size:
+                col_index = i
+                smallest_col_size = dashboard_col_size_dict[i]
+
+        # add zize of selected zone to tracked size per column
+        dashboard_col_size_dict[col_index] += zone_size_dict[zone]
+        
+        #print("Putting zone:%s in col:%d" % (zone, col_index))
+
+        # start the dash-box widget
         dashboard_col_list[col_index] += ('<div class="dash-box">'
                                           '<p class="dash-title">%s</p>'
                                           '<table border="0" padding="3" width="100%%">') % (zone)
 
-        # Controls
+        # Controls in this zone
         for device_name in device_list:
             json_data = gv_jbhasd_device_status_dict[device_name]
             zone_name = json_data['zone']
@@ -784,10 +793,12 @@ def build_web_page(num_cols):
                     # increment for next switch         
                     switch_id += 1
 
+        # Spacing between controls and sensors
         dashboard_col_list[col_index] += '<tr><td></td></tr>'
         dashboard_col_list[col_index] += '<tr><td></td></tr>'
         dashboard_col_list[col_index] += '<tr><td></td></tr>'
 
+        # sensors in this zone
         for device_name in device_list:
             json_data = gv_jbhasd_device_status_dict[device_name]
             zone_name = json_data['zone']
@@ -824,16 +835,15 @@ def build_web_page(num_cols):
         # terminate the zone table and container div
         dashboard_col_list[col_index] += '</table></div>'
 
-        zone_num += 1
-
     # Build the dashboard portion
     # It's the timestamp
     # and then a single row table, one cell
     # per vertical column
     dashboard_str = '<div class="timestamp" align="right">Updated %s</div>' % (time.asctime())
-    dashboard_str += '<table border="0"><tr>'
+    dashboard_str += '<table border="0" width="100%%"><tr>'
+    col_width = int(100 / num_cols)
     for col_str in dashboard_col_list:
-        dashboard_str += '<td align="center" valign="top">'
+        dashboard_str += '<td valign="top" width="%d%%">' % (col_width)
         dashboard_str += col_str
         dashboard_str += '</td>'
     dashboard_str += '</tr></table>'
