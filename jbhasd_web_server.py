@@ -64,10 +64,12 @@ web_page_template = """
     // avoid the reload stacking more timers on itself and 
     // causing major issues
     var refresh_timer = setInterval(refreshPage, __RELOAD__);
+    
+    var window_width;
 
     function refreshPage() {
         if (window_focus == true) {
-            $.get("/", function(data, status){
+            $.get("/?width=" + window.innerWidth, function(data, status){
                 clearInterval(refresh_timer);
                 $("#dashboard").html(data);
             });
@@ -90,7 +92,7 @@ web_page_template = """
 # Its a tidier alternative to page refreshes
 switch_click_template = """
         $("#__ID__").click(function(){
-            $.get("__URL__", function(data, status){
+                $.get("__URL__&width=" + window.innerWidth, function(data, status){
                 // clear refresh timer before reload
                 clearInterval(refresh_timer);
                 $("#dashboard").html(data);
@@ -195,6 +197,7 @@ input:checked + .slider:before {
     margin: 5px 5px 5px;
     padding: 5px 5px 5px;
     border: none;
+    width: 210px;
     -webkit-border-radius: 3px;
     border-radius: 3px;
     font: normal 16px/1 Verdana, Geneva, sans-serif;
@@ -392,6 +395,17 @@ class MyZeroConfListener(object):
         return
 
 
+def json_is_the_same(a, b):
+    a_str = json.dumps(a, sort_keys=True)
+    b_str = json.dumps(b, sort_keys=True)
+    rc = 0
+
+    if (a_str == b_str):
+        rc = 1
+
+    return rc
+
+
 def discover_devices():
     # loop forever 
     while (1):
@@ -475,6 +489,7 @@ def probe_devices():
         successful_probes = 0
         failed_probes = 0
         purged_urls = 0
+        control_changes = 0
         gv_web_ip_safe = urllib.parse.quote_plus(gv_web_ip)
         for url in device_url_list:
             url_w_update = '%s?update_ip=%s&update_port=%d' % (url,
@@ -484,9 +499,21 @@ def probe_devices():
             if (json_data is not None):
                 device_name = json_data['name']
                 gv_jbhasd_device_url_dict[device_name] = url
-                gv_jbhasd_device_status_dict[device_name] = json_data
                 gv_jbhasd_device_ts_dict[device_name] = int(time.time())
                 successful_probes += 1
+
+                # check the json we got back against what we have 
+                # stored. But only compare controls for now  
+                # if its a first time store, then its a change
+                if (device_name in gv_jbhasd_device_status_dict):
+                    controls_same = json_is_the_same(json_data['controls'], 
+                                                     gv_jbhasd_device_status_dict[device_name]['controls'])
+                    if (controls_same == 0):
+                        control_changes += 1
+                else:
+                    control_changes += 1
+
+                gv_jbhasd_device_status_dict[device_name] = json_data
             else:
                 print("Failed to get status on %s" % (url))
                 failed_probes += 1
@@ -611,40 +638,50 @@ def probe_devices():
 
         # update poll timestamp to drive 
         # long poll reaction
-        gv_poll_timestamp = time.time()
-        #print("Updated gv_poll_timestamp to %d (probe refresh)" % (gv_poll_timestamp))
-        print("%s Probe.. successful:%d failed:%d purged:%d" % (time.asctime(),
-                                                               successful_probes,
-                                                               failed_probes,
-                                                               purged_urls))
+        print("%s Probe.. successful:%d failed:%d "
+              "changed:%d purged:%d" % (time.asctime(),
+                                        successful_probes,
+                                        failed_probes,
+                                        control_changes,
+                                        purged_urls))
+        # treat detected control changes or purges as 
+        # a cue to triggering poll requests
+        if (control_changes > 0 or 
+            purged_urls > 0):
+            gv_poll_timestamp = time.time()
 
         # loop sleep interval
         time.sleep(gv_probe_refresh_interval)
     return
 
 
-def build_web_page():
+def build_web_page(num_cols):
 
     # safe snapshot of dict keys into list
     device_list = list(gv_jbhasd_device_status_dict)
     url_dict_copy = copy.deepcopy(gv_jbhasd_device_url_dict)
 
-    # We'll build two strings of data
-    # One for the html content drawing the
-    # widgets
-    # the other is the jquery code defining
+    # We'll build one string of data
+    # for the jquery code defining
     # the clicking and load actions
     # The switch_id number will be incremented
     # as we define switches and matched between the 
     # generated HTML for the switch and jquery
     # code for the click action
     jquery_str = ""
-    dashboard_str = '<div class="timestamp" align="right">Updated %s</div>' % (time.asctime())
-    dashboard_str += '<table border="0"><tr><td>' # single cell table for widgets
+
+    # For HTML content, its a list of columns
+    # initialised to blank strings
+    dashboard_col_list = []
+    for i in range(0, num_cols):
+        dashboard_col_list.append("")
+
     switch_id = 0
 
     # Track the size of each zone in terms of number
     # of controls and sensors
+    # will use this to evebtually control a better 
+    # distribution of widgets
     zone_size_dict = {}
     for device_name in device_list:
         json_data = gv_jbhasd_device_status_dict[device_name]
@@ -666,11 +703,16 @@ def build_web_page():
     # Alphabetic name sort for now
     sorted_zone_list = sorted(zone_size_dict.keys())
 
-    # Iterate zones
+    # Iterate zones we'll number each zone
+    # and use mod on num_cols to select
+    # the column list entry to use
+    zone_num = 0
     for zone in sorted_zone_list:
-        dashboard_str += ('<div class="dash-box">'
-                          '<p class="dash-title">%s</p>'
-                          '<table border="0" padding="3">') % (zone)
+        # column formatting for widgets
+        col_index = zone_num % num_cols
+        dashboard_col_list[col_index] += ('<div class="dash-box">'
+                                          '<p class="dash-title">%s</p>'
+                                          '<table border="0" padding="3" width="100%%">') % (zone)
 
         # Controls
         for device_name in device_list:
@@ -712,17 +754,17 @@ def build_web_page():
                     # with id set to the desired switch_id string
                     # the checked_str also ensures the checkbox is 
                     # rendered in the current state
-                    dashboard_str += ('<tr>'
-                                      '<td class="dash-label">%s</td>'
-                                      '<td align="center">'
-                                      '<label class="switch">'
-                                      '<input type="checkbox" id="switch%d" %s>'
-                                      '<div class="slider round"></div>'
-                                      '</label>'
-                                      '</td>'
-                                      '</tr>') % (control_name,
-                                                  switch_id,
-                                                  checked_str)
+                    dashboard_col_list[col_index] += ('<tr>'
+                                                      '<td class="dash-label">%s</td>'
+                                                      '<td align="center">'
+                                                      '<label class="switch">'
+                                                      '<input type="checkbox" id="switch%d" %s>'
+                                                      '<div class="slider round"></div>'
+                                                      '</label>'
+                                                      '</td>'
+                                                      '</tr>') % (control_name,
+                                                                  switch_id,
+                                                                  checked_str)
 
                     # Jquery code for the click state
                     # Generated with the same switch id
@@ -737,9 +779,9 @@ def build_web_page():
                     # increment for next switch         
                     switch_id += 1
 
-        dashboard_str += '<tr><td></td></tr>'
-        dashboard_str += '<tr><td></td></tr>'
-        dashboard_str += '<tr><td></td></tr>'
+        dashboard_col_list[col_index] += '<tr><td></td></tr>'
+        dashboard_col_list[col_index] += '<tr><td></td></tr>'
+        dashboard_col_list[col_index] += '<tr><td></td></tr>'
 
         for device_name in device_list:
             json_data = gv_jbhasd_device_status_dict[device_name]
@@ -758,26 +800,38 @@ def build_web_page():
 
                         # &#x1f321 thermometer temp
                         # &#x1f322 droplet humidity
-                        dashboard_str += ('<tr>'
-                                          '<td class="dash-label">%s</td>'
-                                          '<td class="dash-label">'
-                                          '<table border="0">'
-                                          '<tr><td class="dash-label" align="center">&#x263C;</td>'
-                                          '<td class="dash-label" align="left">%s C</td></tr>'
-                                          '<tr><td class="dash-label" align="center">&#x1F4A7;</td>'
-                                          '<td class="dash-label" align="left">%s %%</td></tr>'
-                                          '</table></td>'
-                                          '</tr>') % (sensor_name,
-                                                      temp,
-                                                      humidity)
+                        dashboard_col_list[col_index] += ('<tr>'
+                                                          '<td class="dash-label" width="50%%">%s</td>'
+                                                          '<td class="dash-label">'
+                                                          '<table border="0" width="100%%">'
+                                                          '<tr><td class="dash-label" align="center">&#x263C;</td>'
+                                                          '<td class="dash-label" align="left">%s C</td></tr>'
+                                                          '<tr><td class="dash-label" align="center">&#x1F4A7;</td>'
+                                                          '<td class="dash-label" align="left">%s %%</td></tr>'
+                                                          '</table></td>'
+                                                          '</tr>') % (sensor_name,
+                                                                      temp,
+                                                                      humidity)
 
-                        dashboard_str += '<tr><td></td></tr>'
-                        dashboard_str += '<tr><td></td></tr>'
+                        dashboard_col_list[col_index] += '<tr><td></td></tr>'
+                        dashboard_col_list[col_index] += '<tr><td></td></tr>'
 
-        # terminate the zone
-        dashboard_str += '</table></div>'
+        # terminate the zone table and container div
+        dashboard_col_list[col_index] += '</table></div>'
 
-    dashboard_str += '</td></tr></table>'
+        zone_num += 1
+
+    # Build the dashboard portion
+    # It's the timestamp
+    # and then a single row table, one cell
+    # per vertical column
+    dashboard_str = '<div class="timestamp" align="right">Updated %s</div>' % (time.asctime())
+    dashboard_str += '<table border="0"><tr>'
+    for col_str in dashboard_col_list:
+        dashboard_str += '<td align="center" valign="top">'
+        dashboard_str += col_str
+        dashboard_str += '</td>'
+    dashboard_str += '</tr></table>'
 
     # Build and return the web page
     # dropping in CSS, generated jquery code
@@ -847,19 +901,49 @@ def process_device_update(update):
 class web_console_handler(object):
     @cherrypy.expose()
 
-    def index(self, update=None, device=None, zone=None, control=None, state=None):
+    def index(self, update=None, device=None, zone=None, control=None, state=None, poll=None, width=None):
+        global gv_poll_timestamp
 
-        print("%s client:%s params:%s" % (time.asctime(),
-                                          cherrypy.request.remote.ip,
-                                          cherrypy.request.params))
+        # default num cols to 3,
+        # then calculate based on width arg devided by
+        # dash box width (210) + 10
+        num_cols = 3
+        if width is not None:
+            num_cols = int(int(width) / 220)
+
+        print("%s client:%s:%d params:%s" % (time.asctime(),
+                                             cherrypy.request.remote.ip,
+                                             cherrypy.request.remote.port,
+                                             cherrypy.request.params))
         if update is not None:
             process_device_update(update)
             gv_poll_timestamp = time.time()
             return "Thank You"
 
         else:
+            # normal page fetch incl poll mode
+            # take a snap of this timesamp 
+            # first
+            poll_snapshot = gv_poll_timestamp
+
+            # process actions if present
             process_console_action(device, zone, control, state)
-            return build_web_page()
+
+            # if we're in poll mode
+            # we need to stall until there is a 
+            # change
+            if poll is not None:
+                # take a snapshot of the current
+                # poll timestamp and loop until
+                # it changes. Then return the page
+                while (poll_snapshot == gv_poll_timestamp):
+                    print("poll wait.. %s:%d" % (cherrypy.request.remote.ip,
+                                                 cherrypy.request.remote.port))
+                    time.sleep(1)
+
+            # return dashboard in specified number of 
+            # columns
+            return build_web_page(num_cols)
 
     # Force trailling slash off on called URL
     index._cp_config = {'tools.trailing_slash.on': False}
