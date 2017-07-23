@@ -197,7 +197,7 @@ input:checked + .slider:before {
     margin: 5px 5px 5px;
     padding: 5px 5px 5px;
     border: none;
-    width: 210px;
+    width: __DASHBOX_WIDTH__px;
     -webkit-border-radius: 3px;
     border-radius: 3px;
     font: normal 16px/1 Verdana, Geneva, sans-serif;
@@ -263,6 +263,11 @@ gv_http_timeout_secs = 5
 # everytime we perform a full probe
 # or any time we get a push
 gv_poll_timestamp = 0
+
+# presentation settings on dashboard
+gv_dashbox_width = 210
+gv_initial_num_cols = 1
+gv_col_division_offset = 20
 
 # Zone Switchname
 gv_switch_tlist = [
@@ -835,9 +840,10 @@ def build_web_page(num_cols):
 
     # Build and return the web page
     # dropping in CSS, generated jquery code
-    # and dashboard
+    # and dashboard.
     web_page_str = web_page_template
     web_page_str = web_page_str.replace("__CSS__", web_page_css)
+    web_page_str = web_page_str.replace("__DASHBOX_WIDTH__", str(gv_dashbox_width))
     web_page_str = web_page_str.replace("__SWITCH_FUNCTIONS__", jquery_str)
     web_page_str = web_page_str.replace("__DASHBOARD__", dashboard_str)
     web_page_str = web_page_str.replace("__RELOAD__", str(gv_probe_refresh_interval * 1000))
@@ -904,12 +910,14 @@ class web_console_handler(object):
     def index(self, update=None, device=None, zone=None, control=None, state=None, poll=None, width=None):
         global gv_poll_timestamp
 
-        # default num cols to 3,
-        # then calculate based on width arg devided by
-        # dash box width (210) + 10
-        num_cols = 3
+        # set defautl cols
+        # Then calculate more accurate version based on 
+        # supplied window width divided by dashbox width
+        # plus an offset for padding consideration
+        num_cols = gv_initial_num_cols
         if width is not None:
-            num_cols = int(int(width) / 220)
+            num_cols = int(int(width) / (gv_dashbox_width + 
+                                         gv_col_division_offset))
 
         print("%s client:%s:%d params:%s" % (time.asctime(),
                                              cherrypy.request.remote.ip,
