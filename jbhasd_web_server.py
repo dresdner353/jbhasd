@@ -839,11 +839,16 @@ def build_web_page(num_cols):
     # It's the timestamp
     # and then a single row table, one cell
     # per vertical column
+    # table width is set to 50% force it compress
+    # more. Otherwise it will tend to go for a 100% file
+    # and the odd column will be given more width
+    # cells are vertically aligned to top to keep widgets 
+    # top-down in layout and not vertically-centred
     dashboard_str = '<div class="timestamp" align="right">Updated %s</div>' % (time.asctime())
-    dashboard_str += '<table border="0" width="100%%"><tr>'
+    dashboard_str += '<table border="0" width="50%%"><tr>'
     col_width = int(100 / num_cols)
     for col_str in dashboard_col_list:
-        dashboard_str += '<td valign="top" width="%d%%">' % (col_width)
+        dashboard_str += '<td valign="top">'
         dashboard_str += col_str
         dashboard_str += '</td>'
     dashboard_str += '</tr></table>'
