@@ -91,7 +91,7 @@ web_page_template = """
 # Its a tidier alternative to page refreshes
 click_get_reload_template = """
         $("#__ID__").click(function(){
-                $.get("__URL__&width=" + window.innerWidth, function(data, status){
+            $.get("__URL__&width=" + window.innerWidth, function(data, status){
                 // clear refresh timer before reload
                 clearInterval(refresh_timer);
                 $("#dashboard").html(data);
@@ -99,6 +99,32 @@ click_get_reload_template = """
         });
 """
 ### End switch on click template
+
+### Begin Web page reload template
+web_page_reload_template = """
+<head>
+    <meta id="META" name="viewport" content="width=device-width; initial-scale=1.0" >
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+    <script>
+
+    $(document).ready(function(){
+        reload_w_width();
+    });
+
+    function reload_w_width() {
+        $.get("__URL__?width=" + window.innerWidth, function(data, status){
+            $("#dashboard").html(data);
+        });
+    }
+
+    </script>
+</head>
+<body>
+    <div id="dashboard"></div>
+</body>
+"""
+### End Web page template
+
 
 
 # Begin CSS ##################
@@ -950,8 +976,8 @@ def build_device_web_page(num_cols):
         jquery_str += reboot_str
 
         dashboard_col_list[col_index] += ('<tr>'
-                                          '<td class="dash-title">'
-                                          '<a href="%s" target="json-window" title="View JSON">&#x1f4c2;</a>'
+                                          '<td class="dash-label">'
+                                          '<a href="%s" target="json-window" title="View JSON">&#x1f4c4;</a>'
                                           '&nbsp;'
                                           '<label id="%s" title="Reboot device">&#x21bb;</label>'
                                           '</td>'
@@ -1160,6 +1186,16 @@ class web_console_zone_handler(object):
     def index(self, update=None, device=None, zone=None, control=None, state=None, poll=None, width=None):
         global gv_poll_timestamp
 
+        print("%s client:%s:%d params:%s" % (time.asctime(),
+                                             cherrypy.request.remote.ip,
+                                             cherrypy.request.remote.port,
+                                             cherrypy.request.params))
+        if width is None:
+            print("forcing reload to get width")
+            reload_str = web_page_reload_template
+            reload_str = reload_str.replace("__URL__", "/zone")
+            return reload_str
+
         # set defautl cols
         # Then calculate more accurate version based on 
         # supplied window width divided by dashbox width
@@ -1169,10 +1205,6 @@ class web_console_zone_handler(object):
             num_cols = int(int(width) / (gv_dashbox_width + 
                                          gv_col_division_offset))
 
-        print("%s client:%s:%d params:%s" % (time.asctime(),
-                                             cherrypy.request.remote.ip,
-                                             cherrypy.request.remote.port,
-                                             cherrypy.request.params))
         if update is not None:
             process_device_update(update)
             gv_poll_timestamp = time.time()
@@ -1213,6 +1245,16 @@ class web_console_device_handler(object):
     def index(self, device=None, zone=None, control=None, state=None, reboot=None, width=None):
         global gv_poll_timestamp
 
+        print("%s device client:%s:%d params:%s" % (time.asctime(),
+                                                    cherrypy.request.remote.ip,
+                                                    cherrypy.request.remote.port,
+                                                    cherrypy.request.params))
+        if width is None:
+            print("forcing reload to get width")
+            reload_str = web_page_reload_template
+            reload_str = reload_str.replace("__URL__", "/device")
+            return reload_str
+
         # set defautl cols
         # Then calculate more accurate version based on 
         # supplied window width divided by dashbox width
@@ -1222,10 +1264,6 @@ class web_console_device_handler(object):
             num_cols = int(int(width) / (gv_dashbox_width + 
                                          gv_col_division_offset))
 
-        print("%s device client:%s:%d params:%s" % (time.asctime(),
-                                                    cherrypy.request.remote.ip,
-                                                    cherrypy.request.remote.port,
-                                                    cherrypy.request.params))
         # process actions if present
         process_console_action(device, zone, control, reboot, state)
 
