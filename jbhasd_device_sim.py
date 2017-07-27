@@ -43,7 +43,7 @@ def get_ip():
 class device_web_server(object):
     @cherrypy.expose()
 
-    def index(self, update_ip=None, update_port=None, control=None, state=None):
+    def index(self, update_ip=None, update_port=None, control=None, state=None, reboot=None):
         # determine port of called URL 
         parsed_url = urllib.parse.urlparse(cherrypy.url())
         url_port = parsed_url.port
