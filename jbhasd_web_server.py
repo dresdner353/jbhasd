@@ -35,7 +35,7 @@ import cherrypy
 web_page_template = """
 <head>
     <title>__TITLE__</title>
-    <meta id="META" name="viewport" content="width=device-width; initial-scale=1.0" >
+    <meta id="META" name="viewport" content="width=device-width, initial-scale=1.0" >
     <style type="text/css">__CSS__</style>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
     <script>
@@ -103,7 +103,7 @@ click_get_reload_template = """
 ### Begin Web page reload template
 web_page_reload_template = """
 <head>
-    <meta id="META" name="viewport" content="width=device-width; initial-scale=1.0" >
+    <meta id="META" name="viewport" content="width=device-width, initial-scale=1.0" >
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
     <script>
 
@@ -258,7 +258,7 @@ a {
 # Discovery and probing of devices
 gv_zeroconf_refresh_interval = 60
 gv_probe_refresh_interval = 10
-gv_device_purge_timeout = 60
+gv_device_purge_timeout = 30
 gv_web_port = 8080
 gv_web_ip = '127.0.0.1' # will be updated with get_ip() call
 
@@ -496,7 +496,8 @@ def probe_devices():
     # and probe their status values, storing in a dictionary
     # Also calculate sunset time every 6 hours as part of automated 
     # management of devices
-    global gv_last_sunset_check, gv_sunset_lights_on_offset, gv_sunset_on_time, gv_poll_timestamp
+    global gv_last_sunset_check, gv_sunset_lights_on_offset
+    global gv_sunset_on_time, gv_poll_timestamp
 
     # loop forever
     while (1):
@@ -671,8 +672,6 @@ def probe_devices():
                     analytics_file.write("%s\n" % (csv_row)) 
                     analytics_file.flush()
 
-        # update poll timestamp to drive 
-        # long poll reaction
         print("%s Probe.. successful:%d failed:%d "
               "changed:%d purged:%d" % (time.asctime(),
                                         successful_probes,
@@ -725,7 +724,8 @@ def build_zone_web_page(num_cols):
         json_data = gv_jbhasd_device_status_dict[device_name]
         device_name = json_data['name']
         zone_name = json_data['zone']
-        device_size = len(json_data['controls']) + len(json_data['sensors']) + 1
+        device_size = (len(json_data['controls']) + 
+                       len(json_data['sensors']) + 1)
 
         if (zone_name in zone_size_dict):
             zone_size_dict[zone_name] += device_size
@@ -756,7 +756,8 @@ def build_zone_web_page(num_cols):
         # start the dash-box widget
         dashboard_col_list[col_index] += ('<div class="dash-box">'
                                           '<p class="dash-title">%s</p>'
-                                          '<table border="0" padding="3" width="100%%">') % (zone)
+                                          '<table border="0" padding="3" '
+                                          'width="100%%">') % (zone)
 
         # Controls in this zone
         for device_name in device_list:
@@ -802,7 +803,8 @@ def build_zone_web_page(num_cols):
                                                       '<td class="dash-label">%s</td>'
                                                       '<td align="center">'
                                                       '<label class="switch">'
-                                                      '<input type="checkbox" id="switch%d" %s>'
+                                                      '<input type="checkbox" '
+                                                      'id="switch%d" %s>'
                                                       '<div class="slider round"></div>'
                                                       '</label>'
                                                       '</td>'
@@ -846,18 +848,19 @@ def build_zone_web_page(num_cols):
 
                         # &#x1f321 thermometer temp
                         # &#x1f322 droplet humidity
-                        dashboard_col_list[col_index] += ('<tr>'
-                                                          '<td class="dash-label" width="50%%">%s</td>'
-                                                          '<td class="dash-label">'
-                                                          '<table border="0" width="100%%">'
-                                                          '<tr><td class="dash-label" align="center">&#x263C;</td>'
-                                                          '<td class="dash-label" align="left">%s C</td></tr>'
-                                                          '<tr><td class="dash-label" align="center">&#x1F4A7;</td>'
-                                                          '<td class="dash-label" align="left">%s %%</td></tr>'
-                                                          '</table></td>'
-                                                          '</tr>') % (sensor_name,
-                                                                      temp,
-                                                                      humidity)
+                        dashboard_col_list[col_index] += (
+                                '<tr>'
+                                '<td class="dash-label" width="50%%">%s</td>'
+                                '<td class="dash-label">'
+                                '<table border="0" width="100%%">'
+                                '<tr><td class="dash-label" align="center">&#x263C;</td>'
+                                '<td class="dash-label" align="left">%s C</td></tr>'
+                                '<tr><td class="dash-label" align="center">&#x1F4A7;</td>'
+                                '<td class="dash-label" align="left">%s %%</td></tr>'
+                                '</table></td>'
+                                '</tr>') % (sensor_name,
+                                            temp,
+                                            humidity)
 
                         dashboard_col_list[col_index] += '<tr><td></td></tr>'
                         dashboard_col_list[col_index] += '<tr><td></td></tr>'
@@ -873,7 +876,8 @@ def build_zone_web_page(num_cols):
     # and the odd column will be given more width.
     # Cells are vertically aligned to top to keep widgets 
     # top-down in layout and not vertically-centred
-    dashboard_str = '<div class="timestamp" align="right">Updated %s</div>' % (time.asctime())
+    dashboard_str = ('<div class="timestamp" align="right">'
+                     'Updated %s</div>') % (time.asctime())
     dashboard_str += '<table border="0" width="50%%"><tr>'
     for col_str in dashboard_col_list:
         dashboard_str += '<td valign="top">'
@@ -931,8 +935,49 @@ def build_device_web_page(num_cols):
     for device_name in device_list:
         json_data = gv_jbhasd_device_status_dict[device_name]
         device_name = json_data['name']
-        device_size = len(json_data['controls']) + len(json_data['sensors']) + 2
+        device_size = (len(json_data['controls']) + 
+                       len(json_data['sensors']) + 2)
         device_size_dict[device_name] = device_size
+
+    # start the dash-box widget
+    dashboard_col_list[0] += (
+            '<div class="dash-box">'
+            '<p class="dash-title">Master Controls</p>'
+            '<table border="0" padding="3" width="100%%">') 
+
+    dashboard_col_list[0] += (
+            '<tr>'
+            '<td class="dash-label">Number of Devices</td>'
+            '<td align="center" class="dash-label">'
+            '%s'
+            '</td>'
+            '</tr>') % (len(device_list))
+
+    # reboot URL for all devices
+    href_url = ('/device?device=all&reboot=1')
+
+    # jquery code for click
+    reboot_str = click_get_reload_template
+    jquery_click_id = 'reboot_all'
+    reboot_str = reboot_str.replace("__ID__", jquery_click_id)
+    reboot_str = reboot_str.replace("__URL__", href_url)
+    jquery_str += reboot_str
+
+    dashboard_col_list[0] += (
+            '<tr>'
+            '<td class="dash-label">Reboot All</td>'
+            '<td align="center">'
+            '<label class="switch">'
+            '<input type="checkbox" id="%s">'
+            '<div class="slider round"></div>'
+            '</label>'
+            '</td>'
+            '</tr>') % (jquery_click_id)
+
+    dashboard_col_list[0] += '</table></div>'
+
+    # account for size of master dash box
+    dashboard_col_size_dict[0] += 2 
 
     for device_name in device_list:
         json_data = gv_jbhasd_device_status_dict[device_name]
@@ -956,9 +1001,18 @@ def build_device_web_page(num_cols):
         dashboard_col_size_dict[col_index] += device_size_dict[device_name]
         
         # start the dash-box widget
-        dashboard_col_list[col_index] += ('<div class="dash-box">'
-                                          '<p class="dash-title">%s</p>'
-                                          '<table border="0" padding="3" width="100%%">') % (device_name)
+        dashboard_col_list[col_index] += (
+                '<div class="dash-box">'
+                '<p class="dash-title">%s</p>'
+                '<table border="0" padding="3" width="100%%">') % (device_name)
+
+        dashboard_col_list[col_index] += (
+                '<tr>'
+                '<td class="dash-label">Get JSON</td>'
+                '<td align="center" class="dash-title">'
+                '<a href="%s" target="json-window" title="View JSON">&#x1f4c4;</a>'
+                '</td>'
+                '</tr>') % (url)
 
         # reboot URL
         # carries device name and reboot=1
@@ -967,23 +1021,23 @@ def build_device_web_page(num_cols):
         href_url = ('/device?device=%s'
                     '&reboot=1') % (url_safe_device)
 
-        # jquery code matches ID on unique device id
-        # generated from 
+        # jquery code for click
         reboot_str = click_get_reload_template
-        jquery_click_id = 'device%d' % (device_id)
+        jquery_click_id = 'reboot_device%d' % (device_id)
         reboot_str = reboot_str.replace("__ID__", jquery_click_id)
         reboot_str = reboot_str.replace("__URL__", href_url)
         jquery_str += reboot_str
 
-        dashboard_col_list[col_index] += ('<tr>'
-                                          '<td class="dash-label">'
-                                          '<a href="%s" target="json-window" title="View JSON">&#x1f4c4;</a>'
-                                          '&nbsp;'
-                                          '<label id="%s" title="Reboot device">&#x21bb;</label>'
-                                          '</td>'
-                                          '<td></td>'
-                                          '</tr>') % (url,
-                                                      jquery_click_id)
+        dashboard_col_list[col_index] += (
+                '<tr>'
+                '<td class="dash-label">Reboot</td>'
+                '<td align="center">'
+                '<label class="switch">'
+                '<input type="checkbox" id="%s">'
+                '<div class="slider round"></div>'
+                '</label>'
+                '</td>'
+                '</tr>') % (jquery_click_id)
 
         # Controls in this zone
         # Controls
@@ -1029,17 +1083,18 @@ def build_device_web_page(num_cols):
             # with id set to the desired switch_id string
             # the checked_str also ensures the checkbox is 
             # rendered in the current state
-            dashboard_col_list[col_index] += ('<tr>'
-                                              '<td class="dash-label">%s</td>'
-                                              '<td align="center">'
-                                              '<label class="switch">'
-                                              '<input type="checkbox" id="%s" %s>'
-                                              '<div class="slider round"></div>'
-                                              '</label>'
-                                              '</td>'
-                                              '</tr>') % (control_name,
-                                                          jquery_click_id,
-                                                          checked_str)
+            dashboard_col_list[col_index] += (
+                    '<tr>'
+                    '<td class="dash-label">%s</td>'
+                    '<td align="center">'
+                    '<label class="switch">'
+                    '<input type="checkbox" id="%s" %s>'
+                    '<div class="slider round"></div>'
+                    '</label>'
+                    '</td>'
+                    '</tr>') % (control_name,
+                                jquery_click_id,
+                                checked_str)
 
             # increment for next switch
             switch_id += 1
@@ -1060,18 +1115,19 @@ def build_device_web_page(num_cols):
 
                 # &#x1f321 thermometer temp
                 # &#x1f322 droplet humidity
-                dashboard_col_list[col_index] += ('<tr>'
-                                                  '<td class="dash-label" width="50%%">%s</td>'
-                                                  '<td class="dash-label">'
-                                                  '<table border="0" width="100%%">'
-                                                  '<tr><td class="dash-label" align="center">&#x263C;</td>'
-                                                  '<td class="dash-label" align="left">%s C</td></tr>'
-                                                  '<tr><td class="dash-label" align="center">&#x1F4A7;</td>'
-                                                  '<td class="dash-label" align="left">%s %%</td></tr>'
-                                                  '</table></td>'
-                                                  '</tr>') % (sensor_name,
-                                                              temp,
-                                                              humidity)
+                dashboard_col_list[col_index] += (
+                        '<tr>'
+                        '<td class="dash-label" width="50%%">%s</td>'
+                        '<td class="dash-label">'
+                        '<table border="0" width="100%%">'
+                        '<tr><td class="dash-label" align="center">&#x263C;</td>'
+                        '<td class="dash-label" align="left">%s C</td></tr>'
+                        '<tr><td class="dash-label" align="center">&#x1F4A7;</td>'
+                        '<td class="dash-label" align="left">%s %%</td></tr>'
+                        '</table></td>'
+                        '</tr>') % (sensor_name,
+                                    temp,
+                                    humidity)
 
                 dashboard_col_list[col_index] += '<tr><td></td></tr>'
                 dashboard_col_list[col_index] += '<tr><td></td></tr>'
@@ -1088,7 +1144,10 @@ def build_device_web_page(num_cols):
     # and the odd column will be given more width.
     # Cells are vertically aligned to top to keep widgets 
     # top-down in layout and not vertically-centred
-    dashboard_str = '<div class="timestamp" align="right">Updated %s</div>' % (time.asctime())
+
+    dashboard_str = ('<div class="timestamp" align="right">'
+                     'Updated %s</div>') % (time.asctime())
+
     dashboard_str += '<table border="0" width="50%%"><tr>'
     for col_str in dashboard_col_list:
         dashboard_str += '<td valign="top">'
@@ -1113,18 +1172,28 @@ def build_device_web_page(num_cols):
 
 def process_console_action(device, zone, control, reboot, state):
 
-    command_url = ''    
+    command_url_list = []
 
     if (device is not None and
         reboot is not None):
 
-        if device in gv_jbhasd_device_url_dict:
+        if device == 'all':
+            print("%s Rebooting all devices" % (time.asctime()))
+            for device in gv_jbhasd_device_url_dict:
+                url = gv_jbhasd_device_url_dict[device]
+
+                print("%s Rebooting %s" % (time.asctime(),
+                                           device))
+
+                command_url_list.append('%s?reboot=1' % (url))
+
+        elif device in gv_jbhasd_device_url_dict:
             url = gv_jbhasd_device_url_dict[device]
 
             print("%s Rebooting %s" % (time.asctime(),
                                        device))
 
-            command_url = '%s?reboot=1' % (url)
+            command_url_list.append('%s?reboot=1' % (url))
 
     if (device is not None and
         zone is not None and
@@ -1143,15 +1212,15 @@ def process_console_action(device, zone, control, reboot, state):
             # Will handle any special character formatting for spaces
             # etc
             control_safe = urllib.parse.quote_plus(control)
-            command_url = '%s?control=%s&state=%s' % (url,
-                                                      control_safe,
-                                                      state)
+            command_url_list.append('%s?control=%s&state=%s' % (url,
+                                                                control_safe,
+                                                                state))
 
-    if not command_url == '':
+    for url in command_url_list:
         print("%s Issuing command url:%s" % (time.asctime(),
-                                             command_url))
+                                             url))
 
-        json_data = fetch_url(command_url, gv_http_timeout_secs, 1)
+        json_data = fetch_url(url, gv_http_timeout_secs, 1)
         if (json_data is not None):
             # update the status and ts as returned
             gv_jbhasd_device_status_dict[device] = json_data
