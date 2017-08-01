@@ -491,6 +491,51 @@ def fetch_url(url, url_timeout, parse_json):
 
     return response_str
      
+def check_automated_devices():
+    # Check for automated devices
+    # safe snapshot of dict keys into list
+    device_list = list(gv_jbhasd_device_status_dict)
+    # get time in hhmm format
+    current_time = int(time.strftime("%H%M", time.localtime()))
+    for device_name in device_list:
+        json_data = gv_jbhasd_device_status_dict[device_name]
+        zone_name = json_data['zone']
+        url = gv_jbhasd_device_url_dict[device_name]
+
+        # use timestamp from ts dict as sample time
+        # for analytics
+        status_ts = gv_jbhasd_device_ts_dict[device_name]
+
+        # Switch status check 
+        for control in json_data['controls']:
+            control_name = control['name']
+            control_type = control['type']
+            control_state = int(control['state'])
+            desired_state = check_switch(zone_name, 
+                                         control_name,
+                                         current_time,
+                                         control_state)
+ 
+            # If switch state not in desired state
+            # update and recache the status
+            if (desired_state != -1 and control_state != desired_state):
+                print("%s Automatically setting %s/%s to state:%s" % (time.asctime(),
+                                                                      zone_name,
+                                                                      control_name,
+                                                                      desired_state))
+                control_safe = urllib.parse.quote_plus(control_name)
+                command_url = '%s?control=%s&state=%s' % (url,
+                                                          control_safe,
+                                                          desired_state)
+                print("%s Issuing command url:%s" % (time.asctime(),
+                                                     command_url))
+
+                json_data = fetch_url(command_url, gv_http_timeout_secs, 1)
+                if (json_data is not None):
+                    gv_jbhasd_device_status_dict[device_name] = json_data
+                    gv_jbhasd_device_ts_dict[device_name] = int(time.time())
+    return
+
 
 def probe_devices():
     # iterate set of discovered device URLs
@@ -602,8 +647,10 @@ def probe_devices():
                 del gv_jbhasd_device_status_dict[device_name]
                 gv_jbhasd_zconf_url_set.remove(url)
 
-        # Check for automated devices
-        # safe snapshot of dict keys into list
+        # Automated devices
+        check_automated_devices()
+
+        # Analytics
         device_list = list(gv_jbhasd_device_status_dict)
         # get time in hhmm format
         current_time = int(time.strftime("%H%M", time.localtime()))
@@ -621,10 +668,6 @@ def probe_devices():
                 control_name = control['name']
                 control_type = control['type']
                 control_state = int(control['state'])
-                desired_state = check_switch(zone_name, 
-                                             control_name,
-                                             current_time,
-                                             control_state)
  
                 # Record analytics
                 csv_row = "%d,%d,%s,%s,%s,%s,%s,%d" % (2,
@@ -637,25 +680,6 @@ def probe_devices():
                                                        control_state)
                 analytics_file.write("%s\n" % (csv_row)) 
                 analytics_file.flush()
-
-                # If switch state not in desired state
-                # update and recache the status
-                if (desired_state != -1 and control_state != desired_state):
-                    print("%s Automatically setting %s/%s to state:%s" % (time.asctime(),
-                                                                          zone_name,
-                                                                          control_name,
-                                                                          desired_state))
-                    control_safe = urllib.parse.quote_plus(control_name)
-                    command_url = '%s?control=%s&state=%s' % (url,
-                                                              control_safe,
-                                                              desired_state)
-                    print("%s Issuing command url:%s" % (time.asctime(),
-                                                         command_url))
-
-                    json_data = fetch_url(command_url, gv_http_timeout_secs, 1)
-                    if (json_data is not None):
-                        gv_jbhasd_device_status_dict[device_name] = json_data
-                        gv_jbhasd_device_ts_dict[device_name] = int(time.time())
 
             # Iterate sensors and record analytics
             for sensor in json_data['sensors']:
@@ -1271,6 +1295,9 @@ def process_device_update(update):
                 gv_jbhasd_device_url_dict[device_name] = url
                 gv_jbhasd_device_status_dict[device_name] = json_data
                 gv_jbhasd_device_ts_dict[device_name] = int(time.time())
+
+                # check automated devices now
+                check_automated_devices()
         else:
             print("%s Cant match push for %s to URL" % (time.asctime(),
                                                         device_name))
@@ -1289,8 +1316,6 @@ class web_console_zone_handler(object):
                                              cherrypy.request.remote.ip,
                                              cherrypy.request.remote.port,
                                              cherrypy.request.params))
-        # Special case scenarios
-
         # Device push update
         if update is not None:
             process_device_update(update)
