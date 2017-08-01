@@ -268,6 +268,7 @@ gv_sunset_url = 'http://api.sunrise-sunset.org/json?lat=53.349809&lng=-6.2624431
 gv_last_sunset_check = -1
 gv_sunset_lights_on_offset = -3600
 gv_sunset_on_time = "2000" # noddy default
+gv_actual_sunset_time = "xxxx"
 
 # Init dict of discovered device URLs
 # keyed on zeroconf name
@@ -497,7 +498,7 @@ def probe_devices():
     # Also calculate sunset time every 6 hours as part of automated 
     # management of devices
     global gv_last_sunset_check, gv_sunset_lights_on_offset
-    global gv_sunset_on_time, gv_poll_timestamp
+    global gv_sunset_on_time, gv_poll_timestamp, gv_actual_sunset_time 
 
     # loop forever
     while (1):
@@ -510,8 +511,10 @@ def probe_devices():
             if json_data is not None:
                 sunset_str = json_data['results']['sunset']
                 sunset_ts = sunset_api_time_to_epoch(sunset_str)
-                sunset_local_time = time.localtime(sunset_ts + gv_sunset_lights_on_offset)
-                gv_sunset_on_time = int(time.strftime("%H%M", sunset_local_time))
+                sunset_local_time = time.localtime(sunset_ts)
+                sunset_offset_local_time = time.localtime(sunset_ts + gv_sunset_lights_on_offset)
+                gv_sunset_on_time = int(time.strftime("%H%M", sunset_offset_local_time))
+                gv_actual_sunset_time = time.strftime("%H:%M", sunset_local_time)
                 print("%s Sunset on-time is %s (with offset of %d seconds)" % (time.asctime(),
                                                                                gv_sunset_on_time,
                                                                                gv_sunset_lights_on_offset))
@@ -901,6 +904,9 @@ def build_zone_web_page(num_cols):
 
 
 def build_device_web_page(num_cols):
+    global gv_sunset_on_time
+    global gv_actual_sunset_time
+    global gv_sunset_lights_on_offset
 
     # safe snapshot of dict keys into list
     device_list = list(gv_jbhasd_device_status_dict)
@@ -942,16 +948,40 @@ def build_device_web_page(num_cols):
     # start the dash-box widget
     dashboard_col_list[0] += (
             '<div class="dash-box">'
-            '<p class="dash-title">Master Controls</p>'
+            '<p class="dash-title">Control Panel</p>'
             '<table border="0" padding="3" width="100%%">') 
 
     dashboard_col_list[0] += (
             '<tr>'
-            '<td class="dash-label">Number of Devices</td>'
+            '<td class="dash-label">Devices</td>'
             '<td align="center" class="dash-label">'
             '%s'
             '</td>'
             '</tr>') % (len(device_list))
+
+    dashboard_col_list[0] += (
+            '<tr>'
+            '<td class="dash-label">Sunset Time</td>'
+            '<td align="center" class="dash-label">'
+            '%s'
+            '</td>'
+            '</tr>') % (gv_actual_sunset_time)
+
+    dashboard_col_list[0] += (
+            '<tr>'
+            '<td class="dash-label">Lights On</td>'
+            '<td align="center" class="dash-label">'
+            '%d'
+            '</td>'
+            '</tr>') % (gv_sunset_on_time)
+
+    dashboard_col_list[0] += (
+            '<tr>'
+            '<td class="dash-label">Offset (secs)</td>'
+            '<td align="center" class="dash-label">'
+            '%s'
+            '</td>'
+            '</tr>') % (gv_sunset_lights_on_offset)
 
     # reboot URL for all devices
     href_url = ('/device?device=all&reboot=1')
@@ -977,7 +1007,7 @@ def build_device_web_page(num_cols):
     dashboard_col_list[0] += '</table></div>'
 
     # account for size of master dash box
-    dashboard_col_size_dict[0] += 2 
+    dashboard_col_size_dict[0] += 5 
 
     for device_name in device_list:
         json_data = gv_jbhasd_device_status_dict[device_name]
@@ -1259,13 +1289,22 @@ class web_console_zone_handler(object):
                                              cherrypy.request.remote.ip,
                                              cherrypy.request.remote.port,
                                              cherrypy.request.params))
+        # Special case scenarios
+
+        # Device push update
+        if update is not None:
+            process_device_update(update)
+            gv_poll_timestamp = time.time()
+            return "Thank You"
+
+        # Normal client without width
         if width is None:
             print("forcing reload to get width")
             reload_str = web_page_reload_template
             reload_str = reload_str.replace("__URL__", "/zone")
             return reload_str
 
-        # set defautl cols
+        # set default cols
         # Then calculate more accurate version based on 
         # supplied window width divided by dashbox width
         # plus an offset for padding consideration
@@ -1274,39 +1313,34 @@ class web_console_zone_handler(object):
             num_cols = int(int(width) / (gv_dashbox_width + 
                                          gv_col_division_offset))
 
-        if update is not None:
-            process_device_update(update)
-            gv_poll_timestamp = time.time()
-            return "Thank You"
+        # normal page fetch incl poll mode
+        # take a snap of this timesamp 
+        # first
+        poll_snapshot = gv_poll_timestamp
 
-        else:
-            # normal page fetch incl poll mode
-            # take a snap of this timesamp 
-            # first
-            poll_snapshot = gv_poll_timestamp
+        # process actions if present
+        reboot = None
+        process_console_action(device, zone, control, reboot, state)
 
-            # process actions if present
-            reboot = None
-            process_console_action(device, zone, control, reboot, state)
+        # if we're in poll mode
+        # we need to stall until there is a 
+        # change
+        if poll is not None:
+            # take a snapshot of the current
+            # poll timestamp and loop until
+            # it changes. Then return the page
+            while (poll_snapshot == gv_poll_timestamp):
+                print("poll wait.. %s:%d" % (cherrypy.request.remote.ip,
+                                             cherrypy.request.remote.port))
+                time.sleep(1)
 
-            # if we're in poll mode
-            # we need to stall until there is a 
-            # change
-            if poll is not None:
-                # take a snapshot of the current
-                # poll timestamp and loop until
-                # it changes. Then return the page
-                while (poll_snapshot == gv_poll_timestamp):
-                    print("poll wait.. %s:%d" % (cherrypy.request.remote.ip,
-                                                 cherrypy.request.remote.port))
-                    time.sleep(1)
-
-            # return dashboard in specified number of 
-            # columns
-            return build_zone_web_page(num_cols)
+        # return dashboard in specified number of 
+        # columns
+        return build_zone_web_page(num_cols)
 
     # Force trailling slash off on called URL
     index._cp_config = {'tools.trailing_slash.on': False}
+
 
 class web_console_device_handler(object):
     @cherrypy.expose()
