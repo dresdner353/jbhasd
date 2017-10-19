@@ -306,6 +306,7 @@ gv_switch_tlist = [
     ("Livingroom",       "Uplighter",        "sunset",   "0100",   "1200" ),
     ("Playroom",         "Uplighter",        "sunset",   "0100",   "1200" ),
     ("Kitchen",          "Counter Lights",   "sunset",   "0100",   "1200" ),
+    ("Cian's Room",      "Airplane Light",   "sunset",   "0100",   "1200" ),
 
     ("Attic Prototype",  "Sonoff Switch",    "1200",     "1205",   "2359" ),
     ("Attic Prototype",  "Sonoff Switch",    "1230",     "1232",   "1200" ),
@@ -510,30 +511,32 @@ def check_automated_devices():
         for control in json_data['controls']:
             control_name = control['name']
             control_type = control['type']
-            control_state = int(control['state'])
-            desired_state = check_switch(zone_name, 
-                                         control_name,
-                                         current_time,
-                                         control_state)
- 
-            # If switch state not in desired state
-            # update and recache the status
-            if (desired_state != -1 and control_state != desired_state):
-                print("%s Automatically setting %s/%s to state:%s" % (time.asctime(),
-                                                                      zone_name,
-                                                                      control_name,
-                                                                      desired_state))
-                control_safe = urllib.parse.quote_plus(control_name)
-                command_url = '%s?control=%s&state=%s' % (url,
-                                                          control_safe,
-                                                          desired_state)
-                print("%s Issuing command url:%s" % (time.asctime(),
-                                                     command_url))
 
-                json_data = fetch_url(command_url, gv_http_timeout_secs, 1)
-                if (json_data is not None):
-                    gv_jbhasd_device_status_dict[device_name] = json_data
-                    gv_jbhasd_device_ts_dict[device_name] = int(time.time())
+            if control_type == 'switch':
+                control_state = int(control['state'])
+                desired_state = check_switch(zone_name, 
+                                             control_name,
+                                             current_time,
+                                             control_state)
+ 
+                # If switch state not in desired state
+                # update and recache the status
+                if (desired_state != -1 and control_state != desired_state):
+                    print("%s Automatically setting %s/%s to state:%s" % (time.asctime(),
+                                                                          zone_name,
+                                                                          control_name,
+                                                                          desired_state))
+                    control_safe = urllib.parse.quote_plus(control_name)
+                    command_url = '%s?control=%s&state=%s' % (url,
+                                                              control_safe,
+                                                              desired_state)
+                    print("%s Issuing command url:%s" % (time.asctime(),
+                                                         command_url))
+
+                    json_data = fetch_url(command_url, gv_http_timeout_secs, 1)
+                    if (json_data is not None):
+                        gv_jbhasd_device_status_dict[device_name] = json_data
+                        gv_jbhasd_device_ts_dict[device_name] = int(time.time())
     return
 
 
@@ -797,60 +800,62 @@ def build_zone_web_page(num_cols):
                 for control in json_data['controls']:
                     control_name = control['name']
                     control_type = control['type']
-                    control_state = int(control['state'])
-                    alternate_state = (control_state + 1) % 2
 
-                    # prep args for transport
-                    url_safe_device = urllib.parse.quote_plus(device_name)
-                    url_safe_zone = urllib.parse.quote_plus(zone_name)
-                    url_safe_control = urllib.parse.quote_plus(control_name)
+                    if control_type == 'switch':
+                        control_state = int(control['state'])
+                        alternate_state = (control_state + 1) % 2
 
-                    # href URL for generated html
-                    # This is a URL to the webserver
-                    # carrying the device URL and directives
-                    # to change the desired switch state
-                    href_url = ('/?device=%s'
-                                '&zone=%s'
-                                '&control=%s'
-                                '&state=%d') % (url_safe_device,
-                                                url_safe_zone,
-                                                url_safe_control,
-                                                alternate_state)
+                        # prep args for transport
+                        url_safe_device = urllib.parse.quote_plus(device_name)
+                        url_safe_zone = urllib.parse.quote_plus(zone_name)
+                        url_safe_control = urllib.parse.quote_plus(control_name)
 
-                    if (alternate_state == 1):
-                        checked_str = ""
-                    else:
-                        checked_str = "checked"
+                        # href URL for generated html
+                        # This is a URL to the webserver
+                        # carrying the device URL and directives
+                        # to change the desired switch state
+                        href_url = ('/?device=%s'
+                                    '&zone=%s'
+                                    '&control=%s'
+                                    '&state=%d') % (url_safe_device,
+                                                    url_safe_zone,
+                                                    url_safe_control,
+                                                    alternate_state)
 
-                    # format checkbox css slider in table cell
-                    # with id set to the desired switch_id string
-                    # the checked_str also ensures the checkbox is 
-                    # rendered in the current state
-                    dashboard_col_list[col_index] += ('<tr>'
-                                                      '<td class="dash-label">%s</td>'
-                                                      '<td align="center">'
-                                                      '<label class="switch">'
-                                                      '<input type="checkbox" '
-                                                      'id="switch%d" %s>'
-                                                      '<div class="slider round"></div>'
-                                                      '</label>'
-                                                      '</td>'
-                                                      '</tr>') % (control_name,
-                                                                  switch_id,
-                                                                  checked_str)
+                        if (alternate_state == 1):
+                            checked_str = ""
+                        else:
+                            checked_str = "checked"
 
-                    # Jquery code for the click state
-                    # Generated with the same switch id
-                    # to match the ckick action to the related
-                    # url and checkbox switch
-                    switch_str = click_get_reload_template
-                    jquery_click_id = 'switch%d' % (switch_id)
-                    switch_str = switch_str.replace("__ID__", jquery_click_id)
-                    switch_str = switch_str.replace("__URL__", href_url)
-                    jquery_str += switch_str
+                        # format checkbox css slider in table cell
+                        # with id set to the desired switch_id string
+                        # the checked_str also ensures the checkbox is 
+                        # rendered in the current state
+                        dashboard_col_list[col_index] += ('<tr>'
+                                                          '<td class="dash-label">%s</td>'
+                                                          '<td align="center">'
+                                                          '<label class="switch">'
+                                                          '<input type="checkbox" '
+                                                          'id="switch%d" %s>'
+                                                          '<div class="slider round"></div>'
+                                                          '</label>'
+                                                          '</td>'
+                                                          '</tr>') % (control_name,
+                                                                      switch_id,
+                                                                      checked_str)
 
-                    # increment for next switch         
-                    switch_id += 1
+                        # Jquery code for the click state
+                        # Generated with the same switch id
+                        # to match the ckick action to the related
+                        # url and checkbox switch
+                        switch_str = click_get_reload_template
+                        jquery_click_id = 'switch%d' % (switch_id)
+                        switch_str = switch_str.replace("__ID__", jquery_click_id)
+                        switch_str = switch_str.replace("__URL__", href_url)
+                        jquery_str += switch_str
+
+                        # increment for next switch         
+                        switch_id += 1
 
         # Spacing between controls and sensors
         dashboard_col_list[col_index] += '<tr><td></td></tr>'
@@ -1098,60 +1103,62 @@ def build_device_web_page(num_cols):
         for control in json_data['controls']:
             control_name = control['name']
             control_type = control['type']
-            control_state = int(control['state'])
-            alternate_state = (control_state + 1) % 2
 
-            # prep args for transport
-            url_safe_device = urllib.parse.quote_plus(device_name)
-            url_safe_zone = urllib.parse.quote_plus(zone_name)
-            url_safe_control = urllib.parse.quote_plus(control_name)
+            if control_type == 'switch':
+                control_state = int(control['state'])
+                alternate_state = (control_state + 1) % 2
 
-            # href URL for generated html
-            # This is a URL to the webserver
-            # carrying the device URL and directives
-            # to change the desired switch state
-            href_url = ('/device?device=%s'
-                        '&zone=%s'
-                        '&control=%s'
-                        '&state=%d') % (url_safe_device,
-                                        url_safe_zone,
-                                        url_safe_control,
-                                        alternate_state)
+                # prep args for transport
+                url_safe_device = urllib.parse.quote_plus(device_name)
+                url_safe_zone = urllib.parse.quote_plus(zone_name)
+                url_safe_control = urllib.parse.quote_plus(control_name)
 
-            if (alternate_state == 1):
-                checked_str = ""
-            else:
-                checked_str = "checked"
+                # href URL for generated html
+                # This is a URL to the webserver
+                # carrying the device URL and directives
+                # to change the desired switch state
+                href_url = ('/device?device=%s'
+                            '&zone=%s'
+                            '&control=%s'
+                            '&state=%d') % (url_safe_device,
+                                            url_safe_zone,
+                                            url_safe_control,
+                                            alternate_state)
 
-            # Jquery code for the click state
-            # Generated with the same switch id
-            # to match the ckick action to the related
-            # url and checkbox switch
-            switch_str = click_get_reload_template
-            jquery_click_id = 'switch%d' % (switch_id)
-            switch_str = switch_str.replace("__ID__", jquery_click_id)
-            switch_str = switch_str.replace("__URL__", href_url)
-            jquery_str += switch_str
+                if (alternate_state == 1):
+                    checked_str = ""
+                else:
+                    checked_str = "checked"
 
-            # format checkbox css slider in table cell
-            # with id set to the desired switch_id string
-            # the checked_str also ensures the checkbox is 
-            # rendered in the current state
-            dashboard_col_list[col_index] += (
-                    '<tr>'
-                    '<td class="dash-label">%s</td>'
-                    '<td align="center">'
-                    '<label class="switch">'
-                    '<input type="checkbox" id="%s" %s>'
-                    '<div class="slider round"></div>'
-                    '</label>'
-                    '</td>'
-                    '</tr>') % (control_name,
-                                jquery_click_id,
-                                checked_str)
+                # Jquery code for the click state
+                # Generated with the same switch id
+                # to match the ckick action to the related
+                # url and checkbox switch
+                switch_str = click_get_reload_template
+                jquery_click_id = 'switch%d' % (switch_id)
+                switch_str = switch_str.replace("__ID__", jquery_click_id)
+                switch_str = switch_str.replace("__URL__", href_url)
+                jquery_str += switch_str
 
-            # increment for next switch
-            switch_id += 1
+                # format checkbox css slider in table cell
+                # with id set to the desired switch_id string
+                # the checked_str also ensures the checkbox is 
+                # rendered in the current state
+                dashboard_col_list[col_index] += (
+                        '<tr>'
+                        '<td class="dash-label">%s</td>'
+                        '<td align="center">'
+                        '<label class="switch">'
+                        '<input type="checkbox" id="%s" %s>'
+                        '<div class="slider round"></div>'
+                        '</label>'
+                        '</td>'
+                        '</tr>') % (control_name,
+                                    jquery_click_id,
+                                    checked_str)
+
+                # increment for next switch
+                switch_id += 1
 
         # Spacing between controls and sensors
         dashboard_col_list[col_index] += '<tr><td></td></tr>'
