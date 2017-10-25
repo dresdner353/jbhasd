@@ -11,484 +11,55 @@
 #include <ESP8266HTTPClient.h>
 #include <ESP8266mDNS.h>
 #include <DNSServer.h>
-#include <ESP8266mDNS.h>
 #include <DHT.h>
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
+#include "jbhasd_types.h"
+#include "jbhasd_profiles.h"
 
-// Definition for the use of GPIO pins as
-// switches where one pin can control a relay, another can
-// control a LED and a final pin can be used as a manual
-// trigger for the relay.
-// All pin selections are optional.
-// Values for pins are unsigned char 0-255 and NO_PIN(255) acts
-// as the unset value
-struct gpio_switch {
-    char *name;
-    unsigned char relay_pin; // output pin used for relay
-    unsigned char led_pin; // output pin used for LED
-    unsigned char manual_pin; // input pin used for manual toggle
-    unsigned char initial_state;
-    unsigned char current_state;
-};
+// Function: get_sw_context
+// returns string for switch context enum 
+// type
+const char *get_sw_context(enum switch_state_context context)
+{
+    switch(context) {
+      default:
+      case SW_ST_CTXT_INIT:
+        return "init";
+        break;
 
-// enum type for sensor types
-// only one supported for now in DHT
-// defined a NONE type for clarity
-enum gpio_sensor_type {
-    GP_SENS_TYPE_NONE,  // None
-    GP_SENS_TYPE_DHT    // DHT-type sensor
-};
+      case SW_ST_CTXT_MANUAL:
+        return "manual";
+        break;
 
-// Definition for a sensor
-// name, type, variant, pin, struct/class obj ref
-// and 2 floats to hold values
-struct gpio_sensor {
-    char *name;
-    enum gpio_sensor_type sensor_type;
-    unsigned char sensor_variant; // DHT11 DHT22, DHT21 etc
-    unsigned char sensor_pin; // pin for sensor
-    void *ref; // point to allocated reference struct/class
-
-    // value place holders
-    float f1;
-    float f2;
-};
-
-// Definition for the use of GPIO pins as
-// analog PWM to control LED RGB strips and other
-// dimmable LED lighting
-// Struct supports 3 pins, one each for RGB
-// colours. However you can define just a single pin
-// if desired for a single colour.
-// Best advised to use the blue pin for this
-// as it matches the lower octet of the set colour
-// value
-// There is also a manual switch pin which can be assigned to apply
-// random colour changes
-
-# define MAX_PWM_VALUE 1023
-
-struct gpio_led {
-    char *name;
-    unsigned char red_pin;   // Red pin
-    unsigned char green_pin; // Green pin
-    unsigned char blue_pin;  // Blue pin
-
-    unsigned char manual_pin;  // manual toggle
-
-    // Set Hue + RGB values
-    unsigned int current_state;
-
-    // arrays of desired and current states
-    // for pins
-    // these are PWM values not RGB
-    unsigned short desired_states[3];
-    unsigned short current_states[3];
-
-    // fade delay counted as skipped
-    // calls to the function using a
-    // ticker variable
-    unsigned int fade_delay;
-    unsigned int ticker;
-};
-
-// Value used to define an unset PIN
-// using 255 as we're operating in unsigned char
-#define NO_PIN 255
-
-// Switch and sensor definitions per device
-// variant
-
-// ESP-01
-// Using Tx/Rx pins for LED switch functions
-// no defined relays
-// Pin 2 assigned DHT21 temp/humidity sensor plus
-// a fake sensor
-struct gpio_switch gv_switch_register_esp01[] = {
-    {
-        "Tx",       // Name
-        NO_PIN,     // Relay Pin
-        1,          // LED Pin
-        0,          // Manual Pin
-        0,          // Init State
-        0 },        // Current state
-    {
-        "Rx",        // Name
-        NO_PIN,      // Relay Pin
-        3,           // LED Pin
-        0,           // Manual Pin
-        0,           // Init State
-        0 },         // Current state
-    {
-        // terminator.. never delete this
-        NULL,
-        NO_PIN,
-        NO_PIN,
-        NO_PIN,
-        0,
-        0
+      case SW_ST_CTXT_NETWORK:
+        return "network";
+        break;
     }
-};
+}
 
-struct gpio_sensor gv_sensor_register_esp01[] = {
-    {
-        "Temp",           // Name
-        GP_SENS_TYPE_DHT, // Sensor Type
-        DHT21,            // Sensor Variant
-        2,                // Pin
-        NULL,             // void ref
-        0,                // f1
-        0                 // f2
-    },
-    {
-        // Fake DHT with no pin
-        "Fake",            // Name
-        GP_SENS_TYPE_DHT,  // Sensor Type
-        0,                 // Sensor Variant
-        NO_PIN,            // Pin
-        NULL,              // void ref
-        0,                 // f1
-        0                  // f2
-    },
-    {
-        // terminator.. never delete
-        NULL,
-        GP_SENS_TYPE_NONE,
-        0,
-        0,
-        NULL,
-        0,
-        0
+// Function: get_sw_behaviour
+// returns string for switch behaviour enum 
+// type
+const char *get_sw_behaviour(enum switch_behaviour behaviour)
+{
+    switch(behaviour) {
+      default:
+      case SW_BHVR_TOGGLE:
+        return "toggle";
+        break;
+
+      case SW_BHVR_ON:
+        return "on";
+        break;
+
+      case SW_BHVR_OFF:
+        return "off";
+        break;
     }
-};
+}
 
-// Sonoff Basic
-// First switch assigned to onboard relay(12) and LED(13)
-// Three dummy switches defined then for testing
-// Pin 14 assigned to DHT21 sensor plus a fake sensor
-struct gpio_switch gv_switch_register_sonoff_basic[] = {
-    {
-        "A", // Name
-        12,  // Relay Pin
-        13,  // LED Pin
-        0,   // Manual Pin
-        1,   // Init State
-        0    // Current State
-    },
-    {
-        // terminator.. never delete this
-        NULL,
-        NO_PIN,
-        NO_PIN,
-        NO_PIN,
-        0,
-        0
-    }
-};
-
-struct gpio_sensor gv_sensor_register_sonoff_basic[] = {
-    {
-        "Temp",            // Name
-        GP_SENS_TYPE_DHT,  // Sensor Type
-        DHT21,             // Sensor Variant
-        14,                // Pin
-        NULL,              // void ref
-        0,                 // f1
-        0                  // f2
-    },
-    {
-        "Fake",             // Name
-        GP_SENS_TYPE_DHT,   // Sensor Type
-        0,                  // Sensor Variant
-        NO_PIN,             // Pin
-        NULL,               // void ref
-        0,                  // f1
-        0                   // f2
-    }, // Fake DHT with no pin
-    {
-        // terminator.. never delete
-        NULL,
-        GP_SENS_TYPE_NONE,
-        0,
-        0,
-        NULL,
-        0,
-        0
-    }
-};
-
-// Sonoff S20 mains socket
-// main switch assigned to replay on PIN 12
-// No LED pin assigned for switch as there is a built-in blue LED
-// So PIN 13 is defined for its own switch as a LED indicator with no
-// assigned relay
-// 1 fake sensor defined
-struct gpio_switch gv_switch_register_sonoff_s20[] = {
-    {
-        // S20 relay+Blue LED GPIO 12
-        "Socket",    // Name
-        12,          // Relay Pin
-        NO_PIN,      // LED Pin
-        0,           // Manual Pin
-        1,           // Init State
-        0            // Current State
-    },
-    {
-        // S20 Green LED GPIO 13
-        "Green LED", // Name
-        NO_PIN,      // Relay Pin
-        13,          // LED Pin
-        NO_PIN,      // Manual Pin
-        1,           // Init State
-        0            // Current State
-    },
-    {
-        // terminator.. never delete this
-        NULL,
-        NO_PIN,
-        NO_PIN,
-        NO_PIN,
-        0,
-        0
-    }
-};
-
-struct gpio_sensor gv_sensor_register_sonoff_s20[] = {
-    {
-        // DHT21 on Tx Pin
-        "Temp",             // Name
-        GP_SENS_TYPE_DHT,   // Sensor Type
-        DHT21,              // Sensor Variant
-        1,                  // Pin
-        NULL,               // void ref
-        0,                  // f1
-        0                   // f2
-    },
-    {
-        // terminator.. never delete
-        NULL,
-        GP_SENS_TYPE_NONE,
-        0,
-        0,
-        NULL,
-        0,
-        0
-    }
-};
-
-// H801 LED Wifi Controller
-// manual switch set to reset pin 0
-// Onboard Red LED assigned to pin 5
-// Onboard Green LED assigned to pin 1 and used as WiFI LED
-// No sensors for this profile
-// RGB PWM Pins Red:15, Green:13, Blue:12
-// White1:14, White2:4
-
-struct gpio_switch gv_switch_register_h801[] = {
-    {
-        "Red LED",  // Name
-        NO_PIN,     // Relay Pin
-        5,          // LED Pin
-        NO_PIN,     // Manual Pin
-        0,          // Init State
-        0           // Current State
-    },
-    {
-        // terminator.. never delete this
-        NULL,
-        NO_PIN,
-        NO_PIN,
-        NO_PIN,
-        0,
-        0
-    }
-};
-
-struct gpio_led gv_led_register_h801[] = {
-    {
-        "RGB",   // Name
-        15,      // Red Pin
-        13,      // Green Pin
-        12,      // Blue Pin
-        0,       // Manual Pin
-        0        // Initial state
-    },
-    {
-        "W1",    // Name
-        NO_PIN,  // Red Pin
-        NO_PIN,  // Green Pin
-        14,      // Blue Pin
-        NO_PIN,  // Manual Pin
-        0        // Initial state
-    },
-    {
-        "W2",     // Name
-        NO_PIN,   // Red Pin
-        NO_PIN,   // Green Pin
-        4,        // Blue Pin
-        NO_PIN,   // Manual Pin
-        0         // Initial state
-    },
-    {
-        // terminator.. never delete this
-        NULL,
-        NO_PIN,
-        NO_PIN,
-        NO_PIN,
-        NO_PIN,
-        0
-    }
-};
-
-struct gpio_sensor gv_sensor_register_h801[] = {
-    {
-        // terminator.. never delete
-        NULL,
-        GP_SENS_TYPE_NONE,
-        0,
-        0,
-        NULL,
-        0,
-        0
-    }
-};
-
-// Generic empty LED reg for most devices
-struct gpio_led gv_led_register_dummy[] = {
-    {
-        // terminator.. never delete this
-        NULL,
-        NO_PIN,
-        NO_PIN,
-        NO_PIN,
-        NO_PIN,
-        0
-    }
-};
-
-
-// Device Profiles
-// The device profile ties together a switch,
-// sensor and led register into a single structure
-// complete with desired boot program pin and wifi LED
-// status pin
-
-struct device_gpio_profile {
-    char *name;
-    int boot_program_pin;
-    int wifi_led_pin;
-    struct gpio_switch *switch_register;
-    struct gpio_sensor *sensor_register;
-    struct gpio_led *led_register;
-};
-
-// The final profile register then ties all our in-memory
-// arrays together into a set of supported profiles.
-// When a device is first flashed, the default profile will be
-// set to the first in the list. This can be changed from AP
-// mode web I/F
-
-struct device_gpio_profile gv_profile_register[] = {
-    {
-        "Sonoff Basic",                       // Name
-        0,                                    // Boot Pin
-        13,                                   // Wifi LED Pin
-        &gv_switch_register_sonoff_basic[0],  // Switch Register
-        &gv_sensor_register_sonoff_basic[0],  // Sensor Register
-        &gv_led_register_dummy[0]             // LED Register
-    },
-    {
-        "Sonoff S20",                         // Name
-        0,                                    // Boot Pin
-        13,                                   // Wifi LED Pin
-        &gv_switch_register_sonoff_s20[0],    // Switch Register
-        &gv_sensor_register_sonoff_s20[0],    // Sensor Register
-        &gv_led_register_dummy[0]             // LED Register
-    },
-    {
-        "ESP-01",                             // Name
-        0,                                    // Boot Pin
-        1,                                    // Wifi LED Pin
-        &gv_switch_register_esp01[0],         // Switch Register
-        &gv_sensor_register_esp01[0],         // Sensor Register
-        &gv_led_register_dummy[0]             // LED Register
-    },
-    {
-        "H801 LED Controller",                // Name
-        0,                                    // Boot Pin
-        1,                                    // Wifi LED Pin
-        &gv_switch_register_h801[0],          // Switch Register
-        &gv_sensor_register_h801[0],          // Sensor Register
-        &gv_led_register_h801[0]              // LED Register
-    },
-    {
-        // terminator.. never delete
-        NULL,
-        0,
-        0,
-        NULL,
-        NULL,
-        NULL
-    }
-};
-
-// EEPROM Configuration
-// It uses a struct of fields which is cast directly against
-// the eeprom array. The marker field is used to store a dummy
-// value as a means of detecting legit config on the first boot.
-// That marker value can be changed as config is remodelled
-// to ensure a first read is interpreted as blank/invalid and
-// config is then reset
-
-#define MAX_FIELD_LEN 20
-#define MAX_SWITCHES 5
-#define MAX_SENSORS 5
-#define MAX_LEDS 5
-#define CFG_MARKER_VAL 0x11
-
-// Pointer to selected profile
-// This will set at load_config() stage
-struct device_gpio_profile *gv_profile = NULL;
-
-// config struct that we cast into EEPROM
-struct eeprom_config {
-    unsigned char marker;
-    char profile[MAX_FIELD_LEN];
-    char zone[MAX_FIELD_LEN];
-    char wifi_ssid[MAX_FIELD_LEN];
-    char wifi_password[MAX_FIELD_LEN];
-    char switch_names[MAX_SWITCHES][MAX_FIELD_LEN];
-    unsigned char switch_initial_states[MAX_SWITCHES];
-    char sensor_names[MAX_SENSORS][MAX_FIELD_LEN];
-    char temp_offset[MAX_FIELD_LEN];
-    char led_names[MAX_LEDS][MAX_FIELD_LEN];
-    unsigned int led_initial_states[MAX_LEDS];
-    unsigned char ota_enabled;
-    unsigned char telnet_enabled;
-    unsigned char manual_switches_enabled;
-    unsigned char force_apmode_onboot;
-} gv_config;
-
-// Runtime mode
-// Simple enum toggle between modes
-// allowing common areas such as loop to
-// perform mode-specific tasks
-enum gv_mode_enum {
-    MODE_INIT,      // Boot mode
-    MODE_WIFI_AP,   // WiFI AP Mode (for config)
-    MODE_WIFI_STA,  // WiFI station/client (operation mode)
-    MODE_WIFI_OTA   // OTA mode invoked from STA mode
-};
-enum gv_mode_enum gv_mode = MODE_INIT;
-
-// Web and DNS stuff
-// Used to serve the web content
-// in both AP (config) and STA (client) modes
-// DNS server used only in AP mode to provide
-// captive DNS and have most phones/tablets
-// auto-launch the landing config page
-#define WEB_PORT 80
+// Web server
 ESP8266WebServer gv_web_server(WEB_PORT);
 const byte DNS_PORT = 53;
 IPAddress gv_ap_ip(192, 168, 1, 1);
@@ -524,15 +95,6 @@ int gv_led_state_reg[] = { HIGH, LOW };
 // Wrapper layer around logging to serial or
 // to connected network client
 // could be enhanced later on
-#define LOGBUF_MAX 2048
-
-enum gv_logging_enum {
-    LOGGING_NONE,
-    LOGGING_SERIAL,     // Log to Serial
-    LOGGING_NW_CLIENT,  // Log to connected network client
-};
-
-enum gv_logging_enum gv_logging = LOGGING_NONE;
 
 // Function start_serial
 // Starts serial logging after
@@ -549,7 +111,6 @@ void start_serial()
 }
 
 // Telnet server
-#define MAX_TELNET_CLIENTS 3
 WiFiServer telnet_server(23);
 WiFiClient telnet_clients[MAX_TELNET_CLIENTS];
 
@@ -662,15 +223,17 @@ void handle_telnet_sessions()
 // for the in-memory array
 void set_switch_state(const char *name,
                       int index,
-                      unsigned int state)
+                      unsigned int state,
+                      enum switch_state_context context)
 {
     int i = 0;
     int found = 0;
 
-    log_message("set_switch_state(name=%s, index=%d, state=%u)",
+    log_message("set_switch_state(name=%s, index=%d, state=%u, context=%d)",
                 name,
                 index,
-                state);
+                state,
+                context);
 
     // Trust index if provided
     // skips linear search
@@ -715,6 +278,7 @@ void set_switch_state(const char *name,
     if (found) {
         // Set the current state
         gv_profile->switch_register[i].current_state = state;
+        gv_profile->switch_register[i].state_context = context;
 
         if (gv_profile->switch_register[i].relay_pin != NO_PIN) {
             digitalWrite(gv_profile->switch_register[i].relay_pin,
@@ -748,6 +312,8 @@ void setup_switches()
         // with values set in config
         gv_profile->switch_register[i].name = gv_config.switch_names[i];
         gv_profile->switch_register[i].initial_state = gv_config.switch_initial_states[i];
+        gv_profile->switch_register[i].switch_behaviour = 
+            (enum switch_behaviour)gv_config.switch_behaviours[i];
 
         // Only service switches with set names
         // Allows for the config to disable hard-coded
@@ -778,7 +344,8 @@ void setup_switches()
             // set initial state
             set_switch_state(gv_profile->switch_register[i].name,
                              i,
-                             gv_profile->switch_register[i].initial_state);
+                             gv_profile->switch_register[i].initial_state,
+                             SW_ST_CTXT_INIT);
         }
         i++; // to the next entry in register
     }
@@ -820,12 +387,41 @@ void check_manual_switches()
             button_state = digitalRead(gv_profile->switch_register[i].manual_pin);
             if (button_state == LOW) {
                 log_message("Detected manual push on switch:%s pin:%d",
-                              gv_profile->switch_register[i].name,
-                              gv_profile->switch_register[i].manual_pin);
-                set_switch_state(gv_profile->switch_register[i].name,
-                                 i,
-                                 (gv_profile->switch_register[i].current_state + 1) % 2);
-                took_action = 1; // note any activity
+                            gv_profile->switch_register[i].name,
+                            gv_profile->switch_register[i].manual_pin);
+
+                switch(gv_profile->switch_register[i].switch_behaviour) {
+                  default:
+                  case SW_BHVR_TOGGLE:
+                    // toggle state and treat as an action taken
+                    set_switch_state(gv_profile->switch_register[i].name,
+                                     i,
+                                     (gv_profile->switch_register[i].current_state + 1) % 2,
+                                     SW_ST_CTXT_MANUAL);
+                    took_action = 1; // note any activity
+                    break;
+
+                  case SW_BHVR_ON:
+                    // only allow switch to be turned on from off state
+                    if (gv_profile->switch_register[i].current_state != 1) {
+                        set_switch_state(gv_profile->switch_register[i].name,
+                                         i,
+                                         1, // On
+                                         SW_ST_CTXT_MANUAL);
+                        took_action = 1; // note any activity
+                    }
+                    break;
+
+                  case SW_BHVR_OFF:
+                    if (gv_profile->switch_register[i].current_state != 0) {
+                        set_switch_state(gv_profile->switch_register[i].name,
+                                         i,
+                                         0, // Off
+                                         SW_ST_CTXT_MANUAL);
+                        took_action = 1; // note any activity
+                    }
+                    break;
+                }
             }
         }
         i++; // to the next entry in register
@@ -847,11 +443,9 @@ void check_manual_switches()
                             gv_profile->led_register[i].manual_pin);
 
                 // Set to random value
-                set_led_state(gv_profile->led_register[i].name,
-                              i,
-                              (unsigned int)random(0x010101,
-                                                   0xFFFFFF),
-                              200);
+                // FIXME this is technically broken for now
+                // will refactor into something better
+                set_led_state(&(gv_profile->led_register[i]));
                 took_action = 1; // note any activity
             }
         }
@@ -859,12 +453,9 @@ void check_manual_switches()
     }
 
     if (took_action) {
-        // protect against a 2nd press detection of any of the switches
-        // with a short delay
-        delay(delay_msecs);
-
-        // Send update push
-        if (strlen(gv_push_ip) > 0) {
+        // Send update push if WiFI up
+        if (gv_mode == MODE_WIFI_STA_UP && 
+            strlen(gv_push_ip) > 0) {
 
             // straight connection
             // Tried the http object
@@ -891,7 +482,7 @@ void check_manual_switches()
                 wifi_client.println(strlen(gv_small_buffer_1));
                 wifi_client.println();
                 wifi_client.print(gv_small_buffer_1);
-                delay(500);
+                //delay(500);
                 if (wifi_client.connected()) {
                     wifi_client.stop();
                 }
@@ -1153,7 +744,9 @@ void shift_rgb_led(unsigned short &start_red,
 // toward a new colour setting
 void fade_rgb(struct gpio_led *led)
 {
-    if (led->fade_delay <= 0) {
+    unsigned long now;
+
+    if (led->steps[led->step_index].fade_delay <= 0) {
         // instant switch to new setting
         log_message("Instant change to.. Red:%d Green:%d Blue:%d",
                     led->desired_states[0],
@@ -1180,15 +773,17 @@ void fade_rgb(struct gpio_led *led)
         led->current_states[2] = led->desired_states[2];
     }
     else {
-        // delay skip mechanism
-        // Simply incrementing a tick counter
-        // and applying MOD on fade_dalay
-        // This will skip attempts to fade until
-        // we get a MOD of 0
-        led->ticker++;
-        if (led->ticker % led->fade_delay != 0) {
+        // delay mechanism
+        // require elapsed msecs to match configured 
+        // fade delay
+        now = millis();
+        if (led->steps[led->step_index].fade_delay > 0 &&
+            now - led->timestamp < led->steps[led->step_index].fade_delay) {
             return;
         }
+
+        // timestamp activity
+        led->timestamp = now;
 
         // shift all three RGB values 1 PWM value
         // toward the desired states
@@ -1199,9 +794,9 @@ void fade_rgb(struct gpio_led *led)
                       led->desired_states[1],
                       led->desired_states[2]);
 
-        log_message("RGB Step.. Ticker:%u Delay:%d R:%d G:%d B:%d -> R:%d G:%d B:%d",
-                    led->ticker,
-                    led->fade_delay,
+        log_message("RGB Step.. Timestamp:%lu Delay:%d R:%d G:%d B:%d -> R:%d G:%d B:%d",
+                    led->timestamp,
+                    led->steps[led->step_index].fade_delay,
                     led->current_states[0],
                     led->current_states[1],
                     led->current_states[2],
@@ -1233,50 +828,60 @@ void fade_rgb(struct gpio_led *led)
 
 // Function transition_leds()
 // Checks active LED devices and
-// progresses or applies transitions
+// progresses to next step in program
+// or applies transitions to existing step
 void transition_leds()
 {
     int i;
 
     i = 0;
-    while (gv_profile->led_register[i].name) {
-
-        // Active LED devices with one or more differing current and
-        // desired states
-        if (strlen(gv_profile->led_register[i].name) > 0 &&
-            (gv_profile->led_register[i].desired_states[0] !=
-             gv_profile->led_register[i].current_states[0] ||
-             gv_profile->led_register[i].desired_states[1] !=
-             gv_profile->led_register[i].current_states[1] ||
-             gv_profile->led_register[i].desired_states[2] !=
-             gv_profile->led_register[i].current_states[2])) {
-            fade_rgb(&gv_profile->led_register[i]);
+    // iterate LEDs with programs set
+    while (gv_profile->led_register[i].name) { 
+        if (gv_profile->led_register[i].num_steps > 0) {
+            // Fade color if the current and desired states 
+            // are not yet aligned
+            if (strlen(gv_profile->led_register[i].name) > 0 &&
+                (gv_profile->led_register[i].desired_states[0] !=
+                 gv_profile->led_register[i].current_states[0] ||
+                 gv_profile->led_register[i].desired_states[1] !=
+                 gv_profile->led_register[i].current_states[1] ||
+                 gv_profile->led_register[i].desired_states[2] !=
+                 gv_profile->led_register[i].current_states[2])) {
+                fade_rgb(&gv_profile->led_register[i]);
+            }
+            else if (gv_profile->led_register[i].num_steps > 1) {
+                // apply next step in program 
+                // we dont need to call this for 1 step programs
+                set_led_state(&(gv_profile->led_register[i]));
+            }
         }
-
         i++;
     }
 }
 
-// Function: set_led_state
-// Sets the desired led pins to the desired value
-// using an optional msec delay to perform a fade
-// effect
-// The led is referenced by name or index value
-// for the in-memory array
-void set_led_state(const char *name,
-                   int index,
-                   unsigned int state,
-                   int fade_delay)
+// Function set_led_program
+// parses LED string program into 
+// internal array
+// Program string takes the format
+// <colour>;<fade delay>;<pause>,<colour>;<fade delay>;<pause>,...
+// So each step is a semi-colon separated trip of colour, fade and pause
+// Steps are then comma-separated.
+// The fade and pause args can be omitted
+void set_led_program(const char *name,
+                     int index,
+                     const char *program)
 {
     int i = 0;
     int found = 0;
-    int start_red, start_green, start_blue;
-    int end_red, end_green, end_blue;
+    const char *p, *q; 
+    char *r, *s;
+    char step_buffer[50];
+    struct gpio_led *led;
 
-    log_message("set_led_state(name=%s, index=%d, state=0x%08X)",
+    log_message("set_led_program(name=%s, index=%d, program=%s)",
                 name,
                 index,
-                state);
+                program);
 
     // Trust index if provided
     // skips linear search
@@ -1304,31 +909,167 @@ void set_led_state(const char *name,
         }
     }
 
-    // change state as requested
     if (found) {
-        // set desired delay
-        // and reset ticker;
-        gv_profile->led_register[i].fade_delay = fade_delay;
-        gv_profile->led_register[i].ticker = 0;
+        // simplify the pointer access
+        led = &(gv_profile->led_register[i]);
 
-        // Set desired colour (state)
-        gv_profile->led_register[i].current_state = state;
+        // reset LED program
+        // step index is put to -1 as
+        // set_led_state() is intending to advance this
+        // index. Also -1 state is handy for detecting first run 
+        // scenario
+        led->num_steps = 0;
+        led->step_index = -1;
+        led->timestamp = 0;
 
-        // parse the desired state into PWM
-        // values
-        parse_colour(state,
-                     end_red,
-                     end_green,
-                     end_blue);
+        // parse program string
+        p = program;
 
-        // populate into desired state array
-        gv_profile->led_register[i].desired_states[0] = end_red;
-        gv_profile->led_register[i].desired_states[1] = end_green;
-        gv_profile->led_register[i].desired_states[2] = end_blue;
+        // loop while we have a pointer and non-NULL data and 
+        // we've not exceeded the max steps
+        while (p && *p && 
+               led->num_steps < MAX_LED_STEPS) {
+            // set start of this step
+            q = p;
+
+            // search for terminator boundary for next step
+            p = strchr(p, ',');
+            if (p) {
+                // extract characters from this step
+                strncpy(step_buffer, q, p - q);
+                step_buffer[p - q] = '\0';
+                // skip to next field
+                p++;
+            }
+            else {
+                // no more steps, rest of string is the step
+                strcpy(step_buffer, q);
+                p = NULL; // stops any further parsing
+            }
+
+            log_message("Extracted step:%s", step_buffer);
+
+            // search for ; terminator between colour 
+            // and fade delay
+            r = strchr(step_buffer, ';');
+            if (r) {
+                // NULL terminator and move r on 1 char
+                // gives us two strings
+                *r = '\0';
+                r++;
+
+                led->steps[led->num_steps].fade_delay = atoi(r);
+
+                // Next separator is for pause
+                // sme NULL trick
+                s = strchr(r, ';');
+                if (s) {
+                    *s = '\0';
+                    s++;
+                    led->steps[led->num_steps].pause = atoi(s);
+                }
+                else {
+                    // no separator, value taken as 0
+                    led->steps[led->num_steps].pause = 0;
+                }
+            }
+            else {
+                // no separator, value taken as 0
+                led->steps[led->num_steps].fade_delay = 0;
+            }
+
+            // Extract colour value
+            // sensitive to hex and decimal
+            if (strlen(step_buffer) > 2 &&
+                step_buffer[0] == '0' &&
+                (step_buffer[1] == 'x' || step_buffer[1] == 'X')) {
+                // hex decode
+                led->steps[led->num_steps].colour = 
+                    strtoul(&step_buffer[2], NULL, 16);
+            }
+            else {
+                // decimal unsigned int
+                led->steps[led->num_steps].colour = 
+                    strtoul(step_buffer, NULL, 10);
+            }
+
+            log_message("Decoded step[%d].. colour:0x%08X fade delay:%d pause:%d",
+                        led->num_steps,
+                        led->steps[led->num_steps].colour,
+                        led->steps[led->num_steps].fade_delay,
+                        led->steps[led->num_steps].pause);
+
+            // increment steps
+            led->num_steps++;
+        }
+
+        // nudge into motion
+        set_led_state(led);
     }
     else {
         log_message("led not found in register");
     }
+}
+
+// Function: set_led_state
+// Sets the LED to its next/first program step
+// also applies msec interval counting for oauses
+// between program steps
+void set_led_state(struct gpio_led *led)
+{
+    int start_red, start_green, start_blue;
+    int end_red, end_green, end_blue;
+    unsigned long now;
+
+    log_message("set_led_state(name=%s)",
+                led->name);
+
+    if (led->num_steps <= 0) {
+        log_message("program has no defined steps.. nothing to do");
+        return;
+    }
+
+    // Pause behaviour
+    // applies only if we're actually running a program.. so we'll be on 
+    // step_index >=0 (not -1)
+    // The current step will also have to have an assigned
+    // pause period. We then just apply that interval in 
+    // timestamp msec motion before allowing us move to the next
+    // step
+    now = millis();
+    if (led->step_index >= 0 &&
+        led->steps[led->step_index].pause > 0 &&
+        now - led->timestamp < led->steps[led->step_index].pause) {
+        return;
+    }
+
+    // timestamp activity
+    led->timestamp = now;
+
+    // Module-rotate step index
+    // initial increment will be from -1 so the first 
+    // step is slot 0 of the array
+    led->step_index = (led->step_index + 1) % led->num_steps;
+
+    log_message("step index:%d.. colour:0x%08X fade:%d",
+                led->step_index,
+                led->steps[led->step_index].colour,
+                led->steps[led->step_index].fade_delay);
+
+    // Set desired colour (state)
+    led->current_state = led->steps[led->step_index].colour;
+
+    // parse the desired state into PWM
+    // values
+    parse_colour(led->current_state,
+                 end_red,
+                 end_green,
+                 end_blue);
+
+    // populate into desired state array
+    led->desired_states[0] = end_red;
+    led->desired_states[1] = end_green;
+    led->desired_states[2] = end_blue;
 }
 
 // Function: setup_leds
@@ -1348,7 +1089,11 @@ void setup_leds()
         // Over-ride hard-coded name and initial value
         // with values set in config
         gv_profile->led_register[i].name = gv_config.led_names[i];
-        gv_profile->led_register[i].current_state = gv_config.led_initial_states[i];
+        gv_profile->led_register[i].current_state = 0;
+
+        set_led_program(gv_profile->led_register[i].name,
+                        i,
+                        gv_config.led_programs[i]);
 
         // Only service led pins with set names
         // Allows for the config to disable hard-coded
@@ -1378,13 +1123,6 @@ void setup_leds()
                               gv_profile->led_register[i].manual_pin);
                 pinMode(gv_profile->led_register[i].manual_pin, INPUT_PULLUP);
             }
-            // set initial value
-            // this is a nudge on its own value
-            // but will setup the colour parses etc
-            set_led_state(gv_profile->led_register[i].name,
-                          i,
-                          gv_profile->led_register[i].current_state,
-                          0);
         }
         i++; // to the next entry in register
     }
@@ -1475,7 +1213,8 @@ int pin_in_use(int pin)
 const char *get_json_status()
 {
     char *str_ptr;
-    int i;
+    char *led_prog_ptr;
+    int i, j;
 
     log_message("get_json_status()");
 
@@ -1492,7 +1231,12 @@ const char *get_json_status()
      *  "free_heap" : %d, "chip_id" : %d, "flash_id" : %d, "flash_size" : %d,
      *  "flash_real_size" : %d, "flash_speed" : %d, "cycle_count" : %d } }
      *
-     *  Control: { "name": "%s", "type": "%s", "state": %d }
+     *  Control(switch): { "name": "%s", "type": "switch", "state": %d, "state_hex": "%s", 
+     *                     "context": "%s", "behaviour": "%s" }
+     *
+     *  Control(LED): { "name": "%s", "type": "led", "state": %d, "state_hex": "%s", 
+     *                  "program": "%s" }
+     *
      *  Sensor: { "name": "%s", "type": "%s", "humidity": "%s", temp: "%s" }
      */
 
@@ -1512,10 +1256,14 @@ const char *get_json_status()
             }
             str_ptr += ets_sprintf(str_ptr,
                                    "{ \"name\": \"%s\", \"type\": \"switch\", "
-                                   "\"state\": %u, \"state_hex\": \"0x%08X\" }",
+                                   "\"state\": %u, \"state_hex\": \"0x%08X\", "
+                                   "\"context\": \"%s\", "
+                                   "\"behaviour\": \"%s\" }",
                                    gv_profile->switch_register[i].name,
                                    gv_profile->switch_register[i].current_state,
-                                   gv_profile->switch_register[i].current_state);
+                                   gv_profile->switch_register[i].current_state,
+                                   get_sw_context(gv_profile->switch_register[i].state_context),
+                                   get_sw_behaviour(gv_profile->switch_register[i].switch_behaviour));
         }
         i++;
     }
@@ -1527,6 +1275,24 @@ const char *get_json_status()
         // only detail configured led pins
         // Those disabled will have had their name
         // set empty
+
+        // build LED program string
+        led_prog_ptr = gv_small_buffer_2;
+        gv_small_buffer_2[0] = 0;
+        for (j = 0; 
+             j < gv_profile->led_register[i].num_steps;
+             j++) {
+            if (led_prog_ptr != gv_small_buffer_2) {
+                // separator
+                led_prog_ptr += ets_sprintf(led_prog_ptr, ",");
+            }
+            led_prog_ptr += ets_sprintf(led_prog_ptr, 
+                                        "0x%08X;%d;%d",
+                                        gv_profile->led_register[i].steps[j].colour,
+                                        gv_profile->led_register[i].steps[j].fade_delay,
+                                        gv_profile->led_register[i].steps[j].pause);
+        }
+
         if (strlen(gv_profile->led_register[i].name) > 0) {
             if (str_ptr != gv_small_buffer_1) {
                 // separator
@@ -1534,10 +1300,12 @@ const char *get_json_status()
             }
             str_ptr += ets_sprintf(str_ptr,
                                    "{ \"name\": \"%s\", \"type\": \"led\", "
-                                   "\"state\": %u, \"state_hex\": \"0x%08X\" }",
+                                   "\"state\": %u, \"state_hex\": \"0x%08X\", "
+                                   "\"program\": \"%s\" }",
                                    gv_profile->led_register[i].name,
                                    gv_profile->led_register[i].current_state,
-                                   gv_profile->led_register[i].current_state);
+                                   gv_profile->led_register[i].current_state,
+                                   gv_small_buffer_2);
         }
         i++;
     }
@@ -1594,7 +1362,9 @@ const char *get_json_status()
                 "\"sensors\": [%s], "
                 "\"system\" : { \"reset_reason\" : \"%s\", \"free_heap\" : %u, "
                 "\"chip_id\" : %u, \"flash_id\" : %u, \"flash_size\" : %u, "
-                "\"flash_real_size\" : %u, \"flash_speed\" : %u, \"cycle_count\" : %u } }\n",
+                "\"flash_real_size\" : %u, \"flash_speed\" : %u, \"cycle_count\" : %u, "
+                "\"millis\" : %lu "
+                "} }\n",
                 gv_mdns_hostname,
                 gv_config.zone,
                 gv_config.ota_enabled,
@@ -1612,7 +1382,8 @@ const char *get_json_status()
                 ESP.getFlashChipSize(),
                 ESP.getFlashChipRealSize(),
                 ESP.getFlashChipSpeed(),
-                ESP.getCycleCount());
+                ESP.getCycleCount(),
+                millis());
 
     return gv_large_buffer;
 }
@@ -1689,6 +1460,7 @@ void apply_config_profile(const char *profile)
                 strcpy(&(gv_config.switch_names[i][0]),
                        gv_profile->switch_register[i].name);
                 gv_config.switch_initial_states[i] = gv_profile->switch_register[i].initial_state;
+                gv_config.switch_behaviours[i] = gv_profile->switch_register[i].switch_behaviour;
                 i++;
             }
 
@@ -1705,7 +1477,8 @@ void apply_config_profile(const char *profile)
             while (gv_profile->led_register[i].name) {
                 strcpy(&(gv_config.led_names[i][0]),
                        gv_profile->led_register[i].name);
-                gv_config.led_initial_states[i] = gv_profile->led_register[i].current_state;
+                strcpy(&(gv_config.led_programs[i][0]),
+                       gv_profile->led_register[i].init_program);
                 i++;
             }
         }
@@ -1767,10 +1540,11 @@ void load_config()
 
     // Print values of each switch name
     for (i = 0; i < MAX_SWITCHES; i++) {
-        log_message("Switch[%d]:%s state:%d",
+        log_message("Switch[%d]:%s initial state:%d press behaviour:%s",
                     i,
                     gv_config.switch_names[i],
-                    gv_config.switch_initial_states[i]);
+                    gv_config.switch_initial_states[i],
+                    get_sw_behaviour((enum switch_behaviour)gv_config.switch_behaviours[i]));
     }
 
     // Print values of each sensor name
@@ -1782,10 +1556,10 @@ void load_config()
 
     // Print values of each LED name
     for (i = 0; i < MAX_LEDS; i++) {
-        log_message("LED[%d]:%s value:0x%08X",
+        log_message("LED[%d]:%s program:%s",
                     i,
                     gv_config.led_names[i],
-                    gv_config.led_initial_states[i]);
+                    gv_config.led_programs[i]);
     }
 }
 
@@ -1820,10 +1594,11 @@ void save_config()
 
     // Print values of each switch name
     for (i = 0; i < MAX_SWITCHES; i++) {
-        log_message("Switch[%d]:%s state:%d",
-                      i,
-                      gv_config.switch_names[i],
-                      gv_config.switch_initial_states[i]);
+        log_message("Switch[%d]:%s initial state:%d press behaviour:%s",
+                    i,
+                    gv_config.switch_names[i],
+                    gv_config.switch_initial_states[i],
+                    get_sw_behaviour((enum switch_behaviour)gv_config.switch_behaviours[i]));
     }
 
     // Print values of each sensor name
@@ -1835,10 +1610,10 @@ void save_config()
 
     // Print values of each LED name
     for (i = 0; i < MAX_LEDS; i++) {
-        log_message("LED[%d]:%s value:0x%08X",
+        log_message("LED[%d]:%s program:%s",
                     i,
                     gv_config.led_names[i],
-                    gv_config.led_initial_states[i]);
+                    gv_config.led_programs[i]);
     }
 
     log_message("Read EEPROM data..(%d bytes)", sizeof(gv_config));
@@ -1949,6 +1724,22 @@ void ap_handle_root() {
                             gv_small_buffer_1,
                             gv_config.switch_initial_states[i]);
             }
+            
+            // format behaviour arg name
+            ets_sprintf(gv_small_buffer_1,
+                        "behaviour%d",
+                        i);
+            // Retrieve if present
+            if (gv_web_server.hasArg(gv_small_buffer_1)) {
+                log_message("Arg %s present",
+                            gv_small_buffer_1);
+
+                gv_config.switch_behaviours[i] =
+                    (enum switch_behaviour)atoi(gv_web_server.arg(gv_small_buffer_1).c_str());
+                log_message("Got:%s:%d",
+                            gv_small_buffer_1,
+                            gv_config.switch_behaviours[i]);
+            }
         }
 
         for (i = 0; i < MAX_LEDS; i++) {
@@ -1974,30 +1765,19 @@ void ap_handle_root() {
 
             // format value arg name
             ets_sprintf(gv_small_buffer_1,
-                        "ledv%d",
+                        "program%d",
                         i);
             // Retrieve if present
             if (gv_web_server.hasArg(gv_small_buffer_1)) {
                 log_message("Arg %s present",
                             gv_small_buffer_1);
 
-                strcpy(gv_small_buffer_2, gv_web_server.arg(gv_small_buffer_1).c_str());
-
-                if (strlen(gv_small_buffer_2) > 2 &&
-                    gv_small_buffer_2[0] == '0' &&
-                    (gv_small_buffer_2[1] == 'x' || gv_small_buffer_2[1] == 'X')) {
-                    // hex decode
-                    led_value = strtoul(&gv_small_buffer_2[2], NULL, 16);
-                }
-                else {
-                    // decimal unsigned int
-                    led_value = strtoul(gv_small_buffer_2, NULL, 10);
-                }
-                gv_config.led_initial_states[i] = led_value;
+                strcpy(&(gv_config.led_programs[i][0]),
+                       gv_web_server.arg(gv_small_buffer_1).c_str());
 
                 log_message("Got:%s:%d",
                             gv_small_buffer_1,
-                            gv_config.led_initial_states[i]);
+                            gv_config.led_programs[i]);
             }
         }
 
@@ -2053,7 +1833,9 @@ void toggle_wifi_led(int delay_msecs)
     digitalWrite(gv_profile->wifi_led_pin,
                  gv_led_state_reg[state]);
 
-    delay(delay_msecs);
+    if (delay > 0) {
+        delay(delay_msecs);
+    }
 }
 
 // Function: start_ota()
@@ -2064,7 +1846,7 @@ void start_ota()
     static int already_setup = 0;
 
     // Only do this once
-    // lost wifi conections will re-run start_sta_mode() so
+    // lost wifi conections will re-run start_wifi_sta_mode() so
     // we dont want this function called over and over
     if (already_setup) {
         log_message("OTA already started");
@@ -2135,6 +1917,7 @@ void start_ap_mode()
     char *ota_on_selected, *ota_off_selected;
     char *telnet_on_selected, *telnet_off_selected;
     char *manual_on_selected, *manual_off_selected;
+    char *switch_bhvr_selected[3];
 
     if (strlen(gv_config.profile) == 0) {
         // combi for profile selection
@@ -2287,14 +2070,30 @@ void start_ap_mode()
                 switch_initial_off_selected = combi_selected;
             }
 
+            // Set the behaviour mode
+            // using an array of strings here
+            // initialised to emptr strings
+            // and selected behaviour index then set to selected
+            switch_bhvr_selected[0] = combi_not_selected;
+            switch_bhvr_selected[1] = combi_not_selected;
+            switch_bhvr_selected[2] = combi_not_selected;
+            switch_bhvr_selected[gv_config.switch_behaviours[i]] = combi_selected;
+
             // Format the Switch config segment
             ets_sprintf(gv_small_buffer_2,
                         "<div>"
                         "    <label>Switch %d</label>"
                         "    <input type=\"text\" value=\"%s\" maxlength=\"%d\" name=\"switch%d\">"
+                        "    <br><label>Initial State</label>"
                         "    <select name=\"state%d\">"
                         "        <option value=\"1\" %s>On</option>"
                         "        <option value=\"0\" %s>Off</option>"
+                        "    </select>"
+                        "    <br><label>Switch Behaviour</label>"
+                        "    <select name=\"behaviour%d\">"
+                        "        <option value=\"0\" %s>Toggle</option>"
+                        "        <option value=\"1\" %s>On</option>"
+                        "        <option value=\"2\" %s>Off</option>"
                         "    </select>"
                         "</div>",
                         i + 1,
@@ -2303,7 +2102,11 @@ void start_ap_mode()
                         i,
                         i,
                         switch_initial_on_selected,
-                        switch_initial_off_selected);
+                        switch_initial_off_selected,
+                        i,
+                        switch_bhvr_selected[0],
+                        switch_bhvr_selected[1],
+                        switch_bhvr_selected[2]);
 
             // append to the larger form
             strcat(gv_large_buffer, gv_small_buffer_2);
@@ -2317,16 +2120,17 @@ void start_ap_mode()
             // Formt the Switch config segment
             ets_sprintf(gv_small_buffer_2,
                         "<div>"
-                        "    <label>LED %d</label>"
-                        "    <input type=\"text\" value=\"%s\" maxlength=\"%d\" name=\"led%d\">"
-                        "    <input type=\"text\" value=\"%d\" maxlength=\"8\" name=\"ledv%d\">"
+                        "<label>LED %d</label>"
+                        "<input type=\"text\" value=\"%s\" maxlength=\"%d\" name=\"led%d\">"
+                        "<br><label>Program:</label><br>"
+                        "<textarea rows=\"5\" cols=\"20\" name=\"program%d\">%s</textarea>"
                         "</div>",
                         i + 1,
                         gv_config.led_names[i],
                         MAX_FIELD_LEN,
                         i,
-                        gv_config.led_initial_states[i],
-                        i);
+                        i,
+                        gv_config.led_programs[i]);
 
             // append to the larger form
             strcat(gv_large_buffer, gv_small_buffer_2);
@@ -2340,8 +2144,8 @@ void start_ap_mode()
             // Formt the sensor config segment
             ets_sprintf(gv_small_buffer_2,
                         "<div>"
-                        "    <label>Sensor %d</label>"
-                        "    <input type=\"text\" value=\"%s\" maxlength=\"%d\" name=\"sensor%d\">"
+                        "<label>Sensor %d</label>"
+                        "<input type=\"text\" value=\"%s\" maxlength=\"%d\" name=\"sensor%d\">"
                         "</div>",
                         i + 1,
                         gv_config.sensor_names[i],
@@ -2357,7 +2161,7 @@ void start_ap_mode()
         strcat(gv_large_buffer,
                "<br><br>"
                "<div>"
-               "    <button>Apply Settings</button>"
+               "<button>Apply Settings</button>"
                "</div>"
                "</form>");
     }
@@ -2388,121 +2192,43 @@ void start_ap_mode()
     log_message("HTTP server started for AP mode");
 }
 
-// Function: sta_handle_root
-// Handles root web page calls while in client
-// station modea. Displays a basic page with info and
-// buttons for each configured switch.
-// Also handles POST/GET args for "control" and "state"
-// to control a desired switch. The on-page buttons make use of this
-// handling
-void sta_handle_root() {
-    int control_state;
-    int i;
-
-    log_message("sta_handle_root()");
-
-    // Update sensors
-    read_sensors();
-
-    // Check for switch and state
-    if (gv_web_server.hasArg("control") && gv_web_server.hasArg("state")) {
-        strcpy(gv_small_buffer_1, gv_web_server.arg("control").c_str());
-        control_state = atoi(gv_web_server.arg("state").c_str());
-        set_switch_state(gv_small_buffer_1, -1, control_state); // specifying name only
-    }
-
-    // Will display basic info page
-    // with on/off buttons per configured
-    // switch
-    ets_sprintf(gv_large_buffer,
-                "<div>hostname:&nbsp;%s</div>"
-                "<div>Zone:&nbsp;%s</div>",
-                gv_mdns_hostname,
-                gv_config.zone);
-
-    // append details on sensors
-    i = 0;
-    while (gv_profile->sensor_register[i].name) {
-        if (strlen(gv_profile->sensor_register[i].name) > 0) {
-            ets_sprintf(gv_small_buffer_1,
-                        "<div>%s&nbsp;f1:%d.%02d f2:%d.%02d</div>",
-                        gv_profile->sensor_register[i].name,
-                        (int)gv_profile->sensor_register[i].f1,
-                        float_get_fp(gv_profile->sensor_register[i].f1, 2),
-                        (int)gv_profile->sensor_register[i].f2,
-                        float_get_fp(gv_profile->sensor_register[i].f2, 2));
-            strcat(gv_large_buffer, gv_small_buffer_1);
-        }
-        i++; // to the next entry in register
-    }
-
-    // append entries for switches
-    // as simple on/off switch pairs
-    i = 0;
-    while (gv_profile->switch_register[i].name) {
-        if (strlen(gv_profile->switch_register[i].name) > 0) {
-            ets_sprintf(gv_small_buffer_1,
-                        "<div><a href=\"/?control=%s&state=1\"><button>%s On</button></a>&nbsp;"
-                        "<a href=\"/?control=%s&state=0\"><button>%s Off</button></a></div>",
-                        gv_config.switch_names[i],
-                        gv_config.switch_names[i],
-                        gv_config.switch_names[i],
-                        gv_config.switch_names[i]);
-            strcat(gv_large_buffer, gv_small_buffer_1);
-        }
-        i++; // to the next entry in register
-    }
-
-    gv_web_server.send(200, "text/html", gv_large_buffer);
-}
-
 // Function: sta_handle_json
 // This is the API handler that takes in POST/GET args for
-// "control" and "state" and sets the desired comntrol to the
+// "control" and "state" and sets the desired switch to the
 // specified state.
+// "control" and "program" are used to set LED controls to their
+// programmed behaviour
 // Then it prints out the JSON status string listing device name
 // and details along with the configured controls and their states
-// One last check is made for a "reboot" arg and if present, the device
-// reboots
+// Additional commands it supports:
+// "reboot" arg will reboot the device
+// "reset" arg wipes config and restarts
+// "apmode" will perform a once-off boot into AP mode
+// Args "update_ip" amd "update_port" can be used to set an IP:PORT
+// for a POST-based push notification to a server wishing to track 
+// manual switch activity
 void sta_handle_json() {
     unsigned int state;
-    int delay;
 
     log_message("sta_handle_json()");
 
-    // Check for switch/led control name and state
+    // Check for switch control name and state
     if (gv_web_server.hasArg("control") && gv_web_server.hasArg("state")) {
         strcpy(gv_small_buffer_1, gv_web_server.arg("control").c_str());
-        strcpy(gv_small_buffer_2, gv_web_server.arg("state").c_str());
-
-        // Hex/Decimal decode of sate
-        if (strlen(gv_small_buffer_2) > 2 &&
-            gv_small_buffer_2[0] == '0' &&
-            (gv_small_buffer_2[1] == 'x' || gv_small_buffer_2[1] == 'X')) {
-            // hex decode
-            state = strtoul(&gv_small_buffer_2[2], NULL, 16);
-        }
-        else {
-            // decimal unsigned int
-            state = strtoul(gv_small_buffer_2, NULL, 10);
-        }
-        if (gv_web_server.hasArg("delay")) {
-            delay = atoi(gv_web_server.arg("delay").c_str());
-        }
-        else {
-            delay = 0;
-        }
-
-        // Try both switch and LEDs for this
-        // should only match one
+        state = atoi(gv_web_server.arg("state").c_str());
         set_switch_state(gv_small_buffer_1,
                          -1,
-                         state); // specifying name only
+                         state,
+                         SW_ST_CTXT_NETWORK); // specifying name only
+    }
 
-        set_led_state(gv_small_buffer_1,
-                      -1,
-                      state,
-                      delay); // specifying name only
+    if (gv_web_server.hasArg("control") && gv_web_server.hasArg("program")) {
+        strcpy(gv_small_buffer_1, gv_web_server.arg("control").c_str());
+        strcpy(gv_small_buffer_2, gv_web_server.arg("program").c_str());
+
+        set_led_program(gv_small_buffer_1, 
+                        -1,
+                        gv_small_buffer_2);
     }
 
     // Set PUSH url for status updates
@@ -2542,70 +2268,31 @@ void sta_handle_json() {
     }
 }
 
-// Function: start_sta_mode
+// Function: start_wifi_sta_mode
 // Configures the device as a WiFI client
 // giving it about 2 minutes to get connected
 // Once connected, it sets up the web handlers for root
 // and /json
-void start_sta_mode()
+void start_wifi_sta_mode()
 {
-    int connect_timeout = 60;
-    int max_connect_attempts = 5;
-    static int connect_count = 0; // track #times we try to connect
-    int i;
+    log_message("start_wifi_sta_mode()");
 
-    log_message("start_sta_mode()");
-    gv_mode = MODE_WIFI_STA;
-
-    // Count attempts and reboot if we exceed max
-    connect_count++;
-    if (connect_count > max_connect_attempts) {
-        log_message("Exceeded max connect attempts of %d.. rebooting",
-                      max_connect_attempts);
-        ESP.restart();
-    }
-
-    log_message("Connecting to Wifi SSID:%s, Password:%s, Timeout:%d Attempt:%d/%d",
-                  gv_config.wifi_ssid,
-                  gv_config.wifi_password,
-                  connect_timeout,
-                  connect_count,
-                  max_connect_attempts);
+    // set state to track wifi down
+    // will drive main loop to act accordingly
+    gv_mode = MODE_WIFI_STA_DOWN;
 
     // WIFI
     WiFi.disconnect();
     WiFi.mode(WIFI_STA);
     WiFi.begin(gv_config.wifi_ssid,
                gv_config.wifi_password);
+}
 
-    while (WiFi.status() != WL_CONNECTED &&
-           connect_timeout > 0) {
-        toggle_wifi_led(1000);
-        log_message("WiFI Connect.. %d", connect_timeout);
-        connect_timeout--;
-    }
+void start_sta_mode_services()
+{
+    log_message("start_sta_mode_services()");
 
-    if (WiFi.status() != WL_CONNECTED) {
-        log_message("Timed out trying to connect to %s",
-                      gv_config.wifi_ssid);
-        return;
-    }
-
-    // reset connect count so that
-    // we give a reconnect scenario the same max attempts
-    // before reboot
-    connect_count = 0;
-
-    // 50 quick flashes to signal WIFI connected
-    for (i = 1; i <= 50; i++) {
-        toggle_wifi_led(50);
-    }
-
-    // wifi LED off
-    digitalWrite(gv_profile->wifi_led_pin,
-                 gv_led_state_reg[0]);
-
-    // Activate switches
+    // Activate switches & LEDs
     // to reset all to defaults
     setup_switches();
     setup_leds();
@@ -2630,9 +2317,9 @@ void start_sta_mode()
         MDNS.addService("JBHASD", "tcp", WEB_PORT);
     }
 
-    gv_web_server.on("/", sta_handle_root);
+    // Web server
     gv_web_server.on("/json", sta_handle_json);
-    gv_web_server.onNotFound(sta_handle_root);
+    gv_web_server.onNotFound(sta_handle_json);
     gv_web_server.begin();
     log_message("HTTP server started for client mode");
 
@@ -2665,9 +2352,9 @@ void setup()
     ESP.wdtEnable(WDTO_8S);
 
     log_message("Device boot: ChipId:%u FreeHeap:%u ResetReason:%s",
-                  ESP.getChipId(),
-                  ESP.getFreeHeap(),
-                  ESP.getResetReason().c_str());
+                ESP.getChipId(),
+                ESP.getFreeHeap(),
+                ESP.getResetReason().c_str());
 
     // Set mdns hostname based on prefix, chip ID and zone
     // will also use this for AP SSID
@@ -2729,66 +2416,218 @@ void setup()
     }
 
     log_message("Passed pin wait stage.. normal startup");
-    start_sta_mode();
+    start_wifi_sta_mode();
 }
 
+// task loop state machine 
+// function wrappers
+// Its based on void functions (no aegs, no returns)
+// So object-based loop task for web server and 
+// several others are manipulated in simple wrappers
+// Some of the wrappers are more substantial
+
+void loop_task_check_wifi_down(void)
+{
+    log_message("loop_task_check_wifi_down()");
+    if (WiFi.status() != WL_CONNECTED) {
+        log_message("WiFI is down");
+        gv_mode = MODE_WIFI_STA_DOWN;
+
+        log_message("Connecting to Wifi SSID:%s, Password:%s",
+                    gv_config.wifi_ssid,
+                    gv_config.wifi_password);
+
+        start_wifi_sta_mode();
+    }
+}
+
+void loop_task_check_wifi_up(void)
+{
+    int i;
+    // every 2 secs * 1800.. about 1 hour
+    // before it will auto-reboot after losing WiFI
+    int max_checks = 1800; 
+    static int check_count = 0;
+
+    log_message("loop_task_check_wifi_up()");
+    if (WiFi.status() == WL_CONNECTED) {
+        log_message("WiFI has come up");
+        gv_mode = MODE_WIFI_STA_UP;
+
+        // quick LED burst
+        for (i = 1; i <= 50; i++) {
+            toggle_wifi_led(50);
+        }
+
+        // wifi LED off
+        digitalWrite(gv_profile->wifi_led_pin,
+                     gv_led_state_reg[0]);
+
+        // reset connect count so that
+        // we give a reconnect scenario the same max attempts
+        // before reboot
+        check_count = 0;
+
+        // start additional services for sta
+        // mode
+        start_sta_mode_services();
+    }
+    else {
+        // check for max checks and restart
+        check_count++;
+        if (check_count > max_checks) {
+            log_message("Exceeded max checks of %d.. rebooting",
+                        max_checks);
+            ESP.restart();
+        }
+    }
+}
+
+void loop_task_webserver(void)
+{
+    gv_web_server.handleClient();
+}
+
+void loop_task_wdt(void)
+{
+    ESP.wdtFeed();
+}
+
+void loop_task_dns(void)
+{
+    gv_dns_server.processNextRequest();
+}
+
+void loop_task_ota(void)
+{
+    ArduinoOTA.handle();
+}
+
+void loop_task_wifi_led(void)
+{
+    // toggle LED with no delay
+    // main loop driving the timing for this
+    toggle_wifi_led(0); 
+}
+
+// loop tasks
+// Each task lists its state machine modes (mask)
+// msec delay between calls
+// and handler function
+// most functions will work fine with 1ms delays
+// Others can easily wait longer
+// The LED transition was the one that had to get a 
+// zero delay to ensure it can compute timing correctly
+
+struct loop_task gv_loop_tasks[] = {
+
+    {
+        // WDT Timer
+        MODE_ALL,      // Mode
+        1,             // msec delay
+        loop_task_wdt  // Function
+    },
+
+    {
+        // Web Server (AP)
+        MODE_WIFI_AP | MODE_WIFI_STA_UP, // Mode
+        1,                               // msec delay
+        loop_task_webserver              // Function
+    },
+    {
+        // DNS Server
+        MODE_WIFI_AP,  // Mode
+        1,             // msec delay
+        loop_task_dns  // Function
+    },
+    {
+        // AP WiFI LED
+        MODE_WIFI_AP,       // Mode
+        100,                // msec delay every 1/5 sec
+        loop_task_wifi_led  // Function
+    },
+
+    {
+        // STA WiFI LED
+        MODE_WIFI_STA_DOWN, // Mode
+        1000,               // msec delay every sec
+        loop_task_wifi_led  // Function
+    },
+
+    {
+        // WiFI Check (Down)
+        MODE_WIFI_STA_DOWN,      // Mode
+        2000,                    // msec delay every 2 secs
+        loop_task_check_wifi_up  // Function
+    },
+
+    {
+        // Manual Switches
+        MODE_WIFI_STA_DOWN | MODE_WIFI_STA_UP,   // Mode
+        400,                                     // msec delay every 1/2 sec
+        check_manual_switches                    // Function
+    },
+
+    {
+        // WiFI Check (Up)
+        MODE_WIFI_STA_UP,          // Mode
+        10000,                     // msec delay every 10 secs
+        loop_task_check_wifi_down  // Function
+    },
+
+    {
+        // LED Transtions
+        // Requires no delay as the code uses 
+        // its own internal msec scheduling
+        MODE_WIFI_STA_UP | MODE_WIFI_STA_DOWN,   // Mode
+        0,                                       // no delay
+        transition_leds                          // Function
+    },
+
+    {
+        // Telnet Sessions
+        MODE_WIFI_STA_UP,      // Mode
+        1000,                  // msec delay every 1 second
+        handle_telnet_sessions // Function
+    },
+
+    {
+        // OTA (STA)
+        MODE_WIFI_STA_UP | MODE_WIFI_OTA,  // Mode
+        1,                                 // 1 msec delay
+        loop_task_ota                      // Function
+    },
+
+    {
+        // terminator.. never delete
+        MODE_INIT,
+        0,
+        NULL // null func ptr terminates loop
+    }
+};
+
 // Function: loop
-// Main loop driver callback.
-// In both AP and STA modes, it drives the web server
-// AP mode must addtionally operate the DNS server, and toggle
-// its LED state.
-// STA mode is also calling check_manual_switches() to catch
-// any user intervention to turn things on/off in normal use.
-// STA mode also calls the OTA handler to drive any OTA updating
-// while in STA mode
-// If WiFI is detected down in STA mode, it simply calls start_sta_mode()
-// again which will repeat the connect attempt. Helps cater for periodic
-// loss of WiFI
+// Iterates loop task array state machine and executes
+// functions based on gv_mode and msec interval 
+
 void loop()
 {
-    // timer reset
-    // for preventing watchdog resets
-    ESP.wdtFeed();
-
-    // wifi check interval
-    static unsigned long wifi_last_check = 0;
+    int i;
     unsigned long now;
 
-    switch (gv_mode) {
-      case MODE_INIT:
-        break;
-
-      case MODE_WIFI_AP:
-        gv_dns_server.processNextRequest();
-        gv_web_server.handleClient();
-        toggle_wifi_led(100); // fast flashing in AP mode
-        break;
-
-      case MODE_WIFI_STA:
-        // check wifi every 5s initiating
-        // sta mode again if required
+    while (gv_loop_tasks[i].fp != NULL) {
         now = millis();
-        if (now - wifi_last_check >= 5000) {
-            wifi_last_check = now;
-            //log_message("Checking wifi status");
-            if (WiFi.status() != WL_CONNECTED) {
-                 log_message("Detected WiFI Down in main loop");
-                 start_sta_mode();
-            }
-        }
-        else {
-            // normal STA mode loop handlers
-            gv_web_server.handleClient();
-            ArduinoOTA.handle();
-            check_manual_switches();
-            transition_leds();
-            handle_telnet_sessions();
-        }
-        break;
 
-      case MODE_WIFI_OTA:
-        // pure OTA only behaviour
-        ArduinoOTA.handle();
-        break;
+        // Check if mode mask matches current mode
+        // and that interval since last call >= delay between calls
+        // this is unsigned arithmetic and will nicdely handle a 
+        // wrap around of millis()
+        if ((gv_loop_tasks[i].mode_mask & gv_mode) &&
+            now - gv_loop_tasks[i].last_call 
+            >= gv_loop_tasks[i].millis_delay) {
+            gv_loop_tasks[i].last_call = now;
+            gv_loop_tasks[i].fp();
+        }
+        i++;
     }
 }
