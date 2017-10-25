@@ -302,23 +302,35 @@ gv_col_division_offset = 20
 
 # Zone Switchname
 gv_switch_tlist = [
-#   Zone                 Switch              On          Off       Override
-    ("Livingroom",       "Uplighter",        "sunset",   "0100",   "1200" ),
-    ("Playroom",         "Uplighter",        "sunset",   "0100",   "1200" ),
-    ("Kitchen",          "Counter Lights",   "sunset",   "0100",   "1200" ),
-    ("Cian's Room",      "Airplane Light",   "sunset",   "0100",   "1200" ),
+#   Zone                 Switch              On          Off
+    ("Livingroom",       "Uplighter",        "sunset",   "0100" ),
+    ("Playroom",         "Uplighter",        "sunset",   "0100" ),
+    ("Kitchen",          "Counter Lights",   "sunset",   "0100" ),
+    ("Cian's Room",      "Airplane Light",   "sunset",   "0100" ),
 
-    ("Attic Prototype",  "Sonoff Switch",    "1200",     "1205",   "2359" ),
-    ("Attic Prototype",  "Sonoff Switch",    "1230",     "1232",   "1200" ),
-    ("Attic Prototype",  "Sonoff Switch",    "1330",     "1400",   "2359" ),
-    ("Attic Prototype",  "Sonoff Switch",    "1500",     "1501",   "2359" ),
+    ("Attic Prototype",  "Sonoff Switch",    "1200",     "1205" ),
+    ("Attic Prototype",  "Sonoff Switch",    "1230",     "1232" ),
+    ("Attic Prototype",  "Sonoff Switch",    "1330",     "1400" ),
+    ("Attic Prototype",  "Sonoff Switch",    "1500",     "1501" ),
 
-    ("Attic Sonoff",     "Socket A",         "1120",     "1150",   "2359" ),
-    ("Attic Sonoff",     "Green LED A",      "1125",     "1145",   "2359" ),
+    ("Attic Sonoff",     "Socket A",         "1120",     "1150" ),
+    ("Attic Sonoff",     "Green LED A",      "1125",     "1145" ),
 
-    ("Attic Sonoff",     "Socket B",         "1500",     "1600",   "1200" ),
-    ("Attic Sonoff",     "Green LED B",      "1505",     "1510",   "1200" ),
+    ("Attic Sonoff",     "Socket B",         "1500",     "1600" ),
+    ("Attic Sonoff",     "Green LED B",      "1505",     "1510" ),
+
+    ("Sonoff test",      "A",                "sunset",   "0100" ),
 ]
+
+# Dict to track manual switch scenarios
+gv_manual_switch_dict = {}
+
+# Tracks expiry times of manual switch scenarios
+gv_manual_switch_expiry_ts_dict = {}
+
+# Manual over-ride expiry time for switches
+# this is in seconds
+gv_manual_switch_expiry_period = 3600
 
 def get_ip():
     # determine my default LAN IP
@@ -351,9 +363,10 @@ def sunset_api_time_to_epoch(time_str):
 def check_switch(zone_name, 
                  switch_name, 
                  current_time, 
-                 control_state):
+                 control_state,
+                 control_context):
 
-    global gv_sunset_on_time
+    global gv_sunset_on_time, gv_manual_switch_dict, gv_manual_switch_expiry_ts_dict, gv_manual_switch_expiry_period
 
     # represents state of switch
     # -1 do nothing.. not matched
@@ -361,7 +374,27 @@ def check_switch(zone_name,
     # 1 on
     desired_state = -1
 
-    for zone, switch, on_time, off_time, override_time in gv_switch_tlist:
+    # cater for manual over-rides
+    dict_key = '%s:%s' % (zone_name, switch_name)
+    now = time.time()
+    if control_context == 'manual':
+        if not dict_key in gv_manual_switch_dict:
+            gv_manual_switch_dict[dict_key] = control_state
+            gv_manual_switch_expiry_ts_dict[dict_key] = time.time() + gv_manual_switch_expiry_period
+            return -1
+        else:
+            # already exists.. manage expiry
+            override_expiry = gv_manual_switch_expiry_ts_dict[dict_key]
+
+            if override_expiry <= now:
+                # expire
+                del gv_manual_switch_dict[dict_key]
+                del gv_manual_switch_expiry_ts_dict[dict_key]
+            else:
+                # override still in effect
+                return -1
+
+    for zone, switch, on_time, off_time in gv_switch_tlist:
         if zone == zone_name and switch == switch_name:
             # have a match
             # desired state will have a value now
@@ -385,7 +418,6 @@ def check_switch(zone_name,
                 on_time = int(on_time)
 
             off_time = int(off_time)
-            override_time = int(override_time)
 
             if (on_time <= off_time):
                 if (current_time >= on_time and 
@@ -398,15 +430,6 @@ def check_switch(zone_name,
                     if (current_time < on_time and
                         current_time < off_time):
                         desired_state = 1
-
-            # override scenario turning on 
-            # before the scheduled on time
-            # stopping us turning off a switch
-            if (control_state == 1 and 
-                desired_state == 0 and
-                current_time < on_time and
-                current_time >= override_time):
-                desired_state = 1
 
     return desired_state
 
@@ -514,10 +537,20 @@ def check_automated_devices():
 
             if control_type == 'switch':
                 control_state = int(control['state'])
+
+                # determine context
+                # assume network if not present
+                # (older firmware)
+                if 'context' in control:
+                    control_context = control['context']
+                else:
+                    control_context = 'network'
+
                 desired_state = check_switch(zone_name, 
                                              control_name,
                                              current_time,
-                                             control_state)
+                                             control_state,
+                                             control_context)
  
                 # If switch state not in desired state
                 # update and recache the status
