@@ -1113,7 +1113,7 @@ def build_device_web_page(num_cols):
         href_url = ('/device?device=%s'
                     '&reboot=1') % (url_safe_device)
 
-        # jquery code for click
+        # jquery code for reboot click
         reboot_str = click_get_reload_template
         jquery_click_id = 'reboot_device%d' % (device_id)
         reboot_str = reboot_str.replace("__ID__", jquery_click_id)
@@ -1123,6 +1123,31 @@ def build_device_web_page(num_cols):
         dashboard_col_list[col_index] += (
                 '<tr>'
                 '<td class="dash-label">Reboot</td>'
+                '<td align="center">'
+                '<label class="switch">'
+                '<input type="checkbox" id="%s">'
+                '<div class="slider round"></div>'
+                '</label>'
+                '</td>'
+                '</tr>') % (jquery_click_id)
+
+        # apmode URL
+        # carries device name and apmode=1
+        # directive
+        url_safe_device = urllib.parse.quote_plus(device_name)
+        href_url = ('/device?device=%s'
+                    '&apmode=1') % (url_safe_device)
+
+        # jquery code for apmode click
+        apmode_str = click_get_reload_template
+        jquery_click_id = 'apmode_device%d' % (device_id)
+        apmode_str = apmode_str.replace("__ID__", jquery_click_id)
+        apmode_str = apmode_str.replace("__URL__", href_url)
+        jquery_str += apmode_str
+
+        dashboard_col_list[col_index] += (
+                '<tr>'
+                '<td class="dash-label">AP Mode</td>'
                 '<td align="center">'
                 '<label class="switch">'
                 '<input type="checkbox" id="%s">'
@@ -1264,7 +1289,7 @@ def build_device_web_page(num_cols):
     return web_page_str
 
 
-def process_console_action(device, zone, control, reboot, state):
+def process_console_action(device, zone, control, reboot, apmode, state):
 
     command_url_list = []
 
@@ -1288,6 +1313,17 @@ def process_console_action(device, zone, control, reboot, state):
                                        device))
 
             command_url_list.append('%s?reboot=1' % (url))
+
+    if (device is not None and
+        apmode is not None):
+
+        if device in gv_jbhasd_device_url_dict:
+            url = gv_jbhasd_device_url_dict[device]
+
+            print("%s Rebooting %s into AP Mode" % (time.asctime(),
+                                                    device))
+
+            command_url_list.append('%s?apmode=1' % (url))
 
     if (device is not None and
         zone is not None and
@@ -1385,7 +1421,8 @@ class web_console_zone_handler(object):
 
         # process actions if present
         reboot = None
-        process_console_action(device, zone, control, reboot, state)
+        apmode = None
+        process_console_action(device, zone, control, reboot, apmode, state)
 
         # if we're in poll mode
         # we need to stall until there is a 
@@ -1410,7 +1447,7 @@ class web_console_zone_handler(object):
 class web_console_device_handler(object):
     @cherrypy.expose()
 
-    def index(self, device=None, zone=None, control=None, state=None, reboot=None, width=None):
+    def index(self, device=None, zone=None, control=None, state=None, reboot=None, apmode=None, width=None):
         global gv_poll_timestamp
 
         print("%s device client:%s:%d params:%s" % (time.asctime(),
@@ -1433,7 +1470,7 @@ class web_console_device_handler(object):
                                          gv_col_division_offset))
 
         # process actions if present
-        process_console_action(device, zone, control, reboot, state)
+        process_console_action(device, zone, control, reboot, apmode, state)
 
         # return dashboard in specified number of 
         # columns
