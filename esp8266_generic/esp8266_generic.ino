@@ -359,17 +359,26 @@ void check_manual_switches()
 {
     int i;
     int button_state;
-    int delay_msecs = 500;
     int took_action = 0;
+    static unsigned long last_action_timestamp = 0;
     WiFiClient wifi_client;
     int rc;
 
     //disabled to keep the serial activity quiet
     //log_message("check_manual_switches()");
-    //delay(delay_msecs);
 
     if (!gv_config.manual_switches_enabled) {
         //log_message("manual switches disabled.. returning");
+        return;
+    }
+
+    if (millis() - last_action_timestamp < 500) {
+        // fast repeat switching bypassed
+        // the loop calls this function every 100ms
+        // that will ensure a rapid response to a switch
+        // press but we don't want 10 actions per second
+        // so as soon as a switch is pressed, we want 500 msecs
+        // grace before we allow that again
         return;
     }
 
@@ -453,6 +462,10 @@ void check_manual_switches()
     }
 
     if (took_action) {
+        // record timestamp for fast
+        // re-entry protection
+        last_action_timestamp = millis();
+
         // Send update push if WiFI up
         if (gv_mode == MODE_WIFI_STA_UP && 
             strlen(gv_push_ip) > 0) {
@@ -1805,8 +1818,6 @@ void ap_handle_root() {
     }
 
     if (store_config) {
-        // unset the force apmode option
-        gv_config.force_apmode_onboot = 0;
         save_config();
         gv_web_server.send(200, "text/html", "Applying settings and rebooting");
         ESP.restart();
@@ -2292,12 +2303,10 @@ void start_sta_mode_services()
 {
     log_message("start_sta_mode_services()");
 
-    // Activate switches & LEDs
+    // Activate switches, sensors & LEDs
     // to reset all to defaults
     setup_switches();
     setup_leds();
-
-    // sensors
     setup_sensors();
 
     gv_sta_ip = WiFi.localIP();
@@ -2338,6 +2347,10 @@ void start_sta_mode_services()
 // (wifi SSID blank), then it forces itself into AP mode
 void setup()
 {
+    int pin_wait_timer = 25;
+    int delay_msecs = 200;
+    int button_state;
+
     gv_mode = MODE_INIT;
 
     // Get the config at this stage
@@ -2367,20 +2380,19 @@ void setup()
     // Init Push IP
     gv_push_ip[0] = '\0';
 
-    // Activate switches and leds
-    // will perform full setup
-    // even though we may over-ride some pins
-    // helps get relays on ASAP if you have chosen
-    // initial state of on
-    setup_switches();
-    setup_leds();
-
     // Set up status LED
     pinMode(gv_profile->wifi_led_pin, OUTPUT);
 
     // forced AP mode from config
+    // Before we launch AP mode
+    // we first unset this option and save
+    // config.. that ensures that if power cycled, 
+    // the device will boot as normal and not 
+    // remain in AP mode
     if (gv_config.force_apmode_onboot == 1) {
         log_message("Detected forced AP Mode");
+        gv_config.force_apmode_onboot = 0;
+        save_config();
         start_ap_mode();
         return;
     }
@@ -2398,9 +2410,6 @@ void setup()
     // in the form of 25x200ms delay. That will let us
     // jump into AP mode
     pinMode(gv_profile->boot_program_pin, INPUT_PULLUP);
-    int pin_wait_timer = 25;
-    int delay_msecs = 200;
-    int button_state;
 
     log_message("Entering pin wait stage");
     while (pin_wait_timer > 0) {
@@ -2416,6 +2425,12 @@ void setup()
     }
 
     log_message("Passed pin wait stage.. normal startup");
+
+    // Activate switches, leds and sensors
+    setup_switches();
+    setup_leds();
+    setup_sensors();
+
     start_wifi_sta_mode();
 }
 
@@ -2564,7 +2579,7 @@ struct loop_task gv_loop_tasks[] = {
     {
         // Manual Switches
         MODE_WIFI_STA_DOWN | MODE_WIFI_STA_UP,   // Mode
-        400,                                     // msec delay every 1/2 sec
+        100,                                     // msec delay every 1/10 sec
         check_manual_switches                    // Function
     },
 
