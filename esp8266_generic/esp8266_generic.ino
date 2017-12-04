@@ -2295,6 +2295,7 @@ void start_wifi_sta_mode()
     // WIFI
     WiFi.disconnect();
     WiFi.mode(WIFI_STA);
+    WiFi.hostname(gv_mdns_hostname);
     WiFi.begin(gv_config.wifi_ssid,
                gv_config.wifi_password);
 }
@@ -2373,7 +2374,7 @@ void setup()
     // will also use this for AP SSID
     // and OTA mode
     ets_sprintf(gv_mdns_hostname,
-                "esp8266-%d-%s",
+                "ESP-%08X-%s",
                 ESP.getChipId(),
                 gv_config.zone);
 
