@@ -304,9 +304,11 @@ gv_col_division_offset = 20
 gv_switch_tlist = [
 #   Zone                 Switch              On          Off
     ("Livingroom",       "Uplighter",        "sunset",   "0100" ),
+    ("Livingroom",       "Window Lights",    "sunset",   "0100" ),
     ("Playroom",         "Uplighter",        "sunset",   "0100" ),
     ("Kitchen",          "Counter Lights",   "sunset",   "0100" ),
     ("Cian's Room",      "Airplane Light",   "sunset",   "0100" ),
+    ("Hall",             "Stairs",           "sunset",   "0100" ),
 
     ("Attic Prototype",  "Sonoff Switch",    "1200",     "1205" ),
     ("Attic Prototype",  "Sonoff Switch",    "1230",     "1232" ),
@@ -330,7 +332,7 @@ gv_manual_switch_expiry_ts_dict = {}
 
 # Manual over-ride expiry time for switches
 # this is in seconds
-gv_manual_switch_expiry_period = 3600
+gv_manual_switch_expiry_period = 3600 * 5
 
 def get_ip():
     # determine my default LAN IP
@@ -376,20 +378,23 @@ def check_switch(zone_name,
 
     # cater for manual over-rides
     dict_key = '%s:%s' % (zone_name, switch_name)
+    #print("Key %s" % (dict_key))
     now = time.time()
     if control_context == 'manual':
         if not dict_key in gv_manual_switch_dict:
             gv_manual_switch_dict[dict_key] = control_state
-            gv_manual_switch_expiry_ts_dict[dict_key] = time.time() + gv_manual_switch_expiry_period
+            gv_manual_switch_expiry_ts_dict[dict_key] = now + gv_manual_switch_expiry_period
             return -1
         else:
             # already exists.. manage expiry
             override_expiry = gv_manual_switch_expiry_ts_dict[dict_key]
+            #print("Expiry at %d, now is %d.. %d seconds from now" % (override_expiry, now, override_expiry - now))
 
             if override_expiry <= now:
                 # expire
                 del gv_manual_switch_dict[dict_key]
                 del gv_manual_switch_expiry_ts_dict[dict_key]
+                #print("Expired over-ride")
             else:
                 # override still in effect
                 return -1
@@ -431,6 +436,7 @@ def check_switch(zone_name,
                         current_time < off_time):
                         desired_state = 1
 
+    #print("return %d" % (desired_state))
     return desired_state
 
 
@@ -554,7 +560,8 @@ def check_automated_devices():
  
                 # If switch state not in desired state
                 # update and recache the status
-                if (desired_state != -1 and control_state != desired_state):
+                if (desired_state != -1 and (control_state != desired_state or 
+                                             control_context == 'manual')):
                     print("%s Automatically setting %s/%s to state:%s" % (time.asctime(),
                                                                           zone_name,
                                                                           control_name,
