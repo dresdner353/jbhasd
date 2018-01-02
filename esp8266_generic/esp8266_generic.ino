@@ -2304,12 +2304,6 @@ void start_sta_mode_services()
 {
     log_message("start_sta_mode_services()");
 
-    // Activate switches, sensors & LEDs
-    // to reset all to defaults
-    setup_switches();
-    setup_leds();
-    setup_sensors();
-
     gv_sta_ip = WiFi.localIP();
     log_message("Connected.. IP:%d.%d.%d.%d",
                   gv_sta_ip[0],
@@ -2337,6 +2331,39 @@ void start_sta_mode_services()
     start_telnet();
 }
 
+
+// Function: check_boot_ap_switch
+// Checks for a pressed state on the boot program
+// pin to drive a switch to AP mode
+void check_boot_ap_switch()
+{
+    static unsigned char pin_wait_timer = 25;
+    int button_state;
+
+	// Can toggle LED with no 
+	// delay as the main loop tasks
+	// apply the timing
+    toggle_wifi_led(0);
+
+	// decrement pin wait timer on each call
+	// 25 calls against a 200msec call interval
+	// is roughly 5 seconds
+    if (pin_wait_timer > 0) {
+        log_message("Button wait #%d", pin_wait_timer);
+        button_state = digitalRead(gv_profile->boot_program_pin);
+        if (button_state == LOW) {
+            log_message("Detected pin down.. going to AP mode");
+            start_ap_mode();
+            return;
+        }
+        pin_wait_timer--;
+    }
+    else {
+        log_message("Passed pin wait stage.. going to STA mode");
+        start_wifi_sta_mode();
+    }
+}
+
 // Function: setup
 // Standard setup initialisation callback function
 // Does an initial config load and switch setup.
@@ -2348,10 +2375,6 @@ void start_sta_mode_services()
 // (wifi SSID blank), then it forces itself into AP mode
 void setup()
 {
-    int pin_wait_timer = 25;
-    int delay_msecs = 200;
-    int button_state;
-
     gv_mode = MODE_INIT;
 
     // Get the config at this stage
@@ -2406,33 +2429,16 @@ void setup()
         return;
     }
 
-    // Assuming we've got legit config in play
-    // we give 5 seconds or so to activate the reset pin
-    // in the form of 25x200ms delay. That will let us
-    // jump into AP mode
+	// Init Boot program pin for detecting manual
+	// jump to AP mode at boot stage
     pinMode(gv_profile->boot_program_pin, INPUT_PULLUP);
-
-    log_message("Entering pin wait stage");
-    while (pin_wait_timer > 0) {
-        log_message("Button wait #%d", pin_wait_timer);
-        toggle_wifi_led(delay_msecs);
-        button_state = digitalRead(gv_profile->boot_program_pin);
-        if (button_state == LOW) {
-            log_message("Detected pin down.. going to AP mode");
-            start_ap_mode();
-            return;
-        }
-        pin_wait_timer--;
-    }
-
-    log_message("Passed pin wait stage.. normal startup");
 
     // Activate switches, leds and sensors
     setup_switches();
     setup_leds();
     setup_sensors();
 
-    start_wifi_sta_mode();
+    log_message("Setup stage complete");
 }
 
 // task loop state machine 
@@ -2550,12 +2556,21 @@ struct loop_task gv_loop_tasks[] = {
         1,                               // msec delay
         loop_task_webserver              // Function
     },
+
     {
         // DNS Server
         MODE_WIFI_AP,  // Mode
         1,             // msec delay
         loop_task_dns  // Function
     },
+
+    {
+        // Init Mode button push
+        MODE_INIT,         // Mode
+        200,               // msec delay every 1/5 sec
+        check_boot_ap_switch  // Function
+    },
+
     {
         // AP WiFI LED
         MODE_WIFI_AP,       // Mode
@@ -2595,9 +2610,13 @@ struct loop_task gv_loop_tasks[] = {
         // LED Transtions
         // Requires no delay as the code uses 
         // its own internal msec scheduling
-        MODE_WIFI_STA_UP | MODE_WIFI_STA_DOWN,   // Mode
-        0,                                       // no delay
-        transition_leds                          // Function
+        // Also runs in both STA modes
+        // and init mode ensuring LEDs start working right
+        // away at boot time even during the 5-sec AP mode 
+        // wait
+        MODE_WIFI_STA_UP | MODE_WIFI_STA_DOWN | MODE_INIT, // Mode
+        0,                                                 // no delay
+        transition_leds                                    // Function
     },
 
     {
