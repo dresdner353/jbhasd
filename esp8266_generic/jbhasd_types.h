@@ -182,8 +182,11 @@ enum gv_logging_enum gv_logging = LOGGING_NONE;
 
 // Main loop ticker timing
 struct loop_task {
+    char *name;
     int mode_mask;
     unsigned long millis_delay;
     void (*fp)(void);
     unsigned long last_call;
+    unsigned long num_calls;
+    unsigned long cpu_time;
 };
