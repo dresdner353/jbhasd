@@ -122,9 +122,40 @@ void log_message(char *format, ... )
     static char log_buf[LOGBUF_MAX + 1];
     int i;
     va_list args;
+    unsigned long now;
+    unsigned long days;
+    unsigned long hours;
+    unsigned long mins;
+    unsigned long secs;
+    unsigned long msecs;
+    unsigned long remainder;
 
+    // Timestamp
+    // Break down relative msecs
+    // into days, hours. mins, secs & msecs
+    now = millis();
+    days = now / (1000 * 60 * 60 * 24);
+    remainder = now % (1000 * 60 * 60 * 24);
+    hours = remainder / (1000 * 60 * 60);
+    remainder = remainder % (1000 * 60 * 60);
+    mins = remainder / (1000 * 60);
+    remainder = remainder % (1000 * 60);
+    secs = remainder / 1000;
+    msecs = remainder % 1000;
+
+    // pre-write timestamp to log buffer
+    ets_sprintf(log_buf,
+                "%02u:%02u:%02u:%02u:%03u  ",
+                days,
+                hours,
+                mins,
+                secs,
+                msecs);
+
+    // handle va arg list and write to buffer offset by 
+    // existing timestamp length
     va_start(args, format);
-    vsnprintf(log_buf,
+    vsnprintf(log_buf + strlen(log_buf),
               LOGBUF_MAX,
               format,
               args);
@@ -2466,12 +2497,20 @@ void loop_task_check_wifi_down(void)
 void loop_task_check_wifi_up(void)
 {
     int i;
-    // every 2 secs * 1800.. about 1 hour
-    // before it will auto-reboot after losing WiFI
-    int max_checks = 1800; 
     static int check_count = 0;
 
+    // This function gets called every 2 secs
+    // So 1800 calls is about 1 hour
+    int max_checks_before_reboot = 1800; 
+
+    // Every 15 checks, we will try to reconnect WiFI
+    // Thats about 30 seconds grace to a establish WiFI
+    int max_checks_before_reconnect = 15;
+
     log_message("loop_task_check_wifi_up()");
+
+    check_count++;
+
     if (WiFi.status() == WL_CONNECTED) {
         log_message("WiFI has come up");
         gv_mode = MODE_WIFI_STA_UP;
@@ -2495,12 +2534,19 @@ void loop_task_check_wifi_up(void)
         start_sta_mode_services();
     }
     else {
-        // check for max checks and restart
-        check_count++;
-        if (check_count > max_checks) {
-            log_message("Exceeded max checks of %d.. rebooting",
-                        max_checks);
-            ESP.restart();
+
+        if (check_count % max_checks_before_reconnect == 0) {
+            log_message("Exceeded max checks of %d.. reconnecting WiFI",
+                        max_checks_before_reconnect);
+            start_wifi_sta_mode();
+        }
+        else {
+            // check for max checks and restart
+            if (check_count > max_checks_before_reboot) {
+                log_message("Exceeded max checks of %d.. rebooting",
+                            max_checks_before_reboot);
+                ESP.restart();
+            }
         }
     }
 }
@@ -2508,11 +2554,6 @@ void loop_task_check_wifi_up(void)
 void loop_task_webserver(void)
 {
     gv_web_server.handleClient();
-}
-
-void loop_task_wdt(void)
-{
-    ESP.wdtFeed();
 }
 
 void loop_task_dns(void)
@@ -2532,6 +2573,7 @@ void loop_task_wifi_led(void)
     toggle_wifi_led(0); 
 }
 
+
 // loop tasks
 // Each task lists its state machine modes (mask)
 // msec delay between calls
@@ -2544,28 +2586,24 @@ void loop_task_wifi_led(void)
 struct loop_task gv_loop_tasks[] = {
 
     {
-        // WDT Timer
-        MODE_ALL,      // Mode
-        1,             // msec delay
-        loop_task_wdt  // Function
-    },
-
-    {
         // Web Server (AP)
+        "Webserver",
         MODE_WIFI_AP | MODE_WIFI_STA_UP, // Mode
-        1,                               // msec delay
+        10,                              // msec delay
         loop_task_webserver              // Function
     },
 
     {
         // DNS Server
+        "DNS",
         MODE_WIFI_AP,  // Mode
-        1,             // msec delay
+        10,            // msec delay
         loop_task_dns  // Function
     },
 
     {
         // Init Mode button push
+        "Boot AP Switch",
         MODE_INIT,         // Mode
         200,               // msec delay every 1/5 sec
         check_boot_ap_switch  // Function
@@ -2573,6 +2611,7 @@ struct loop_task gv_loop_tasks[] = {
 
     {
         // AP WiFI LED
+        "AP Status LED",
         MODE_WIFI_AP,       // Mode
         100,                // msec delay every 1/5 sec
         loop_task_wifi_led  // Function
@@ -2580,13 +2619,15 @@ struct loop_task gv_loop_tasks[] = {
 
     {
         // STA WiFI LED
+        "STA Status LED",
         MODE_WIFI_STA_DOWN, // Mode
         1000,               // msec delay every sec
         loop_task_wifi_led  // Function
     },
 
     {
-        // WiFI Check (Down)
+        // WiFI Check (While Down)
+        "WiFI Status Up Check",
         MODE_WIFI_STA_DOWN,      // Mode
         2000,                    // msec delay every 2 secs
         loop_task_check_wifi_up  // Function
@@ -2594,13 +2635,15 @@ struct loop_task gv_loop_tasks[] = {
 
     {
         // Manual Switches
+        "Manual Switch Checks",
         MODE_WIFI_STA_DOWN | MODE_WIFI_STA_UP,   // Mode
         100,                                     // msec delay every 1/10 sec
         check_manual_switches                    // Function
     },
 
     {
-        // WiFI Check (Up)
+        // WiFI Check (While Up)
+        "WiFI Status Down Check",
         MODE_WIFI_STA_UP,          // Mode
         10000,                     // msec delay every 10 secs
         loop_task_check_wifi_down  // Function
@@ -2614,6 +2657,7 @@ struct loop_task gv_loop_tasks[] = {
         // and init mode ensuring LEDs start working right
         // away at boot time even during the 5-sec AP mode 
         // wait
+        "PWM LED Transitions",
         MODE_WIFI_STA_UP | MODE_WIFI_STA_DOWN | MODE_INIT, // Mode
         0,                                                 // no delay
         transition_leds                                    // Function
@@ -2621,6 +2665,7 @@ struct loop_task gv_loop_tasks[] = {
 
     {
         // Telnet Sessions
+        "Telnet Sessions",
         MODE_WIFI_STA_UP,      // Mode
         1000,                  // msec delay every 1 second
         handle_telnet_sessions // Function
@@ -2628,18 +2673,48 @@ struct loop_task gv_loop_tasks[] = {
 
     {
         // OTA (STA)
+        "OTA",
         MODE_WIFI_STA_UP | MODE_WIFI_OTA,  // Mode
         1,                                 // 1 msec delay
         loop_task_ota                      // Function
     },
 
     {
+        // Task Stat logging
+        "Stat Logging",
+        MODE_ALL,           // Mode
+        30000,              // Every 30 seconds
+        loop_task_log_stats // Function
+    },
+
+    {
         // terminator.. never delete
+        "Terminator",
         MODE_INIT,
         0,
         NULL // null func ptr terminates loop
     }
 };
+
+void loop_task_log_stats(void)
+{
+    int i = 0;
+
+    log_message("loop_task_log_stats()");
+    while (gv_loop_tasks[i].fp != NULL) {
+        if (gv_loop_tasks[i].num_calls > 0) {
+            log_message("  Task:%s Calls:%u CpuTime:%u",
+                        gv_loop_tasks[i].name,
+                        gv_loop_tasks[i].num_calls,
+                        gv_loop_tasks[i].cpu_time);
+        }
+
+        gv_loop_tasks[i].num_calls = 0;
+        gv_loop_tasks[i].cpu_time = 0;
+        i++;
+    }
+}
+
 
 // Function: loop
 // Iterates loop task array state machine and executes
@@ -2647,22 +2722,46 @@ struct loop_task gv_loop_tasks[] = {
 
 void loop()
 {
-    int i;
+    int i = 0;
     unsigned long now;
+    static int first_run = 1;
+
+    // Keep the sw watchdog happy
+    ESP.wdtFeed();
 
     while (gv_loop_tasks[i].fp != NULL) {
         now = millis();
 
+        // inits for each task 
+        // during very first loop() call
+        if (first_run) {
+            gv_loop_tasks[i].last_call = 0;
+            gv_loop_tasks[i].num_calls = 0;
+            gv_loop_tasks[i].cpu_time = 0;
+        }
+
         // Check if mode mask matches current mode
         // and that interval since last call >= delay between calls
-        // this is unsigned arithmetic and will nicdely handle a 
+        // this is unsigned arithmetic and will nicely handle a 
         // wrap around of millis()
         if ((gv_loop_tasks[i].mode_mask & gv_mode) &&
             now - gv_loop_tasks[i].last_call 
             >= gv_loop_tasks[i].millis_delay) {
+
+            // Record call time
             gv_loop_tasks[i].last_call = now;
+
+            // Call function
             gv_loop_tasks[i].fp();
+
+            // Calculate call stats
+            now = millis();
+            gv_loop_tasks[i].cpu_time += (now - gv_loop_tasks[i].last_call);
+            gv_loop_tasks[i].num_calls++;
         }
         i++;
     }
+
+    // Disable first run handling from now on
+    first_run = 0;
 }
