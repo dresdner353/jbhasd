@@ -2324,7 +2324,7 @@ void start_wifi_sta_mode()
     gv_mode = MODE_WIFI_STA_DOWN;
 
     // WIFI
-    WiFi.disconnect();
+    //WiFi.disconnect();
     WiFi.mode(WIFI_STA);
     WiFi.hostname(gv_mdns_hostname);
     WiFi.begin(gv_config.wifi_ssid,
@@ -2497,22 +2497,21 @@ void loop_task_check_wifi_down(void)
 void loop_task_check_wifi_up(void)
 {
     int i;
+    int status;
     static int check_count = 0;
 
     // This function gets called every 2 secs
     // So 1800 calls is about 1 hour
     int max_checks_before_reboot = 1800; 
 
-    // Every 15 checks, we will try to reconnect WiFI
-    // Thats about 30 seconds grace to a establish WiFI
-    int max_checks_before_reconnect = 15;
-
     log_message("loop_task_check_wifi_up()");
 
     check_count++;
 
-    if (WiFi.status() == WL_CONNECTED) {
-        log_message("WiFI has come up");
+    status = WiFi.status();
+    log_message("WiFI Status: %d", status);
+    if (status == WL_CONNECTED) {
+        log_message("WiFI is up");
         gv_mode = MODE_WIFI_STA_UP;
 
         // quick LED burst
@@ -2534,19 +2533,14 @@ void loop_task_check_wifi_up(void)
         start_sta_mode_services();
     }
     else {
+        log_message("WiFI is down");
+        WiFi.printDiag(Serial);
 
-        if (check_count % max_checks_before_reconnect == 0) {
-            log_message("Exceeded max checks of %d.. reconnecting WiFI",
-                        max_checks_before_reconnect);
-            start_wifi_sta_mode();
-        }
-        else {
-            // check for max checks and restart
-            if (check_count > max_checks_before_reboot) {
-                log_message("Exceeded max checks of %d.. rebooting",
-                            max_checks_before_reboot);
-                ESP.restart();
-            }
+        // check for max checks and restart
+        if (check_count > max_checks_before_reboot) {
+            log_message("Exceeded max checks of %d.. rebooting",
+                        max_checks_before_reboot);
+            ESP.restart();
         }
     }
 }
