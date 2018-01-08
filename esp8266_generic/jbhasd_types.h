@@ -163,6 +163,7 @@ struct eeprom_config {
 #define MODE_ALL           0xFF  // All states 
 
 int gv_mode = MODE_INIT;
+int gv_reboot_requested = 0;
 
 #define LOGBUF_MAX 2048
 

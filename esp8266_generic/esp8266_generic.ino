@@ -1851,7 +1851,7 @@ void ap_handle_root() {
     if (store_config) {
         save_config();
         gv_web_server.send(200, "text/html", "Applying settings and rebooting");
-        ESP.restart();
+        gv_reboot_requested = 1;
     }
     else {
         // Just return the pre-formatted web page we built at
@@ -2288,7 +2288,7 @@ void sta_handle_json() {
     // reboot if directed
     if (gv_web_server.hasArg("reboot")) {
         log_message("Received reboot command");
-        ESP.restart();
+        gv_reboot_requested = 1;
     }
 
     // jump to ap mode if directed
@@ -2298,7 +2298,7 @@ void sta_handle_json() {
         log_message("Received apmode command");
         gv_config.force_apmode_onboot = 1;
         save_config();
-        ESP.restart();
+        gv_reboot_requested = 1;
     }
 
     // factory reset if directed
@@ -2306,7 +2306,7 @@ void sta_handle_json() {
         log_message("Received reset command");
         reset_config();
         save_config();
-        ESP.restart();
+        gv_reboot_requested = 1;
     }
 }
 
@@ -2540,7 +2540,7 @@ void loop_task_check_wifi_up(void)
         if (check_count > max_checks_before_reboot) {
             log_message("Exceeded max checks of %d.. rebooting",
                         max_checks_before_reboot);
-            ESP.restart();
+            gv_reboot_requested = 1;
         }
     }
 }
@@ -2568,6 +2568,13 @@ void loop_task_wifi_led(void)
 }
 
 
+void loop_task_reboot(void)
+{
+    if (gv_reboot_requested) {
+        ESP.restart();
+    }
+}
+
 // loop tasks
 // Each task lists its state machine modes (mask)
 // msec delay between calls
@@ -2578,6 +2585,13 @@ void loop_task_wifi_led(void)
 // zero delay to ensure it can compute timing correctly
 
 struct loop_task gv_loop_tasks[] = {
+    {
+        // Reboot
+        "Reboot",
+        MODE_ALL,           // Mode
+        5000,               // Every 5 seconds
+        loop_task_reboot    // Function
+    },
 
     {
         // Web Server (AP)
@@ -2680,7 +2694,7 @@ struct loop_task gv_loop_tasks[] = {
         30000,              // Every 30 seconds
         loop_task_log_stats // Function
     },
-
+    
     {
         // terminator.. never delete
         "Terminator",
