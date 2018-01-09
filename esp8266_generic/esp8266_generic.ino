@@ -395,11 +395,7 @@ void check_manual_switches()
     WiFiClient wifi_client;
     int rc;
 
-    //disabled to keep the serial activity quiet
-    //log_message("check_manual_switches()");
-
     if (!gv_config.manual_switches_enabled) {
-        //log_message("manual switches disabled.. returning");
         return;
     }
 
@@ -423,7 +419,6 @@ void check_manual_switches()
         // Excludes non-relevant or config-disabled entries
         if (strlen(gv_profile->switch_register[i].name) > 0 &&
             gv_profile->switch_register[i].manual_pin != NO_PIN) {
-            //log_message("Check Manual pin:%d", gv_profile->switch_register[i].manual_pin);
             button_state = digitalRead(gv_profile->switch_register[i].manual_pin);
             if (button_state == LOW) {
                 log_message("Detected manual push on switch:%s pin:%d",
@@ -475,7 +470,6 @@ void check_manual_switches()
         // Excludes non-relevant or config-disabled entries
         if (strlen(gv_profile->led_register[i].name) > 0 &&
             gv_profile->led_register[i].manual_pin != NO_PIN) {
-            //log_message("Check Manual pin:%d", gv_profile->led_register[i].manual_pin);
             button_state = digitalRead(gv_profile->led_register[i].manual_pin);
             if (button_state == LOW) {
                 log_message("Detected manual push on led:%s pin:%d",
@@ -506,8 +500,9 @@ void check_manual_switches()
             // for GET and PUSH and just got
             // grief from the python web server
 
-            log_message("pushing update request to host:%s port:%d", gv_push_ip,
-                                                                       gv_push_port);
+            log_message("pushing update request to host:%s port:%d", 
+                        gv_push_ip,
+                        gv_push_port);
 
             ets_sprintf(gv_small_buffer_1,
                        "update=%s",
@@ -1571,7 +1566,8 @@ void load_config()
                 "OTA Update:%u "
                 "Telnet:%u "
                 "Temp Offset:%s "
-                "Manual switches:%u ",
+                "Manual switches:%u "
+                "Force AP Mode on Boot:%u ",
                 gv_config.marker,
                 gv_config.profile,
                 gv_config.zone,
@@ -1580,7 +1576,8 @@ void load_config()
                 gv_config.ota_enabled,
                 gv_config.telnet_enabled,
                 gv_config.temp_offset,
-                gv_config.manual_switches_enabled);
+                gv_config.manual_switches_enabled,
+                gv_config.force_apmode_onboot);
 
     // Print values of each switch name
     for (i = 0; i < MAX_SWITCHES; i++) {
@@ -1616,7 +1613,7 @@ void save_config()
 
     gv_config.marker = CFG_MARKER_VAL;
 
-    log_message("Writing EEPROM data..");
+    log_message("Config Summary...");
     log_message("Marker:%02X "
                 "Profile:%s "
                 "Zone:%s "
@@ -1625,7 +1622,8 @@ void save_config()
                 "OTA Update:%u "
                 "Telnet:%u "
                 "Temp Offset:%s "
-                "Manual switches:%u ",
+                "Manual switches:%u "
+                "Force AP Mode on Boot:%u ",
                 gv_config.marker,
                 gv_config.profile,
                 gv_config.zone,
@@ -1634,7 +1632,8 @@ void save_config()
                 gv_config.ota_enabled,
                 gv_config.telnet_enabled,
                 gv_config.temp_offset,
-                gv_config.manual_switches_enabled);
+                gv_config.manual_switches_enabled,
+                gv_config.force_apmode_onboot);
 
     // Print values of each switch name
     for (i = 0; i < MAX_SWITCHES; i++) {
@@ -1660,7 +1659,7 @@ void save_config()
                     gv_config.led_programs[i]);
     }
 
-    log_message("Read EEPROM data..(%d bytes)", sizeof(gv_config));
+    log_message("Write EEPROM data..(%d bytes)", sizeof(gv_config));
     EEPROM.begin(sizeof(gv_config) + 10);
     EEPROM.put(0, gv_config);
     EEPROM.commit();
@@ -1925,7 +1924,10 @@ void start_ota()
 
     ArduinoOTA.onProgress([](unsigned int progress,
                              unsigned int total) {
-        log_message("Progress: %02u%%\r", (progress / (total / 100)));
+        log_message("OTA Progress: %d/%d (%02u%%)", 
+                    progress, 
+                    total, 
+                    (progress / (total / 100)));
     });
 
     ArduinoOTA.onError([](ota_error_t error) {
@@ -2312,9 +2314,6 @@ void sta_handle_json() {
 
 // Function: start_wifi_sta_mode
 // Configures the device as a WiFI client
-// giving it about 2 minutes to get connected
-// Once connected, it sets up the web handlers for root
-// and /json
 void start_wifi_sta_mode()
 {
     log_message("start_wifi_sta_mode()");
@@ -2324,13 +2323,16 @@ void start_wifi_sta_mode()
     gv_mode = MODE_WIFI_STA_DOWN;
 
     // WIFI
-    //WiFi.disconnect();
     WiFi.mode(WIFI_STA);
     WiFi.hostname(gv_mdns_hostname);
     WiFi.begin(gv_config.wifi_ssid,
                gv_config.wifi_password);
 }
 
+
+// Function: start_sta_mode_services
+// Run after we confirm WiFI up
+// records IP and starts MDNS & DNS-SD
 void start_sta_mode_services()
 {
     log_message("start_sta_mode_services()");
@@ -2413,8 +2415,9 @@ void setup()
     load_config();
     start_serial();
 
-    // timer reset
-    // helps stop spontaneous watchdog
+    // Watchdog timer reconfigure
+    // for longer period (8 seconds)
+    // Helps stop spontaneous watchdog
     // timers resetting the device
     ESP.wdtDisable();
     ESP.wdtEnable(WDTO_8S);
@@ -2424,7 +2427,7 @@ void setup()
                 ESP.getFreeHeap(),
                 ESP.getResetReason().c_str());
 
-    // Set mdns hostname based on prefix, chip ID and zone
+    // Set MDNS hostname based on prefix, chip ID and zone
     // will also use this for AP SSID
     // and OTA mode
     ets_sprintf(gv_mdns_hostname,
@@ -2534,7 +2537,6 @@ void loop_task_check_wifi_up(void)
     }
     else {
         log_message("WiFI is down");
-        WiFi.printDiag(Serial);
 
         // check for max checks and restart
         if (check_count > max_checks_before_reboot) {
@@ -2571,6 +2573,7 @@ void loop_task_wifi_led(void)
 void loop_task_reboot(void)
 {
     if (gv_reboot_requested) {
+        log_message("Calling ESP.restart()");
         ESP.restart();
     }
 }
