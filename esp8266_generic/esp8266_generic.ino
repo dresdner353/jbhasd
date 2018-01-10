@@ -2577,6 +2577,12 @@ void loop_task_reboot(void)
     }
 }
 
+void loop_task_ap_reboot(void)
+{
+    log_message("Rebooting from AP Mode (timeout)");
+    gv_reboot_requested = 1;
+}
+
 // loop tasks
 // Each task lists its state machine modes (mask)
 // msec delay between calls
@@ -2593,6 +2599,14 @@ struct loop_task gv_loop_tasks[] = {
         MODE_ALL,           // Mode
         5000,               // Every 5 seconds
         loop_task_reboot    // Function
+    },
+
+    {
+        // AP auto-reboot
+        "AP Reboot Timer",
+        MODE_WIFI_AP,        // Mode
+        300000,              // msec delay 5 mins
+        loop_task_ap_reboot  // Function
     },
 
     {
