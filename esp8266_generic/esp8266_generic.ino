@@ -2211,7 +2211,6 @@ void start_ap_mode()
     }
 
     // Activate AP mode
-    WiFi.disconnect();
     WiFi.mode(WIFI_AP);
     WiFi.softAPConfig(gv_ap_ip,
                       gv_ap_ip,
