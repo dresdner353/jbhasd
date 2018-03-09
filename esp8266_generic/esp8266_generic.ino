@@ -530,6 +530,46 @@ void check_manual_switches()
     }
 }
 
+// Function: restore_wifi_led_state
+// Restores state of WIFI LED to match
+// it's assigned switch state if applicable
+void restore_wifi_led_state()
+{
+    int i;
+    int found = 0;
+
+    log_message("restore_wifi_led_state()");
+
+    // Start by turning off
+    digitalWrite(gv_profile->wifi_led_pin,
+                 gv_led_state_reg[0]);
+
+    // locate the switch by widi LED pin in register
+    while (gv_profile->switch_register[i].name && !found) {
+        if (gv_profile->switch_register[i].led_pin == 
+            gv_profile->wifi_led_pin) {
+            found = 1;
+            log_message("found switch:%s state:%d using WIFI LED", 
+                        gv_profile->switch_register[i].name,
+                        gv_profile->switch_register[i].current_state);
+        }
+        else {
+            i++;
+        }
+    }
+
+    if (found) {
+        // Set LED to the current state of matched
+        // switch
+        digitalWrite(gv_profile->wifi_led_pin,
+                     gv_led_state_reg[gv_profile->switch_register[i].current_state]);
+    }
+    else {
+        log_message("no switch found assigned to wifi LED");
+    }
+
+}
+
 // Function: setup_sensors
 // Scans the in-memory array and configures the
 // defined sensor pins
@@ -1399,9 +1439,16 @@ const char *get_json_status()
                 "\"profile\" : \"%s\", "
                 "\"controls\": [%s], "
                 "\"sensors\": [%s], "
-                "\"system\" : { \"reset_reason\" : \"%s\", \"free_heap\" : %u, "
-                "\"chip_id\" : %u, \"flash_id\" : %u, \"flash_size\" : %u, "
-                "\"flash_real_size\" : %u, \"flash_speed\" : %u, \"cycle_count\" : %u, "
+                "\"system\" : { "
+                "\"compile_date\" : \"%s\", "
+                "\"reset_reason\" : \"%s\", "
+                "\"free_heap\" : %u, "
+                "\"chip_id\" : %u, "
+                "\"flash_id\" : %u, "
+                "\"flash_size\" : %u, "
+                "\"flash_real_size\" : %u, "
+                "\"flash_speed\" : %u, "
+                "\"cycle_count\" : %u, "
                 "\"millis\" : %lu "
                 "} }\n",
                 gv_mdns_hostname,
@@ -1414,6 +1461,7 @@ const char *get_json_status()
                 gv_config.profile,
                 gv_small_buffer_1,
                 gv_small_buffer_2,
+                gw_sw_compile_date,
                 ESP.getResetReason().c_str(),
                 ESP.getFreeHeap(),
                 ESP.getChipId(),
@@ -2315,13 +2363,18 @@ void sta_handle_json() {
 // Configures the device as a WiFI client
 void start_wifi_sta_mode()
 {
-    log_message("start_wifi_sta_mode()");
+    log_message("start_wifi_sta_mode(ssid:%s)", 
+                gv_config.wifi_ssid);
 
     // set state to track wifi down
     // will drive main loop to act accordingly
     gv_mode = MODE_WIFI_STA_DOWN;
 
     // WIFI
+    // Turn off first as it better 
+    // handles recovery after WIFI router
+    // outages
+    WiFi.mode(WIFI_OFF);
     WiFi.mode(WIFI_STA);
     WiFi.hostname(gv_mdns_hostname);
     WiFi.begin(gv_config.wifi_ssid,
@@ -2506,6 +2559,10 @@ void loop_task_check_wifi_up(void)
     // So 1800 calls is about 1 hour
     int max_checks_before_reboot = 1800; 
 
+    // Restart WiFI every 60 seconds if we continue
+    // to remain disconnected
+    int max_checks_before_wifi_restart = 30; 
+
     log_message("loop_task_check_wifi_up()");
 
     check_count++;
@@ -2521,9 +2578,8 @@ void loop_task_check_wifi_up(void)
             toggle_wifi_led(50);
         }
 
-        // wifi LED off
-        digitalWrite(gv_profile->wifi_led_pin,
-                     gv_led_state_reg[0]);
+        // wifi LED back to correct state
+        restore_wifi_led_state();
 
         // reset connect count so that
         // we give a reconnect scenario the same max attempts
@@ -2542,6 +2598,15 @@ void loop_task_check_wifi_up(void)
             log_message("Exceeded max checks of %d.. rebooting",
                         max_checks_before_reboot);
             gv_reboot_requested = 1;
+        }
+        else {
+            // if not rebooting, then go for simple Wifi Restarts
+            // every N calls
+            if (check_count % max_checks_before_wifi_restart == 0) {
+                log_message("Exceeded %d check interval.. restarting WiFI",
+                            max_checks_before_wifi_restart);
+                start_wifi_sta_mode();
+            }
         }
     }
 }
