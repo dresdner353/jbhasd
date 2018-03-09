@@ -127,6 +127,11 @@ struct gpio_led {
 #define MAX_PROGRAM_LEN 100
 #define CFG_MARKER_VAL 0x16
 
+// Software Version
+// Crude compile-time grab of date and time
+// into string
+const char *gw_sw_compile_date = __DATE__ " " __TIME__;
+
 // Pointer to selected profile
 // This will set at load_config() stage
 struct device_gpio_profile *gv_profile = NULL;
