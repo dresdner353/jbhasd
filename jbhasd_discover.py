@@ -26,7 +26,7 @@ class MyListener(object):
         port = info.port
         url = 'http://%s:%d' % (address, port)
         url_set.add(url)
-        #print("\nDiscovered: %s\nURL: %s\nInfo:%s\n" % (name, url, info))
+        print("\nDiscovered: %s\nURL: %s\nInfo:%s\n" % (name, url, info))
         json_url = '%s/json' % (url)
 
         response = None
