@@ -310,16 +310,8 @@ gv_switch_tlist = [
     ("Cian's Room",      "Airplane Light",   "sunset",   "0100" ),
     ("Hall",             "Stairs",           "sunset",   "0100" ),
 
-    ("Attic Prototype",  "Sonoff Switch",    "1200",     "1205" ),
-    ("Attic Prototype",  "Sonoff Switch",    "1230",     "1232" ),
-    ("Attic Prototype",  "Sonoff Switch",    "1330",     "1400" ),
-    ("Attic Prototype",  "Sonoff Switch",    "1500",     "1501" ),
-
     ("Attic Sonoff",     "Socket A",         "1120",     "1150" ),
     ("Attic Sonoff",     "Green LED A",      "1125",     "1145" ),
-
-    ("Attic Sonoff",     "Socket B",         "1500",     "1600" ),
-    ("Attic Sonoff",     "Green LED B",      "1505",     "1510" ),
 
     ("Sonoff test",      "A",                "sunset",   "0100" ),
 ]
@@ -333,6 +325,22 @@ gv_manual_switch_expiry_ts_dict = {}
 # Manual over-ride expiry time for switches
 # this is in seconds
 gv_manual_switch_expiry_period = 3600 * 5
+
+def reset_all_dicts():
+    # wipe all dicts for tracked devices, states etc
+
+    global gv_jbhasd_device_url_dict, gv_jbhasd_device_status_dict
+    global gv_manual_switch_dict, gv_manual_switch_expiry_ts_dict
+    global gv_jbhasd_zconf_url_set
+
+    print("%s Resetting all dictionaries\n" % (time.asctime()))
+
+    gv_jbhasd_device_url_dict = {}
+    gv_jbhasd_device_status_dict = {}
+    gv_manual_switch_dict = {}
+    gv_manual_switch_expiry_ts_dict = {}
+    gv_jbhasd_zconf_url_set = set()
+
 
 def get_ip():
     # determine my default LAN IP
@@ -1299,12 +1307,14 @@ def build_device_web_page(num_cols):
 def process_console_action(device, zone, control, reboot, apmode, state):
 
     command_url_list = []
+    reboot_all = 0
 
     if (device is not None and
         reboot is not None):
 
         if device == 'all':
             print("%s Rebooting all devices" % (time.asctime()))
+            reboot_all = 1
             for device in gv_jbhasd_device_url_dict:
                 url = gv_jbhasd_device_url_dict[device]
 
@@ -1362,6 +1372,12 @@ def process_console_action(device, zone, control, reboot, apmode, state):
             # update the status and ts as returned
             gv_jbhasd_device_status_dict[device] = json_data
             gv_jbhasd_device_ts_dict[device] = int(time.time())
+
+
+    # If a reboot all was performed
+    # we need to wipe the dicts now
+    if (reboot_all == 1):
+        reset_all_dicts()
 
     return
 
