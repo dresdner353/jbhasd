@@ -1,3 +1,5 @@
+#!/usr/bin/python3 
+
 # Cormac Long April 2017
 #
 # Simple webserver script
