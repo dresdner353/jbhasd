@@ -106,13 +106,13 @@ Nothing is perfect and one always strives for improvement :). So in no particula
 - Move to a JSON config file in the sketch, stored in the SPIFFS instead of EEPROM
 - Add some CSS to the AP mode device web interface
 - Evolve the profile model away from in-memory arrays to JSON documents that can be pushed to the devices and stored in SPIFFS
--- This would mean that the entire pin assignments could be changed without reflashing a device
+  - This would mean that the entire pin assignments could be changed without reflashing a device
 - Give the python web server a JSON config file that it uses to save preferences
--- This would pave the way for adding automation rules around discovered devices instead of having to edit the script
+  - This would pave the way for adding automation rules around discovered devices instead of having to edit the script
 - Implement proper long poll on the web server so that it updates instantly when any device state changes
 - Sort out Analytics support on web server end:
--- Write rotating CSV files based on time and number of line limits
--- Purge mechanism for older CSV files
--- Assume an analytics system will pull and delete files from the server
--- Commit Elasticsearch scripts and related material for collecting analytics from JBHASD devices
+  - Write rotating CSV files based on time and number of line limits
+  - Purge mechanism for older CSV files
+  - Assume an analytics system will pull and delete files from the server
+  - Commit Elasticsearch scripts and related material for collecting analytics from JBHASD devices
 - Examine intergation with Node Red for those that prefer to do things that way
