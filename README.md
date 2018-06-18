@@ -8,7 +8,7 @@ The main objective of the project is to create firmware sketches for ESP-8266 de
 
 There's some great existing options for home automation stacks out there and protocols such as MQTT. There are also some very powerful firmware sketches and LUA/Node-MCU scripts for the ESP-8266. However I wanted to build a lean simplified model that made it easier to manage during setup. The objective was to use a JSON status string served via URL from the device as a means of presenting the  capabilities to a querying server. The discovery would be based on DNS-SD/Zeroconf. 
 
-## Flashing the Formware to ESP8266 Devices
+## Flashing the Firmware to ESP8266 Devices
 The esp8266_generic folder contains an Arduino sketch you can flash to any ESP-8266 device. It has 4 profiles or pin assignmenets built in for ESP-01, Sonoff Basic, Sonoff S20 and H801 Wifi LED Controller devices. All these profiles are doing is defining the pin assignments in terms of switches, LEDS, and sensors. You can easily edit the fletch to define additional profiles based around your devices and configurations.
 
 ## Configuring A Device
@@ -100,5 +100,19 @@ Script jbhasd_device_sim.py can be used to simulate a set of fake JBHASD devices
 A link to some photos of the prototypes and enclosures I've built to date..
 https://goo.gl/photos/uwRadttk9wY7vvGm6
 
-TODO:
+## TODO
+Nothing is perfect and one always strives for improvement :). So in no particular order, here are some enhancements I'd like to address in the future:
 
+- Move to a JSON config file in the sketch, stored in the SPIFFS instead of EEPROM
+- Add some CSS to the AP mode device web interface
+- Evolve the profile model away from in-memory arrays to JSON documents that can be pushed to the devices and stored in SPIFFS
+-- This would mean that the entire pin assignments could be changed without reflashing a device
+- Give the python web server a JSON config file that it uses to save preferences
+-- This would pave the way for adding automation rules around discovered devices instead of having to edit the script
+- Implement proper long poll on the web server so that it updates instantly when any device state changes
+- Sort out Analytics support on web server end:
+-- Write rotating CSV files based on time and number of line limits
+-- Purge mechanism for older CSV files
+-- Assume an analytics system will pull and delete files from the server
+-- Commit Elasticsearch scripts and related material for collecting analytics from JBHASD devices
+- Examine intergation with Node Red for those that prefer to do things that way
