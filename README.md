@@ -1,4 +1,6 @@
-# jbhasd (JSON-Based Home Automation with Service Discovery)
+# jbhasd 
+#    "JSON-Based Home Automation with Service Discovery"
+
 
 Just a pet project to go and build some home automation devices, turn on and off appliances, read a few sensors, have some fun and learn something along the way. 
 
