@@ -268,7 +268,7 @@ gv_web_ip = '127.0.0.1' # will be updated with get_ip() call
 # set with co-ords of Dublin Spire, Ireland
 gv_sunset_url = 'http://api.sunrise-sunset.org/json?lat=53.349809&lng=-6.2624431&formatted=0'
 gv_last_sunset_check = -1
-gv_sunset_lights_on_offset = -3600
+gv_sunset_lights_on_offset = -1800
 gv_sunset_on_time = "2000" # noddy default
 gv_actual_sunset_time = "xxxx"
 
