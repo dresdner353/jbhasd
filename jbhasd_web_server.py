@@ -328,6 +328,7 @@ gv_manual_switch_expiry_ts_dict = {}
 # this is in seconds
 gv_manual_switch_expiry_period = 3600 * 5
 
+
 def reset_all_dicts():
     # wipe all dicts for tracked devices, states etc
 
@@ -531,6 +532,7 @@ def fetch_url(url, url_timeout, parse_json):
 
     return response_str
      
+
 def check_automated_devices():
     # Check for automated devices
     # safe snapshot of dict keys into list
@@ -1306,6 +1308,28 @@ def build_device_web_page(num_cols):
     return web_page_str
 
 
+def build_device_json_status():
+
+    # safe snapshot of dict keys into list
+    device_list = list(gv_jbhasd_device_status_dict)
+
+    # Empty JSON object
+    json_status = json.loads('{}')
+
+    # Add devices list member
+    json_status['devices'] = []
+
+    # FIXME Can add further top-level
+    # fields with details about webserver
+
+    for device_name in device_list:
+        json_data = gv_jbhasd_device_status_dict[device_name]
+        json_status['devices'].append(json_data)
+
+    # Return string version of JSON dict
+    return json.dumps(json_status)
+
+
 def process_console_action(device, zone, control, reboot, apmode, state):
 
     command_url_list = []
@@ -1505,6 +1529,25 @@ class web_console_device_handler(object):
     index._cp_config = {'tools.trailing_slash.on': False}
 
 
+class web_console_json_handler(object):
+    @cherrypy.expose()
+
+    def index(self, device=None, zone=None, control=None, state=None, reboot=None):
+
+        print("%s json client:%s:%d params:%s" % (time.asctime(),
+                                                  cherrypy.request.remote.ip,
+                                                  cherrypy.request.remote.port,
+                                                  cherrypy.request.params))
+        # process actions if present
+        apmode = None
+        process_console_action(device, zone, control, reboot, apmode, state)
+
+        # return JSON summary of all devices
+        return build_device_json_status()
+
+    # Force trailling slash off on called URL
+    index._cp_config = {'tools.trailing_slash.on': False}
+
 
 def web_server():
     global gv_poll_timestamp
@@ -1528,6 +1571,7 @@ def web_server():
     cherrypy.tree.mount(web_console_zone_handler(), '/')
     cherrypy.tree.mount(web_console_zone_handler(), '/zone')
     cherrypy.tree.mount(web_console_device_handler(), '/device')
+    cherrypy.tree.mount(web_console_json_handler(), '/json')
 
     cherrypy.engine.start()
     cherrypy.engine.block()
