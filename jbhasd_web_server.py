@@ -1330,7 +1330,7 @@ def build_device_json_status():
     return json.dumps(json_status)
 
 
-def process_console_action(device, zone, control, reboot, apmode, state):
+def process_console_action(device, zone, control, reboot, apmode, state, program):
 
     command_url_list = []
     reboot_all = 0
@@ -1388,7 +1388,26 @@ def process_console_action(device, zone, control, reboot, apmode, state):
             command_url_list.append('%s?control=%s&state=%s' % (url,
                                                                 control_safe,
                                                                 state))
+    if (device is not None and
+        zone is not None and
+        control is not None and
+        program is not None):
 
+        if device in gv_jbhasd_device_url_dict:
+            url = gv_jbhasd_device_url_dict[device]
+
+            print("%s Manually setting %s/%s to program:%s" % (time.asctime(),
+                                                               zone,
+                                                               control,
+                                                               program))
+
+            # Format URL and pass control name through quoting function
+            # Will handle any special character formatting for spaces
+            # etc
+            control_safe = urllib.parse.quote_plus(control)
+            command_url_list.append('%s?control=%s&program=%s' % (url,
+                                                                  control_safe,
+                                                                  program))
     for url in command_url_list:
         print("%s Issuing command url:%s" % (time.asctime(),
                                              url))
@@ -1471,7 +1490,8 @@ class web_console_zone_handler(object):
         # process actions if present
         reboot = None
         apmode = None
-        process_console_action(device, zone, control, reboot, apmode, state)
+        program = None
+        process_console_action(device, zone, control, reboot, apmode, state, program)
 
         # if we're in poll mode
         # we need to stall until there is a 
@@ -1519,7 +1539,8 @@ class web_console_device_handler(object):
                                          gv_col_division_offset))
 
         # process actions if present
-        process_console_action(device, zone, control, reboot, apmode, state)
+        program = None
+        process_console_action(device, zone, control, reboot, apmode, state, program)
 
         # return dashboard in specified number of 
         # columns
@@ -1532,7 +1553,7 @@ class web_console_device_handler(object):
 class web_console_json_handler(object):
     @cherrypy.expose()
 
-    def index(self, device=None, zone=None, control=None, state=None, reboot=None):
+    def index(self, device=None, zone=None, control=None, state=None, program=None, reboot=None):
 
         print("%s json client:%s:%d params:%s" % (time.asctime(),
                                                   cherrypy.request.remote.ip,
@@ -1540,7 +1561,7 @@ class web_console_json_handler(object):
                                                   cherrypy.request.params))
         # process actions if present
         apmode = None
-        process_console_action(device, zone, control, reboot, apmode, state)
+        process_console_action(device, zone, control, reboot, apmode, state, program)
 
         # return JSON summary of all devices
         return build_device_json_status()
