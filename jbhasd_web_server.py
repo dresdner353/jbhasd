@@ -15,7 +15,6 @@
 import time
 import socket
 import struct
-import urllib
 import urllib.parse
 import urllib.request
 import urllib.error
@@ -256,21 +255,99 @@ a {
 """
 # END CSS ##################
 
+# Config
+gv_home_dir = os.path.expanduser('~')
+gv_config_file = gv_home_dir + '/.jbhasd_web_server'
+gv_json_config = {}
 
-# Discovery and probing of devices
-gv_zeroconf_refresh_interval = 60
-gv_probe_refresh_interval = 10
-gv_device_purge_timeout = 30
-gv_web_port = 8080
-gv_web_ip = '127.0.0.1' # will be updated with get_ip() call
+def set_default_config():
+    global gv_config_file, gv_json_config
 
-# Sunset config
-# set with co-ords of Dublin Spire, Ireland
-gv_sunset_url = 'http://api.sunrise-sunset.org/json?lat=53.349809&lng=-6.2624431&formatted=0'
+    print("%s Setting config defaults" % (time.asctime()))
+    gv_json_config = {}
+    # discovery
+    gv_json_config['discovery'] = {}
+    gv_json_config['discovery']['zeroconf_refersh_interval'] = 60
+    gv_json_config['discovery']['device_probe_interval'] = 10
+    gv_json_config['discovery']['device_purge_timeout'] = 30
+
+    # web
+    gv_json_config['web'] = {}
+    gv_json_config['web']['port'] = 8080
+
+    # dashboard
+    gv_json_config['dashboard'] = {}
+    gv_json_config['dashboard']['initial_num_columns'] = 1
+    gv_json_config['dashboard']['box_width'] = 210
+    gv_json_config['dashboard']['col_division_offset'] = 20
+
+    # sunset
+    gv_json_config['sunset'] = {}
+    gv_json_config['sunset']['url'] = 'http://api.sunrise-sunset.org/json?lat=53.349809&lng=-6.2624431&formatted=0'
+    gv_json_config['sunset']['lights_on_offset'] = -1800
+
+    # Timed switches
+    gv_json_config['timers'] = []
+
+    gv_json_config['timers'].append (
+            { 'zone' : 'Livingroom', 
+              'switch' : 'Uplighter', 
+              'on' : 'sunset', 
+              'off' : '0100', 
+            })
+
+    gv_json_config['timers'].append (
+            { 'zone' : 'Livingroom', 
+              'switch' : 'Window Lights', 
+              'on' : 'sunset', 
+              'off' : '0100', 
+            })
+
+    gv_json_config['timers'].append (
+            { 'zone' : 'Playroom', 
+              'switch' : 'Uplighter', 
+              'on' : 'sunset', 
+              'off' : '0100', 
+            })
+
+    gv_json_config['timers'].append (
+            { 'zone' : 'Kitchen', 
+              'switch' : 'Counter Lights', 
+              'on' : 'sunset', 
+              'off' : '0100', 
+            })
+
+    save_config()
+
+
+def load_config():
+    global gv_config_file, gv_json_config
+
+    print("%s Loading config from %s" % (time.asctime(),
+                                         gv_config_file))
+    try:
+        config_data = open(gv_config_file).read()
+        gv_json_config = json.loads(config_data)
+    except:
+        print("%s failed to load config" % (time.asctime()))
+        set_default_config()
+
+def save_config():
+    print("%s Saving config to %s" % (time.asctime(),
+                                      gv_config_file))
+    with open(gv_config_file, 'w') as outfile:
+        indented_json_str = json.dumps(gv_json_config, 
+                                       indent=4, 
+                                       sort_keys=True)
+        outfile.write(indented_json_str)
+        outfile.close()
+
+# Sunset globals
 gv_last_sunset_check = -1
-gv_sunset_lights_on_offset = -1800
 gv_sunset_on_time = "2000" # noddy default
 gv_actual_sunset_time = "xxxx"
+
+# device global dictionaries
 
 # Init dict of discovered device URLs
 # keyed on zeroconf name
@@ -297,27 +374,6 @@ gv_http_timeout_secs = 5
 # or any time we get a push
 gv_poll_timestamp = 0
 
-# presentation settings on dashboard
-gv_dashbox_width = 210
-gv_initial_num_cols = 1
-gv_col_division_offset = 20
-
-# Zone Switchname
-gv_switch_tlist = [
-#   Zone                 Switch              On          Off
-    ("Livingroom",       "Uplighter",        "sunset",   "0100" ),
-    ("Livingroom",       "Window Lights",    "sunset",   "0100" ),
-    ("Playroom",         "Uplighter",        "sunset",   "0100" ),
-    ("Kitchen",          "Counter Lights",   "sunset",   "0100" ),
-    ("Cian's Room",      "Airplane Light",   "sunset",   "0100" ),
-    ("Hall",             "Stairs",           "sunset",   "0100" ),
-
-    ("Attic Sonoff",     "Socket A",         "1120",     "1150" ),
-    ("Attic Sonoff",     "Green LED A",      "1125",     "1145" ),
-
-    ("Sonoff test",      "A",                "sunset",   "0100" ),
-]
-
 # Dict to track manual switch scenarios
 gv_manual_switch_dict = {}
 
@@ -336,7 +392,7 @@ def reset_all_dicts():
     global gv_manual_switch_dict, gv_manual_switch_expiry_ts_dict
     global gv_jbhasd_zconf_url_set
 
-    print("%s Resetting all dictionaries\n" % (time.asctime()))
+    print("%s Resetting all dictionaries" % (time.asctime()))
 
     gv_jbhasd_device_url_dict = {}
     gv_jbhasd_device_status_dict = {}
@@ -410,8 +466,8 @@ def check_switch(zone_name,
                 # override still in effect
                 return -1
 
-    for zone, switch, on_time, off_time in gv_switch_tlist:
-        if zone == zone_name and switch == switch_name:
+    for timer in gv_json_config['timers']:
+        if timer['zone'] == zone_name and timer['switch'] == switch_name:
             # have a match
             # desired state will have a value now
             # so we assume off initially
@@ -428,12 +484,12 @@ def check_switch(zone_name,
 
             # sunset keyword replacemenet with
             # dynamic sunset offset time
-            if (on_time == "sunset"):
+            if (timer['on'] == "sunset"):
                 on_time = gv_sunset_on_time
             else:
-                on_time = int(on_time)
+                on_time = int(timer['on'])
 
-            off_time = int(off_time)
+            off_time = int(timer['off'])
 
             if (on_time <= off_time):
                 if (current_time >= on_time and 
@@ -492,7 +548,7 @@ def discover_devices():
 
         # loop interval sleep then 
         # close zeroconf object
-        time.sleep(gv_zeroconf_refresh_interval)
+        time.sleep(gv_json_config['discovery']['zeroconf_refersh_interval'])
         zeroconf.close()
 
 
@@ -518,8 +574,6 @@ def fetch_url(url, url_timeout, parse_json):
             print("%s Error in response.read() URL:%s" % (time.asctime(), url))
             return None
 
-        #print("%s Got response:\n%s" % (time.asctime(), response_str))
-        # parse and return json dict if requested
         if parse_json:
             try:
                 json_data = json.loads(response_str.decode('utf-8'))
@@ -597,7 +651,7 @@ def probe_devices():
     # and probe their status values, storing in a dictionary
     # Also calculate sunset time every 6 hours as part of automated 
     # management of devices
-    global gv_last_sunset_check, gv_sunset_lights_on_offset
+    global gv_last_sunset_check, gv_json_config
     global gv_sunset_on_time, gv_poll_timestamp, gv_actual_sunset_time 
 
     # loop forever
@@ -607,33 +661,33 @@ def probe_devices():
         if ((now - gv_last_sunset_check) >= 6*60*60): # every 6 hours
             # Re-calculate
             print("%s Getting Sunset times.." % (time.asctime()))
-            json_data = fetch_url(gv_sunset_url, 20, 1)
+            json_data = fetch_url(gv_json_config['sunset']['url'], 20, 1)
             if json_data is not None:
                 sunset_str = json_data['results']['sunset']
                 sunset_ts = sunset_api_time_to_epoch(sunset_str)
                 sunset_local_time = time.localtime(sunset_ts)
-                sunset_offset_local_time = time.localtime(sunset_ts + gv_sunset_lights_on_offset)
+                sunset_offset_local_time = time.localtime(sunset_ts + gv_json_config['sunset']['lights_on_offset'])
                 gv_sunset_on_time = int(time.strftime("%H%M", sunset_offset_local_time))
                 gv_actual_sunset_time = time.strftime("%H:%M", sunset_local_time)
                 print("%s Sunset on-time is %s (with offset of %d seconds)" % (time.asctime(),
                                                                                gv_sunset_on_time,
-                                                                               gv_sunset_lights_on_offset))
+                                                                               gv_json_config['sunset']['lights_on_offset']))
 
             gv_last_sunset_check = now
 
         # iterate set of discovered device URLs as snapshot list
         # avoids issues if the set is updated mid-way
         device_url_list = list(gv_jbhasd_zconf_url_set)
-        gv_web_ip = get_ip()
+        web_ip = get_ip()
         successful_probes = 0
         failed_probes = 0
         purged_urls = 0
         control_changes = 0
-        gv_web_ip_safe = urllib.parse.quote_plus(gv_web_ip)
+        web_ip_safe = urllib.parse.quote_plus(web_ip)
         for url in device_url_list:
             url_w_update = '%s?update_ip=%s&update_port=%d' % (url,
-                                                               gv_web_ip_safe, 
-                                                               gv_web_port)
+                                                               web_ip_safe, 
+                                                               gv_json_config['web']['port'])
             json_data = fetch_url(url_w_update, gv_http_timeout_secs, 1)
             if (json_data is not None):
                 device_name = json_data['name']
@@ -690,7 +744,7 @@ def probe_devices():
             url = gv_jbhasd_device_url_dict[device_name]
 
             last_updated = now - gv_jbhasd_device_ts_dict[device_name]
-            if last_updated >= gv_device_purge_timeout:
+            if last_updated >= gv_json_config['discovery']['device_purge_timeout']:
                 purged_urls += 1
                 reason = "expired last updated %d seconds ago" % (last_updated)
                 print("%s Purging Device:%s URL:%s.. reason:%s" % (time.asctime(),
@@ -767,7 +821,7 @@ def probe_devices():
             gv_poll_timestamp = time.time()
 
         # loop sleep interval
-        time.sleep(gv_probe_refresh_interval)
+        time.sleep(gv_json_config['discovery']['device_probe_interval'])
     return
 
 
@@ -975,11 +1029,11 @@ def build_zone_web_page(num_cols):
     web_page_str = web_page_template
     web_page_str = web_page_str.replace("__TITLE__", "JBHASD Zone Console")
     web_page_str = web_page_str.replace("__CSS__", web_page_css)
-    web_page_str = web_page_str.replace("__DASHBOX_WIDTH__", str(gv_dashbox_width))
+    web_page_str = web_page_str.replace("__DASHBOX_WIDTH__", str(gv_json_config['dashboard']['box_width']))
     web_page_str = web_page_str.replace("__SWITCH_FUNCTIONS__", jquery_str)
     web_page_str = web_page_str.replace("__DASHBOARD__", dashboard_str)
     web_page_str = web_page_str.replace("__URL__", "/")
-    web_page_str = web_page_str.replace("__RELOAD__", str(gv_probe_refresh_interval * 1000))
+    web_page_str = web_page_str.replace("__RELOAD__", str(gv_json_config['discovery']['device_probe_interval'] * 1000))
 
     return web_page_str
 
@@ -987,7 +1041,7 @@ def build_zone_web_page(num_cols):
 def build_device_web_page(num_cols):
     global gv_sunset_on_time
     global gv_actual_sunset_time
-    global gv_sunset_lights_on_offset
+    global gv_json_config
 
     # safe snapshot of dict keys into list
     device_list = list(gv_jbhasd_device_status_dict)
@@ -1062,7 +1116,7 @@ def build_device_web_page(num_cols):
             '<td align="center" class="dash-label">'
             '%s'
             '</td>'
-            '</tr>') % (gv_sunset_lights_on_offset)
+            '</tr>') % (gv_json_config['sunset']['lights_on_offset'])
 
     # reboot URL for all devices
     href_url = ('/device?device=all&reboot=1')
@@ -1299,11 +1353,11 @@ def build_device_web_page(num_cols):
     web_page_str = web_page_template
     web_page_str = web_page_str.replace("__TITLE__", "JBHASD Device Console")
     web_page_str = web_page_str.replace("__CSS__", web_page_css)
-    web_page_str = web_page_str.replace("__DASHBOX_WIDTH__", str(gv_dashbox_width))
+    web_page_str = web_page_str.replace("__DASHBOX_WIDTH__", str(gv_json_config['dashboard']['box_width']))
     web_page_str = web_page_str.replace("__SWITCH_FUNCTIONS__", jquery_str)
     web_page_str = web_page_str.replace("__DASHBOARD__", dashboard_str)
     web_page_str = web_page_str.replace("__URL__", "/device")
-    web_page_str = web_page_str.replace("__RELOAD__", str(gv_probe_refresh_interval * 1000))
+    web_page_str = web_page_str.replace("__RELOAD__", str(gv_json_config['discovery']['device_probe_interval'] * 1000))
 
     return web_page_str
 
@@ -1458,10 +1512,10 @@ class web_console_zone_handler(object):
         # Then calculate more accurate version based on 
         # supplied window width divided by dashbox width
         # plus an offset for padding consideration
-        num_cols = gv_initial_num_cols
+        num_cols = gv_json_config['dashboard']['initial_num_columns']
         if width is not None:
-            num_cols = int(int(width) / (gv_dashbox_width + 
-                                         gv_col_division_offset))
+            num_cols = int(int(width) / (gv_json_config['dashboard']['box_width'] + 
+                                         gv_json_config['dashboard']['col_division_offset']))
 
         # normal page fetch incl poll mode
         # take a snap of this timesamp 
@@ -1513,10 +1567,10 @@ class web_console_device_handler(object):
         # Then calculate more accurate version based on 
         # supplied window width divided by dashbox width
         # plus an offset for padding consideration
-        num_cols = gv_initial_num_cols
+        num_cols = gv_json_config['dashboard']['initial_num_columns']
         if width is not None:
-            num_cols = int(int(width) / (gv_dashbox_width + 
-                                         gv_col_division_offset))
+            num_cols = int(int(width) / (gv_json_config['dashboard']['box_width'] + 
+                                         gv_json_config['dashboard']['col_division_offset']))
 
         # process actions if present
         process_console_action(device, zone, control, reboot, apmode, state)
@@ -1555,7 +1609,7 @@ def web_server():
     # init poll timestamp
     gv_poll_timestamp = time.time()
 
-    print("Starting console web server on port %d" % (gv_web_port))
+    print("Starting console web server on port %d" % (gv_json_config['web']['port']))
     # Logging off
     cherrypy.config.update({'log.screen': False,
                             'log.access_file': '',
@@ -1563,7 +1617,7 @@ def web_server():
 
     # Listen on our port on any IF
     cherrypy.server.socket_host = '0.0.0.0'
-    cherrypy.server.socket_port = gv_web_port
+    cherrypy.server.socket_port = gv_json_config['web']['port']
 
     # Cherrypy main loop
     #cherrypy.quickstart(web_console_zone_handler())
@@ -1577,6 +1631,7 @@ def web_server():
     cherrypy.engine.block()
 
 # main()
+load_config()
 
 # Analytics
 analytics_file = open("analytics.csv", "a")
@@ -1600,11 +1655,6 @@ web_server_t = threading.Thread(target = web_server)
 web_server_t.daemon = True
 web_server_t.start()
 thread_list.append(web_server_t)
-
-#web_poll_server_t = threading.Thread(target = web_poll_server)
-#web_poll_server_t.daemon = True
-#web_poll_server_t.start()
-#thread_list.append(web_poll_server_t)
 
 while (1):
     dead_threads = 0
