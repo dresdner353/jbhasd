@@ -274,6 +274,7 @@ def set_default_config():
     # web
     gv_json_config['web'] = {}
     gv_json_config['web']['port'] = 8080
+    gv_json_config['web']['users'] = {}
 
     # dashboard
     gv_json_config['dashboard'] = {}
@@ -708,7 +709,8 @@ def probe_devices():
 
                 gv_jbhasd_device_status_dict[device_name] = json_data
             else:
-                print("Failed to get status on %s" % (url))
+                print("%s Failed to get status on %s" % (time.asctime(),
+                                                         url))
                 failed_probes += 1
         
         # Purge dead devices and URLs
@@ -1522,7 +1524,7 @@ class web_console_zone_handler(object):
 
         # Normal client without width
         if width is None:
-            print("forcing reload to get width")
+            print("%s forcing reload to get width" % time.asctime())
             reload_str = web_page_reload_template
             reload_str = reload_str.replace("__URL__", "/zone")
             return reload_str
@@ -1578,7 +1580,7 @@ class web_console_device_handler(object):
                                                     cherrypy.request.remote.port,
                                                     cherrypy.request.params))
         if width is None:
-            print("forcing reload to get width")
+            print("%s forcing reload to get width" % time.asctime())
             reload_str = web_page_reload_template
             reload_str = reload_str.replace("__URL__", "/device")
             return reload_str
@@ -1630,7 +1632,8 @@ def web_server():
     # init poll timestamp
     gv_poll_timestamp = time.time()
 
-    print("Starting console web server on port %d" % (gv_json_config['web']['port']))
+    print("%s Starting console web server on port %d" % (time.asctime(),
+                                                         gv_json_config['web']['port']))
     # Logging off
     cherrypy.config.update({'log.screen': False,
                             'log.access_file': '',
@@ -1640,14 +1643,38 @@ def web_server():
     cherrypy.server.socket_host = '0.0.0.0'
     cherrypy.server.socket_port = gv_json_config['web']['port']
 
+    # Authentication
+    # If the users section in web config is populated
+    # We generate a config string with HTTP digest
+    # enabled
+    users = gv_json_config['web']['users']
+    if len(users) > 0:
+        ha1 = cherrypy.lib.auth_digest.get_ha1_dict_plain(users)
+
+        # Generate a random digest auth key
+        # Might help against is getting compromised
+        random.seed()
+        digest_key = hex(random.randint(0x1000000000000000,
+                                        0xFFFFFFFFFFFFFFFF))
+        conf = {
+            '/': {
+                'tools.auth_digest.on': True,
+                'tools.auth_digest.realm': 'localhost',
+                'tools.auth_digest.get_ha1': ha1,
+                'tools.auth_digest.key': digest_key,
+            }
+        }
+    else:
+        print("%s No users provisioned in config.. bypassing authentation" % (time.asctime()))
+        conf = {}
+
+    # Set webhooks
+    #cherrypy.tree.mount(web_console_zone_handler(), '/', conf)
+    cherrypy.tree.mount(web_console_zone_handler(), '/zone', conf)
+    cherrypy.tree.mount(web_console_device_handler(), '/device', conf)
+    cherrypy.tree.mount(web_console_json_handler(), '/json', conf)
+
     # Cherrypy main loop
-    #cherrypy.quickstart(web_console_zone_handler())
-
-    cherrypy.tree.mount(web_console_zone_handler(), '/')
-    cherrypy.tree.mount(web_console_zone_handler(), '/zone')
-    cherrypy.tree.mount(web_console_device_handler(), '/device')
-    cherrypy.tree.mount(web_console_json_handler(), '/json')
-
     cherrypy.engine.start()
     cherrypy.engine.block()
 
@@ -1684,7 +1711,8 @@ while (1):
              dead_threads += 1
 
     if (dead_threads > 0):
-        print("Detected %d dead threads.. exiting" % (dead_threads))
+        print("%s Detected %d dead threads.. exiting" % (time.asctime(),
+                                                         dead_threads))
         sys.exit(-1);
 
     time.sleep(5)
