@@ -369,12 +369,6 @@ gv_jbhasd_device_ts_dict = {}
 # timeout for all fetch calls
 gv_http_timeout_secs = 5
 
-# Long poll timestamp
-# this will set to current epoch
-# everytime we perform a full probe
-# or any time we get a push
-gv_poll_timestamp = 0
-
 # Dict to track manual switch scenarios
 gv_manual_switch_dict = {}
 
@@ -653,7 +647,7 @@ def probe_devices():
     # Also calculate sunset time every 6 hours as part of automated 
     # management of devices
     global gv_last_sunset_check, gv_json_config
-    global gv_sunset_on_time, gv_poll_timestamp, gv_actual_sunset_time 
+    global gv_sunset_on_time, gv_actual_sunset_time 
 
     # loop forever
     while (1):
@@ -816,11 +810,6 @@ def probe_devices():
                                         failed_probes,
                                         control_changes,
                                         purged_urls))
-        # treat detected control changes or purges as 
-        # a cue to triggering poll requests
-        if (control_changes > 0 or 
-            purged_urls > 0):
-            gv_poll_timestamp = time.time()
 
         # loop sleep interval
         time.sleep(gv_json_config['discovery']['device_probe_interval'])
@@ -1487,8 +1476,14 @@ def process_device_update(update):
 class web_console_zone_handler(object):
     @cherrypy.expose()
 
-    def index(self, update=None, device=None, zone=None, control=None, state=None, poll=None, width=None):
-        global gv_poll_timestamp
+    def index(self, 
+              update=None, 
+              device=None, 
+              zone=None, 
+              control=None, 
+              state=None, 
+              poll=None, 
+              width=None):
 
         print("%s client:%s:%d params:%s" % (time.asctime(),
                                              cherrypy.request.remote.ip,
@@ -1497,7 +1492,6 @@ class web_console_zone_handler(object):
         # Device push update
         if update is not None:
             process_device_update(update)
-            gv_poll_timestamp = time.time()
             return "Thank You"
 
         # Normal client without width
@@ -1516,11 +1510,6 @@ class web_console_zone_handler(object):
             num_cols = int(int(width) / (gv_json_config['dashboard']['box_width'] + 
                                          gv_json_config['dashboard']['col_division_offset']))
 
-        # normal page fetch incl poll mode
-        # take a snap of this timesamp 
-        # first
-        poll_snapshot = gv_poll_timestamp
-
         # process actions if present
         reboot = None
         apmode = None
@@ -1532,18 +1521,6 @@ class web_console_zone_handler(object):
                                apmode, 
                                state, 
                                program)
-
-        # if we're in poll mode
-        # we need to stall until there is a 
-        # change
-        if poll is not None:
-            # take a snapshot of the current
-            # poll timestamp and loop until
-            # it changes. Then return the page
-            while (poll_snapshot == gv_poll_timestamp):
-                print("poll wait.. %s:%d" % (cherrypy.request.remote.ip,
-                                             cherrypy.request.remote.port))
-                time.sleep(1)
 
         # return dashboard in specified number of 
         # columns
@@ -1557,7 +1534,6 @@ class web_console_device_handler(object):
     @cherrypy.expose()
 
     def index(self, device=None, zone=None, control=None, state=None, reboot=None, apmode=None, width=None):
-        global gv_poll_timestamp
 
         print("%s device client:%s:%d params:%s" % (time.asctime(),
                                                     cherrypy.request.remote.ip,
@@ -1623,10 +1599,6 @@ class web_console_json_handler(object):
 
 
 def web_server():
-    global gv_poll_timestamp
-
-    # init poll timestamp
-    gv_poll_timestamp = time.time()
 
     print("%s Starting console web server on port %d" % (time.asctime(),
                                                          gv_json_config['web']['port']))
@@ -1668,11 +1640,7 @@ def web_server():
         conf = {}
 
     # Set webhooks
-    # None set for / to deliberately force user to 
-    # /device or /json
-    # Also config for auth restricted for now to just 
-    # /zone and /device as the /json webhook needs a different
-    # auth mechanism
+    cherrypy.tree.mount(web_console_zone_handler(), '/', conf)
     cherrypy.tree.mount(web_console_zone_handler(), '/zone', conf)
     cherrypy.tree.mount(web_console_device_handler(), '/device', conf)
     cherrypy.tree.mount(web_console_json_handler(), '/json')
