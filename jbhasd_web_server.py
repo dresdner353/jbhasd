@@ -1364,28 +1364,6 @@ def build_device_web_page(num_cols):
     return web_page_str
 
 
-def build_device_json_status():
-
-    # safe snapshot of dict keys into list
-    device_list = list(gv_jbhasd_device_status_dict)
-
-    # Empty JSON object
-    json_status = json.loads('{}')
-
-    # Add devices list member
-    json_status['devices'] = []
-
-    # FIXME Can add further top-level
-    # fields with details about webserver
-
-    for device_name in device_list:
-        json_data = gv_jbhasd_device_status_dict[device_name]
-        json_status['devices'].append(json_data)
-
-    # Return string version of JSON dict
-    return json.dumps(json_status)
-
-
 def process_console_action(device, zone, control, reboot, apmode, state, program):
 
     command_url_list = []
@@ -1480,7 +1458,7 @@ def process_console_action(device, zone, control, reboot, apmode, state, program
     if (reboot_all == 1):
         reset_all_dicts()
 
-    return
+    return 
 
 
 def process_device_update(update):
@@ -1547,7 +1525,13 @@ class web_console_zone_handler(object):
         reboot = None
         apmode = None
         program = None
-        process_console_action(device, zone, control, reboot, apmode, state, program)
+        process_console_action(device, 
+                               zone, 
+                               control, 
+                               reboot, 
+                               apmode, 
+                               state, 
+                               program)
 
         # if we're in poll mode
         # we need to stall until there is a 
@@ -1596,7 +1580,13 @@ class web_console_device_handler(object):
 
         # process actions if present
         program = None
-        process_console_action(device, zone, control, reboot, apmode, state, program)
+        process_console_action(device, 
+                               zone, 
+                               control, 
+                               reboot, 
+                               apmode, 
+                               state, 
+                               program)
 
         # return dashboard in specified number of 
         # columns
@@ -1617,10 +1607,16 @@ class web_console_json_handler(object):
                                                   cherrypy.request.params))
         # process actions if present
         apmode = None
-        process_console_action(device, zone, control, reboot, apmode, state, program)
+        process_console_action(device, 
+                               zone, 
+                               control, 
+                               reboot, 
+                               apmode, 
+                               state, 
+                               program)
 
-        # return JSON summary of all devices
-        return build_device_json_status()
+        # Return nothing
+        return ""
 
     # Force trailling slash off on called URL
     index._cp_config = {'tools.trailing_slash.on': False}
@@ -1634,8 +1630,9 @@ def web_server():
 
     print("%s Starting console web server on port %d" % (time.asctime(),
                                                          gv_json_config['web']['port']))
-    # Logging off
-    cherrypy.config.update({'log.screen': False,
+    # main config
+    cherrypy.config.update({'environment': 'production',
+                            'log.screen': False,
                             'log.access_file': '',
                             'log.error_file': ''})
 
@@ -1656,23 +1653,29 @@ def web_server():
         random.seed()
         digest_key = hex(random.randint(0x1000000000000000,
                                         0xFFFFFFFFFFFFFFFF))
-        conf = {
-            '/': {
+        digest_conf = {
                 'tools.auth_digest.on': True,
                 'tools.auth_digest.realm': 'localhost',
                 'tools.auth_digest.get_ha1': ha1,
                 'tools.auth_digest.key': digest_key,
-            }
+        }
+
+        conf = {
+            '/': digest_conf
         }
     else:
         print("%s No users provisioned in config.. bypassing authentation" % (time.asctime()))
         conf = {}
 
     # Set webhooks
-    #cherrypy.tree.mount(web_console_zone_handler(), '/', conf)
+    # None set for / to deliberately force user to 
+    # /device or /json
+    # Also config for auth restricted for now to just 
+    # /zone and /device as the /json webhook needs a different
+    # auth mechanism
     cherrypy.tree.mount(web_console_zone_handler(), '/zone', conf)
     cherrypy.tree.mount(web_console_device_handler(), '/device', conf)
-    cherrypy.tree.mount(web_console_json_handler(), '/json', conf)
+    cherrypy.tree.mount(web_console_json_handler(), '/json')
 
     # Cherrypy main loop
     cherrypy.engine.start()
