@@ -69,7 +69,7 @@ web_page_template = """
 
     function refreshPage() {
         if (window_focus == true) {
-            $.get("__URL__?width=" + window.innerWidth, function(data, status){
+            $.get("__REFRESH_URL__?width=" + window.innerWidth, function(data, status){
                 clearInterval(refresh_timer);
                 $("#dashboard").html(data);
             });
@@ -87,15 +87,18 @@ web_page_template = """
 # Begin switch on click function
 # The switch click template is the jquery code
 # used to drive the action taken when we click on a given 
-# switch checkbox. The action gets a given URL and replaces the 
-# dashboard content with the result
+# switch checkbox. The action gets a given URL to perform 
+# the desired action and then gets a refresh URL and 
+# replaces the dashboard content with the result
 # Its a tidier alternative to page refreshes
 click_get_reload_template = """
         $("#__ID__").click(function(){
-            $.get("__URL__&width=" + window.innerWidth, function(data, status){
-                // clear refresh timer before reload
-                clearInterval(refresh_timer);
-                $("#dashboard").html(data);
+            $.get("__ACTION_URL__", function(){
+                $.get("__REFRESH_URL__?width=" + window.innerWidth, function(data, status){
+                    // clear refresh timer before reload
+                    clearInterval(refresh_timer);
+                    $("#dashboard").html(data);
+                });
             });
         });
 """
@@ -113,7 +116,7 @@ web_page_reload_template = """
     });
 
     function reload_w_width() {
-        $.get("__URL__?width=" + window.innerWidth, function(data, status){
+        $.get("__REFRESH_URL__?width=" + window.innerWidth, function(data, status){
             $("#dashboard").html(data);
         });
     }
@@ -911,7 +914,7 @@ def build_zone_web_page(num_cols):
                         # This is a URL to the webserver
                         # carrying the device URL and directives
                         # to change the desired switch state
-                        href_url = ('/?device=%s'
+                        href_url = ('/api?device=%s'
                                     '&zone=%s'
                                     '&control=%s'
                                     '&state=%d') % (url_safe_device,
@@ -948,7 +951,7 @@ def build_zone_web_page(num_cols):
                         switch_str = click_get_reload_template
                         jquery_click_id = 'switch%d' % (switch_id)
                         switch_str = switch_str.replace("__ID__", jquery_click_id)
-                        switch_str = switch_str.replace("__URL__", href_url)
+                        switch_str = switch_str.replace("__ACTION_URL__", href_url)
                         jquery_str += switch_str
 
                         # increment for next switch         
@@ -1023,7 +1026,7 @@ def build_zone_web_page(num_cols):
     web_page_str = web_page_str.replace("__DASHBOX_WIDTH__", str(gv_json_config['dashboard']['box_width']))
     web_page_str = web_page_str.replace("__SWITCH_FUNCTIONS__", jquery_str)
     web_page_str = web_page_str.replace("__DASHBOARD__", dashboard_str)
-    web_page_str = web_page_str.replace("__URL__", "/")
+    web_page_str = web_page_str.replace("__REFRESH_URL__", "/zone")
     web_page_str = web_page_str.replace("__RELOAD__", str(gv_json_config['discovery']['device_probe_interval'] * 1000))
 
     return web_page_str
@@ -1110,13 +1113,13 @@ def build_device_web_page(num_cols):
             '</tr>') % (gv_json_config['sunset']['lights_on_offset'])
 
     # reboot URL for all devices
-    href_url = ('/device?device=all&reboot=1')
+    href_url = ('/api?device=all&reboot=1')
 
     # jquery code for click
     reboot_str = click_get_reload_template
     jquery_click_id = 'reboot_all'
     reboot_str = reboot_str.replace("__ID__", jquery_click_id)
-    reboot_str = reboot_str.replace("__URL__", href_url)
+    reboot_str = reboot_str.replace("__ACTION_URL__", href_url)
     jquery_str += reboot_str
 
     dashboard_col_list[0] += (
@@ -1174,14 +1177,14 @@ def build_device_web_page(num_cols):
         # carries device name and reboot=1
         # directive
         url_safe_device = urllib.parse.quote_plus(device_name)
-        href_url = ('/device?device=%s'
+        href_url = ('/api?device=%s'
                     '&reboot=1') % (url_safe_device)
 
         # jquery code for reboot click
         reboot_str = click_get_reload_template
         jquery_click_id = 'reboot_device%d' % (device_id)
         reboot_str = reboot_str.replace("__ID__", jquery_click_id)
-        reboot_str = reboot_str.replace("__URL__", href_url)
+        reboot_str = reboot_str.replace("__ACTION_URL__", href_url)
         jquery_str += reboot_str
 
         dashboard_col_list[col_index] += (
@@ -1199,14 +1202,14 @@ def build_device_web_page(num_cols):
         # carries device name and apmode=1
         # directive
         url_safe_device = urllib.parse.quote_plus(device_name)
-        href_url = ('/device?device=%s'
+        href_url = ('/api?device=%s'
                     '&apmode=1') % (url_safe_device)
 
         # jquery code for apmode click
         apmode_str = click_get_reload_template
         jquery_click_id = 'apmode_device%d' % (device_id)
         apmode_str = apmode_str.replace("__ID__", jquery_click_id)
-        apmode_str = apmode_str.replace("__URL__", href_url)
+        apmode_str = apmode_str.replace("__ACTION_URL__", href_url)
         jquery_str += apmode_str
 
         dashboard_col_list[col_index] += (
@@ -1239,7 +1242,7 @@ def build_device_web_page(num_cols):
                 # This is a URL to the webserver
                 # carrying the device URL and directives
                 # to change the desired switch state
-                href_url = ('/device?device=%s'
+                href_url = ('/api?device=%s'
                             '&zone=%s'
                             '&control=%s'
                             '&state=%d') % (url_safe_device,
@@ -1259,7 +1262,7 @@ def build_device_web_page(num_cols):
                 switch_str = click_get_reload_template
                 jquery_click_id = 'switch%d' % (switch_id)
                 switch_str = switch_str.replace("__ID__", jquery_click_id)
-                switch_str = switch_str.replace("__URL__", href_url)
+                switch_str = switch_str.replace("__ACTION_URL__", href_url)
                 jquery_str += switch_str
 
                 # format checkbox css slider in table cell
@@ -1347,7 +1350,7 @@ def build_device_web_page(num_cols):
     web_page_str = web_page_str.replace("__DASHBOX_WIDTH__", str(gv_json_config['dashboard']['box_width']))
     web_page_str = web_page_str.replace("__SWITCH_FUNCTIONS__", jquery_str)
     web_page_str = web_page_str.replace("__DASHBOARD__", dashboard_str)
-    web_page_str = web_page_str.replace("__URL__", "/device")
+    web_page_str = web_page_str.replace("__REFRESH_URL__", "/device")
     web_page_str = web_page_str.replace("__RELOAD__", str(gv_json_config['discovery']['device_probe_interval'] * 1000))
 
     return web_page_str
@@ -1476,29 +1479,17 @@ def process_device_update(update):
 class web_console_zone_handler(object):
     @cherrypy.expose()
 
-    def index(self, 
-              update=None, 
-              device=None, 
-              zone=None, 
-              control=None, 
-              state=None, 
-              poll=None, 
-              width=None):
+    def index(self, width=None):
 
         print("%s client:%s:%d params:%s" % (time.asctime(),
                                              cherrypy.request.remote.ip,
                                              cherrypy.request.remote.port,
                                              cherrypy.request.params))
-        # Device push update
-        if update is not None:
-            process_device_update(update)
-            return "Thank You"
-
         # Normal client without width
         if width is None:
             print("%s forcing reload to get width" % time.asctime())
             reload_str = web_page_reload_template
-            reload_str = reload_str.replace("__URL__", "/zone")
+            reload_str = reload_str.replace("__REFRESH_URL__", "/zone")
             return reload_str
 
         # set default cols
@@ -1509,18 +1500,6 @@ class web_console_zone_handler(object):
         if width is not None:
             num_cols = int(int(width) / (gv_json_config['dashboard']['box_width'] + 
                                          gv_json_config['dashboard']['col_division_offset']))
-
-        # process actions if present
-        reboot = None
-        apmode = None
-        program = None
-        process_console_action(device, 
-                               zone, 
-                               control, 
-                               reboot, 
-                               apmode, 
-                               state, 
-                               program)
 
         # return dashboard in specified number of 
         # columns
@@ -1533,16 +1512,17 @@ class web_console_zone_handler(object):
 class web_console_device_handler(object):
     @cherrypy.expose()
 
-    def index(self, device=None, zone=None, control=None, state=None, reboot=None, apmode=None, width=None):
+    def index(self, width=None):
 
         print("%s device client:%s:%d params:%s" % (time.asctime(),
                                                     cherrypy.request.remote.ip,
                                                     cherrypy.request.remote.port,
                                                     cherrypy.request.params))
+        # Normal client without width
         if width is None:
             print("%s forcing reload to get width" % time.asctime())
             reload_str = web_page_reload_template
-            reload_str = reload_str.replace("__URL__", "/device")
+            reload_str = reload_str.replace("__REFRESH_URL__", "/device")
             return reload_str
 
         # set defautl cols
@@ -1554,16 +1534,6 @@ class web_console_device_handler(object):
             num_cols = int(int(width) / (gv_json_config['dashboard']['box_width'] + 
                                          gv_json_config['dashboard']['col_division_offset']))
 
-        # process actions if present
-        program = None
-        process_console_action(device, 
-                               zone, 
-                               control, 
-                               reboot, 
-                               apmode, 
-                               state, 
-                               program)
-
         # return dashboard in specified number of 
         # columns
         return build_device_web_page(num_cols)
@@ -1572,17 +1542,29 @@ class web_console_device_handler(object):
     index._cp_config = {'tools.trailing_slash.on': False}
 
 
-class web_console_json_handler(object):
+class web_console_api_handler(object):
     @cherrypy.expose()
 
-    def index(self, device=None, zone=None, control=None, state=None, program=None, reboot=None):
+    def index(self, 
+              device=None, 
+              zone=None, 
+              control=None, 
+              state=None, 
+              program=None, 
+              reboot=None,
+              update=None,
+              apmode=None):
 
         print("%s json client:%s:%d params:%s" % (time.asctime(),
                                                   cherrypy.request.remote.ip,
                                                   cherrypy.request.remote.port,
                                                   cherrypy.request.params))
+        # Device push update
+        if update is not None:
+            process_device_update(update)
+            return ""
+
         # process actions if present
-        apmode = None
         process_console_action(device, 
                                zone, 
                                control, 
@@ -1639,11 +1621,13 @@ def web_server():
         print("%s No users provisioned in config.. bypassing authentation" % (time.asctime()))
         conf = {}
 
-    # Set webhooks
-    cherrypy.tree.mount(web_console_zone_handler(), '/', conf)
+    # Set webhooks for zone and device
     cherrypy.tree.mount(web_console_zone_handler(), '/zone', conf)
     cherrypy.tree.mount(web_console_device_handler(), '/device', conf)
-    cherrypy.tree.mount(web_console_json_handler(), '/json')
+
+    # webhook for API
+    cherrypy.tree.mount(web_console_api_handler(), '/')
+    cherrypy.tree.mount(web_console_api_handler(), '/api')
 
     # Cherrypy main loop
     cherrypy.engine.start()
