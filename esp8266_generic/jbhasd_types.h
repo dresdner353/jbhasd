@@ -37,20 +37,16 @@
     (head)->prev = (item); \
 }
 
-#define LIST_RMOVE(item) { \
+#define LIST_REMOVE(item) { \
     (item)->prev->next = (item)->next; \
     (item)->next->prev = (item)->prev; \
     (item)->next = NULL; \
     (item)->prev = NULL; \
 }
 
-#define LIST_NEXT(item) { \
-    (item)->next \
-}
+#define LIST_NEXT(item) (item)->next
 
-#define LIST_PREV(item) { \
-    (item)->prev \
-}
+#define LIST_PREV(item) (item)->prev
 
 // Context type for tracking how
 // a switch was activated
@@ -172,82 +168,13 @@ struct device_profile {
     int boot_program_pin;
     int wifi_led_pin;
     int force_apmode_onboot;
+    int provisioned;
     struct gpio_switch *switch_list;
     struct gpio_sensor *sensor_list;
     struct gpio_led *led_list;
 };
 
 struct device_profile gv_device;
-
-/*
-char *gv_config_json_str = 
-                     "{"
-                     "\"zone\" : \"proto\", "
-                     "\"wifi_ssid\" : \"cormac-L\", "
-                     "\"wifi_password\" : \"h0tcak3y\", "
-                     "\"ota_enabled\" : 1, "
-                     "\"telnet_enabled\" : 1, "
-                     "\"mdns_enabled\" : 1, "
-                     "\"manual_switches_enabled\" : 1, "
-                     "\"switches\" : 1, "
-                     "\"boot_pin\" : 0, "
-                     "\"wifi_led_pin\" : 13, "
-                     "\"force_apmode_onboot\" : 0, "
-                     "\"controls\" : ["
-                     "{ \"name\" : \"relay\","
-                     "  \"type\" : \"switch\", "
-                     "  \"sw_mode\" : \"toggle\", "
-                     "  \"sw_state\" : 1, "
-                     "  \"sw_context\" : \"init\", "
-                     "  \"sw_relay_pin\" : 12, "
-                     "  \"sw_led_pin\" : 13, "
-                     "  \"sw_man_pin\" : 0 "
-                     "},"
-                     "{ \"name\" : \"fake1\","
-                     "  \"type\" : \"switch\", "
-                     "  \"sw_mode\" : \"toggle\", "
-                     "  \"sw_state\" : 0, "
-                     "  \"sw_context\" : \"init\", "
-                     "  \"sw_relay_pin\" : 255, "
-                     "  \"sw_led_pin\" : 255, "
-                     "  \"sw_man_pin\" : 255 "
-                     "},"
-                     "{ \"name\" : \"fake2\","
-                     "  \"type\" : \"switch\", "
-                     "  \"sw_mode\" : \"toggle\", "
-                     "  \"sw_state\" : 0, "
-                     "  \"sw_context\" : \"init\", "
-                     "  \"sw_relay_pin\" : 255, "
-                     "  \"sw_led_pin\" : 255, "
-                     "  \"sw_man_pin\" : 255 "
-                     "},"
-                     "{ \"name\" : \"FakeTemp1\","
-                     "  \"type\" : \"temp/humidity\", "
-                     "  \"th_variant\" : \"DHT21\", "
-                     "  \"th_temp\" : 5.02, "
-                     "  \"th_humidity\" : 28.6, "
-                     "  \"th_temp_offset\" : -2.4, "
-                     "  \"th_pin\" : 255 "
-                     "},"
-                     "{ \"name\" : \"FakeTemp2\","
-                     "  \"type\" : \"temp/humidity\", "
-                     "  \"th_variant\" : \"DHT21\", "
-                     "  \"th_temp\" : 5.02, "
-                     "  \"th_humidity\" : 28.6, "
-                     "  \"th_temp_offset\" : -2.4, "
-                     "  \"th_pin\" : 255 "
-                     "},"
-                     "{ \"name\" : \"Temp\","
-                     "  \"type\" : \"temp/humidity\", "
-                     "  \"th_variant\" : \"DHT21\", "
-                     "  \"th_temp\" : 5.02, "
-                     "  \"th_humidity\" : 28.6, "
-                     "  \"th_temp_offset\" : -2.4, "
-                     "  \"th_pin\" : 2 "
-                     "}"
-                     "]"
-                     "}";
-                     */
 
 // Runtime mode
 // using bitmasks so new modes need to 
