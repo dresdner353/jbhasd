@@ -9,6 +9,49 @@
 // Values for pins are unsigned char 0-255 and NO_PIN(255) acts
 // as the unset value
 
+
+// Value used to define an unset PIN
+// using 255 as we're operating in unsigned char
+#define NO_PIN 255
+
+// EEPROM Configuration
+// It uses a struct of fields which is cast directly against
+// the eeprom array. The marker field is used to store a dummy
+// value as a means of detecting legit config on the first boot.
+// That marker value can be changed as config is remodelled
+// to ensure a first read is interpreted as blank/invalid and
+// config is then reset
+
+#define MAX_FIELD_LEN 30
+#define MAX_CONFIG_LEN 2048
+
+#define LIST_SELFLINK(head) { \
+    (head)->prev = (head); \
+    (head)->next = (head); \
+}
+
+#define LIST_INSERT(head, item) { \
+    (item)->next = (head); \
+    (item)->prev = (head)->prev; \
+    (item)->prev->next = item; \
+    (head)->prev = (item); \
+}
+
+#define LIST_RMOVE(item) { \
+    (item)->prev->next = (item)->next; \
+    (item)->next->prev = (item)->prev; \
+    (item)->next = NULL; \
+    (item)->prev = NULL; \
+}
+
+#define LIST_NEXT(item) { \
+    (item)->next \
+}
+
+#define LIST_PREV(item) { \
+    (item)->prev \
+}
+
 // Context type for tracking how
 // a switch was activated
 enum switch_state_context {
@@ -24,11 +67,11 @@ enum switch_behaviour {
 };
 
 struct gpio_switch {
-    char *name;
+    struct gpio_switch *prev, *next;
+    char name[MAX_FIELD_LEN];
     unsigned char relay_pin; // output pin used for relay
     unsigned char led_pin; // output pin used for LED
     unsigned char manual_pin; // input pin used for manual toggle
-    unsigned char initial_state;
     unsigned char current_state;
     enum switch_behaviour switch_behaviour; 
     enum switch_state_context state_context;
@@ -46,10 +89,12 @@ enum gpio_sensor_type {
 // name, type, variant, pin, struct/class obj ref
 // and 2 floats to hold values
 struct gpio_sensor {
-    char *name;
+    struct gpio_sensor *prev, *next;
+    char name[MAX_FIELD_LEN];
     enum gpio_sensor_type sensor_type;
     unsigned char sensor_variant; // DHT11 DHT22, DHT21 etc
     unsigned char sensor_pin; // pin for sensor
+    float temp_offset;
     void *ref; // point to allocated reference struct/class
 
     // value place holders
@@ -78,12 +123,13 @@ struct led_program_step {
 };
 
 struct gpio_led {
-    char *name;
+    struct gpio_led *prev, *next;
+    char name[MAX_FIELD_LEN];
     unsigned char red_pin;   // Red pin
     unsigned char green_pin; // Green pin
     unsigned char blue_pin;  // Blue pin
     unsigned char manual_pin;  // manual toggle
-    char *init_program; // default program
+    char program[2048]; // default program
 
     // Hue + RGB values
     // for current colour
@@ -108,53 +154,100 @@ struct gpio_led {
     unsigned long timestamp;
 };
 
-// Value used to define an unset PIN
-// using 255 as we're operating in unsigned char
-#define NO_PIN 255
 
-// EEPROM Configuration
-// It uses a struct of fields which is cast directly against
-// the eeprom array. The marker field is used to store a dummy
-// value as a means of detecting legit config on the first boot.
-// That marker value can be changed as config is remodelled
-// to ensure a first read is interpreted as blank/invalid and
-// config is then reset
-
-#define MAX_FIELD_LEN 20
-#define MAX_SWITCHES 5
-#define MAX_SENSORS 5
-#define MAX_LEDS 5
-#define MAX_PROGRAM_LEN 100
-#define CFG_MARKER_VAL 0x16
 
 // Software Version
 // Crude compile-time grab of date and time
 // into string
-const char *gw_sw_compile_date = __DATE__ " " __TIME__;
+const char *gv_sw_compile_date = __DATE__ " " __TIME__;
 
-// Pointer to selected profile
-// This will set at load_config() stage
-struct device_gpio_profile *gv_profile = NULL;
-
-// config struct that we cast into EEPROM
-struct eeprom_config {
-    unsigned char marker;
-    char profile[MAX_FIELD_LEN];
+struct device_profile {
     char zone[MAX_FIELD_LEN];
     char wifi_ssid[MAX_FIELD_LEN];
     char wifi_password[MAX_FIELD_LEN];
-    char switch_names[MAX_SWITCHES][MAX_FIELD_LEN];
-    unsigned char switch_initial_states[MAX_SWITCHES];
-    unsigned char switch_behaviours[MAX_SWITCHES];
-    char sensor_names[MAX_SENSORS][MAX_FIELD_LEN];
-    char temp_offset[MAX_FIELD_LEN];
-    char led_names[MAX_LEDS][MAX_FIELD_LEN];
-    char led_programs[MAX_LEDS][MAX_PROGRAM_LEN];
-    unsigned char ota_enabled;
-    unsigned char telnet_enabled;
-    unsigned char manual_switches_enabled;
-    unsigned char force_apmode_onboot;
-} gv_config;
+    int ota_enabled;
+    int telnet_enabled;
+    int mdns_enabled;
+    int manual_switches_enabled;
+    int boot_program_pin;
+    int wifi_led_pin;
+    int force_apmode_onboot;
+    struct gpio_switch *switch_list;
+    struct gpio_sensor *sensor_list;
+    struct gpio_led *led_list;
+};
+
+struct device_profile gv_device;
+
+/*
+char *gv_config_json_str = 
+                     "{"
+                     "\"zone\" : \"proto\", "
+                     "\"wifi_ssid\" : \"cormac-L\", "
+                     "\"wifi_password\" : \"h0tcak3y\", "
+                     "\"ota_enabled\" : 1, "
+                     "\"telnet_enabled\" : 1, "
+                     "\"mdns_enabled\" : 1, "
+                     "\"manual_switches_enabled\" : 1, "
+                     "\"switches\" : 1, "
+                     "\"boot_pin\" : 0, "
+                     "\"wifi_led_pin\" : 13, "
+                     "\"force_apmode_onboot\" : 0, "
+                     "\"controls\" : ["
+                     "{ \"name\" : \"relay\","
+                     "  \"type\" : \"switch\", "
+                     "  \"sw_mode\" : \"toggle\", "
+                     "  \"sw_state\" : 1, "
+                     "  \"sw_context\" : \"init\", "
+                     "  \"sw_relay_pin\" : 12, "
+                     "  \"sw_led_pin\" : 13, "
+                     "  \"sw_man_pin\" : 0 "
+                     "},"
+                     "{ \"name\" : \"fake1\","
+                     "  \"type\" : \"switch\", "
+                     "  \"sw_mode\" : \"toggle\", "
+                     "  \"sw_state\" : 0, "
+                     "  \"sw_context\" : \"init\", "
+                     "  \"sw_relay_pin\" : 255, "
+                     "  \"sw_led_pin\" : 255, "
+                     "  \"sw_man_pin\" : 255 "
+                     "},"
+                     "{ \"name\" : \"fake2\","
+                     "  \"type\" : \"switch\", "
+                     "  \"sw_mode\" : \"toggle\", "
+                     "  \"sw_state\" : 0, "
+                     "  \"sw_context\" : \"init\", "
+                     "  \"sw_relay_pin\" : 255, "
+                     "  \"sw_led_pin\" : 255, "
+                     "  \"sw_man_pin\" : 255 "
+                     "},"
+                     "{ \"name\" : \"FakeTemp1\","
+                     "  \"type\" : \"temp/humidity\", "
+                     "  \"th_variant\" : \"DHT21\", "
+                     "  \"th_temp\" : 5.02, "
+                     "  \"th_humidity\" : 28.6, "
+                     "  \"th_temp_offset\" : -2.4, "
+                     "  \"th_pin\" : 255 "
+                     "},"
+                     "{ \"name\" : \"FakeTemp2\","
+                     "  \"type\" : \"temp/humidity\", "
+                     "  \"th_variant\" : \"DHT21\", "
+                     "  \"th_temp\" : 5.02, "
+                     "  \"th_humidity\" : 28.6, "
+                     "  \"th_temp_offset\" : -2.4, "
+                     "  \"th_pin\" : 255 "
+                     "},"
+                     "{ \"name\" : \"Temp\","
+                     "  \"type\" : \"temp/humidity\", "
+                     "  \"th_variant\" : \"DHT21\", "
+                     "  \"th_temp\" : 5.02, "
+                     "  \"th_humidity\" : 28.6, "
+                     "  \"th_temp_offset\" : -2.4, "
+                     "  \"th_pin\" : 2 "
+                     "}"
+                     "]"
+                     "}";
+                     */
 
 // Runtime mode
 // using bitmasks so new modes need to 
