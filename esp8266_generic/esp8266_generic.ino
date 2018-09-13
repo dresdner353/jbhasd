@@ -2,7 +2,7 @@
 // using what I call the JBHASD "API"
 // (Json-Based Home Automation with Service Discovery)
 //
-// Cormac Long July 2017
+// Cormac Long September 2018
 
 #include <EEPROM.h>
 #include <ESP8266WiFi.h>
@@ -70,11 +70,12 @@ char gv_mdns_hostname[MAX_FIELD_LEN + MAX_FIELD_LEN];
 char gv_push_ip[MAX_FIELD_LEN];
 int gv_push_port;
 
-// Output buffers
+// Global Data buffers
 // In an effort to keep the RAM usage low
 // It seems best to use a single large and two
 // small buffers to do all string formatting for
 // web pages and JSON strings
+char gv_small_buffer[512];
 char gv_large_buffer[4096];
 char gv_config[MAX_CONFIG_LEN];
 
@@ -89,11 +90,6 @@ char gv_config[MAX_CONFIG_LEN];
 // needed to turn on the LED
 int gv_switch_state_reg[] = { LOW, HIGH };
 int gv_led_state_reg[] = { HIGH, LOW };
-
-// Telnet Support
-// Wrapper layer around logging to serial or
-// to connected network client
-// could be enhanced later on
 
 // Function start_serial
 // Starts serial logging after
@@ -110,6 +106,8 @@ void start_serial()
 }
 
 // Telnet server
+// Used for logging diversion from serial
+// to connected clients
 WiFiServer telnet_server(23);
 WiFiClient telnet_clients[MAX_TELNET_CLIENTS];
 
@@ -173,7 +171,8 @@ void log_message(char *format, ... )
         for(i = 0; i < MAX_TELNET_CLIENTS; i++) {
             if (telnet_clients[i] && 
                 telnet_clients[i].connected()) {
-                telnet_clients[i].write((uint8_t*)log_buf, strlen(log_buf));
+                telnet_clients[i].write((uint8_t*)log_buf, 
+                                        strlen(log_buf));
                 telnet_clients[i].flush();
             }
         }
@@ -222,14 +221,26 @@ void handle_telnet_sessions()
                 if(telnet_clients[i]) {
                     telnet_clients[i].stop();
                 }
-            telnet_clients[i] = telnet_server.available();
-            continue;
+                telnet_clients[i] = telnet_server.available();
+                ets_sprintf(gv_small_buffer,
+                            "JBHASD %s Logging Console client %d/%d\r\n",
+                            gv_mdns_hostname,
+                            i + 1,
+                            MAX_TELNET_CLIENTS);
+                telnet_clients[i].write((uint8_t*)gv_small_buffer, 
+                                        strlen(gv_small_buffer));
+                continue;
+            }
         }
-    }
 
-    //no free/disconnected spot so reject
-    WiFiClient serverClient = telnet_server.available();
-    serverClient.stop();
+        //no free/disconnected slot so reject
+        WiFiClient serverClient = telnet_server.available();
+        ets_sprintf(gv_small_buffer,
+                    "JBHASD %s Logging Console.. no available slots\r\n",
+                    gv_mdns_hostname);
+        serverClient.write((uint8_t*)gv_small_buffer, 
+                           strlen(gv_small_buffer));
+        serverClient.stop();
     }
 
     //check clients for data
@@ -249,8 +260,6 @@ void handle_telnet_sessions()
 
 // Function: set_switch_state
 // Sets the desired switch state to the value of the state arg
-// The switch is referenced by name or index value
-// for the in-memory array
 void set_switch_state(struct gpio_switch *gpio_switch,
                       unsigned int state,
                       enum switch_state_context context)
@@ -294,8 +303,8 @@ void set_switch_state(struct gpio_switch *gpio_switch,
 }
 
 // Function: setup_switches
-// Scans the in-memory array and configures the defined switch
-// pins including initial states
+// Scans the list of configured switches
+// and performs the required pin setups
 void setup_switches()
 {
     struct gpio_switch *gpio_switch;
@@ -499,7 +508,7 @@ void restore_wifi_led_state()
 // defined sensor pins
 void setup_sensors()
 {
-    static int already_setup = 0;
+    static int first_run = 1;
     struct gpio_sensor *gpio_sensor;
     DHT *dhtp;
 
@@ -510,11 +519,11 @@ void setup_sensors()
     // because of the pointer ref field
     // could try to get smart and call delete on set pointers
     // but its probably safer to just do this once.
-    if (already_setup) {
+    if (!first_run) {
         log_message("already setup (returning)");
         return;
     }
-    already_setup = 1;
+    first_run = 0;
 
     for (gpio_sensor = LIST_NEXT(gv_device.sensor_list);
          gpio_sensor != gv_device.sensor_list;
@@ -525,10 +534,11 @@ void setup_sensors()
         switch (gpio_sensor->sensor_type) {
           case GP_SENS_TYPE_NONE:
             // do nothing
+            log_message("    Unknown Type (dummy)");
             break;
 
           case GP_SENS_TYPE_DHT:
-            log_message("DHT Type %d on pin %d",
+            log_message("    DHT Type %d on pin %d",
                         gpio_sensor->sensor_variant,
                         gpio_sensor->sensor_pin);
 
@@ -540,7 +550,7 @@ void setup_sensors()
                 gpio_sensor->ref = dhtp;
             }
             else {
-                log_message("Sensor not assigned to pin (fake)");
+                log_message("    Sensor not assigned to pin (fake)");
                 // non-pin assigned DHT
                 // for faking/simulation
                 gpio_sensor->ref = NULL;
@@ -1177,11 +1187,12 @@ const char *get_json_status(int pretty)
     // top-level fields
     json_status["name"] = gv_mdns_hostname;
     json_status["zone"] = gv_device.zone;
+    json_status["wifi_ssid"] = gv_device.wifi_ssid;
     json_status["ota_enabled"] = gv_device.ota_enabled;
     json_status["telnet_enabled"] = gv_device.telnet_enabled;
     json_status["mdns_enabled"] = gv_device.mdns_enabled;
     json_status["manual_switches_enabled"] = gv_device.manual_switches_enabled;
-    json_status["wifi_ssid"] = gv_device.wifi_ssid;
+    json_status["provisioned"] = gv_device.provisioned;
 
     // system section
     JsonObject& system = json_status.createNestedObject("system");
@@ -1315,9 +1326,80 @@ struct gpio_led* find_led(const char *name)
     return NULL;
 }
 
+// Function: save_config
+// Writes config to EEPROM
+void save_config()
+{
+    log_message("save_config()");
+
+    log_message("config data: (%d bytes) \n%s", 
+                strlen(gv_config), 
+                gv_config);
+
+    log_message("Write EEPROM data..(%d bytes)", sizeof(gv_config));
+    EEPROM.begin(sizeof(gv_config));
+    EEPROM.put(0, gv_config);
+    EEPROM.commit();
+}
+
+void update_config(char *field, 
+                   const char *sval,
+                   int ival,
+                   int save_now)
+{    
+    log_message("update_config()");
+
+    log_message("Current Config:\n%s", gv_config);
+
+    // JSON parse from config
+    const int capacity = 4096;
+    DynamicJsonBuffer gv_json_buffer(capacity);
+    JsonObject& json_cfg = 
+        gv_json_buffer.parseObject((const char*)gv_config);
+
+    if (!json_cfg.success()) {
+        log_message("JSON decode failed for config");
+
+        // build fresh JSON document
+        strcpy(gv_config, "{}");
+        JsonObject& json_cfg = gv_json_buffer.createObject();
+
+        if (!json_cfg.success()) {
+            log_message("Failed to create json cfg document");
+            return;
+        }
+    }
+
+    // perform the desired update
+    // after determining a string or int focus
+    if (sval) {
+        log_message("Updating string %s with %s", 
+                    field,
+                    sval);
+        json_cfg[field] = sval;
+    }
+    else {
+        log_message("Updating string %s with %d", 
+                    field,
+                    ival);
+        json_cfg[field] = ival;
+    }
+
+    // Dump back out JSON config
+    json_cfg.prettyPrintTo(gv_large_buffer);
+    strcpy(gv_config, gv_large_buffer);
+    
+    log_message("Config updated to:\n%s", gv_config);
+
+    if (save_now) {
+        // Commit to disk
+        save_config();
+    }
+}
+
 // Function: reset_config
-// wipes all config and resets active
-// profile to first in register
+// wipes all config 
+// puts in sensible defaults
 void reset_config()
 {
     struct gpio_switch *gpio_switch;
@@ -1326,30 +1408,25 @@ void reset_config()
 
     log_message("reset_config()");
 
-    memset(&gv_config, 0, sizeof(gv_config));
+    // factory default settings
+    // last field on most calls is 0 to 
+    // delay EEPROM commit per call
     strcpy(gv_config, "{}");
-    memset(&gv_device, 0, sizeof(gv_device));
+    update_config("zone", "Needs Setup", 0, 0);
+    update_config("wifi_ssid", "", 0, 0);
+    update_config("wifi_password", "", 0, 0);
+    update_config("ota_enabled", NULL, 1, 0);
+    update_config("telnet_enabled", NULL, 1, 0);
+    update_config("mdns_enabled", NULL, 1, 0);
+    update_config("manual_switches_enabled", NULL, 1, 0);
+    update_config("boot_pin", NULL, 0, 0);
+    update_config("wifi_led_pin", NULL, NO_PIN, 0);
 
-    // In a reset state, assume boot pin is 0 
-    // as it nearly always is and
-    // disable Wifi PIN
-    gv_device.boot_program_pin = 0;
-    gv_device.wifi_led_pin = NO_PIN;
-    gv_device.ota_enabled = 1;
-    gv_device.telnet_enabled = 1;
-    gv_device.mdns_enabled = 1;
-    strcpy(gv_device.zone, "Unknown");
-
-    // Initialise lists for switches, sensors and LEDs
-    gv_device.switch_list = gpio_switch_alloc();
-    LIST_SELFLINK(gv_device.switch_list);
-
-    gv_device.sensor_list = gpio_sensor_alloc();
-    LIST_SELFLINK(gv_device.sensor_list);
-
-    gv_device.led_list = gpio_led_alloc();
-    LIST_SELFLINK(gv_device.led_list);
-
+    // Mark provisioned state to 0 to label 
+    // ready for auto-config
+    // also set last field to 1 to commit 
+    // the lot to EEPROM
+    update_config("provisioned", NULL, 0, 1);
 }
 
 
@@ -1365,14 +1442,41 @@ void load_config()
 
     log_message("load_config()");
 
-    reset_config();
+    // Init of device 
+    memset(&gv_device, 0, sizeof(gv_device));
+
+    // Initialise lists for switches, sensors and LEDs
+    gv_device.switch_list = gpio_switch_alloc();
+    LIST_SELFLINK(gv_device.switch_list);
+
+    gv_device.sensor_list = gpio_sensor_alloc();
+    LIST_SELFLINK(gv_device.sensor_list);
+
+    gv_device.led_list = gpio_led_alloc();
+    LIST_SELFLINK(gv_device.led_list);
 
     log_message("Read EEPROM data..(%d bytes)", sizeof(gv_config));
     EEPROM.begin(sizeof(gv_config));
     EEPROM.get(0, gv_config);
+
+    // Safe terminate last char of string
+    // just in case
+    gv_config[sizeof(gv_config) - 1] = 0;
+
     log_message("config data: (%d bytes) \n%s", 
                 strlen(gv_config), 
                 gv_config);
+
+    // Extra Sanity on config data
+    // we should have what seem to tokens for zone, wifi 
+    // and password
+    if (!strstr(gv_config, "\"zone\"") ||
+        !strstr(gv_config, "\"wifi_ssid\"") ||
+        !strstr(gv_config, "\"wifi_password\"")) {
+        log_message("Config likely corrupt.. resetting");
+        reset_config();
+        return;
+    }
 
     // JSON parse from config
     const int capacity = 4096;
@@ -1381,7 +1485,8 @@ void load_config()
         gv_json_buffer.parseObject((const char*)gv_config);
 
     if (!json_cfg.success()) {
-        log_message("JSON decode failed for config");
+        log_message("JSON decode failed for config.. resetting");
+        reset_config();
         return;
     }
 
@@ -1396,6 +1501,7 @@ void load_config()
     gv_device.boot_program_pin = json_cfg["boot_pin"];
     gv_device.wifi_led_pin = json_cfg["wifi_led_pin"];
     gv_device.force_apmode_onboot = json_cfg["force_apmode_onboot"];
+    gv_device.provisioned = json_cfg["provisioned"];
 
     JsonArray& controls = json_cfg["controls"];
     if (controls.success()) {
@@ -1465,58 +1571,8 @@ void load_config()
 
 }
 
-void update_config(char *field, 
-                   const char *sval,
-                   int ival = 0)
-{    
-    log_message("update_config()");
 
-    // JSON parse from config
-    const int capacity = 4096;
-    DynamicJsonBuffer gv_json_buffer(capacity);
-    JsonObject& json_cfg = 
-        gv_json_buffer.parseObject((const char*)gv_config);
 
-    if (!json_cfg.success()) {
-        log_message("JSON decode failed for config");
-        return;
-    }
-
-    // perform the desired update
-    // after determining a string or int focus
-    if (sval && strlen(sval) > 0) {
-        log_message("Updating string %s with %s", 
-                    field,
-                    sval);
-        json_cfg[field] = sval;
-    }
-    else {
-        log_message("Updating string %s with %d", 
-                    field,
-                    ival);
-        json_cfg[field] = ival;
-    }
-
-    // Dump back out JSON config
-    json_cfg.prettyPrintTo(gv_large_buffer);
-    strcpy(gv_config, gv_large_buffer);
-}
-
-// Function: save_config
-// Writes config to EEPROM
-void save_config()
-{
-    log_message("save_config()");
-
-    log_message("config data: (%d bytes) \n%s", 
-                strlen(gv_config), 
-                gv_config);
-
-    log_message("Write EEPROM data..(%d bytes)", sizeof(gv_config));
-    EEPROM.begin(sizeof(gv_config));
-    EEPROM.put(0, gv_config);
-    EEPROM.commit();
-}
 
 // Function: ap_handle_root
 // On the initial call, this will display the pre-built
@@ -1533,33 +1589,33 @@ void ap_handle_root()
     int i;
     unsigned int led_value;
 
-    int store_config = 0; // default
+    int apply_config = 0; // default
 
     log_message("ap_handle_root()");
 
     // check for post args
 
     if (gv_web_server.hasArg("zone")) {
-        // actual normal config saving
-        // just store
-        store_config = 1;
+        // actual normal config updates
+        apply_config = 1;
 
         update_config("zone", 
                       gv_web_server.arg("zone").c_str(),
+                      0,
                       0);
 
         update_config("wifi_ssid", 
                       gv_web_server.arg("ssid").c_str(),
+                      0,
                       0);
 
         update_config("wifi_password", 
                       gv_web_server.arg("password").c_str(),
-                      0);
-
+                      0,
+                      1);
     }
 
-    if (store_config) {
-        save_config();
+    if (apply_config) {
         gv_web_server.send(200, "text/html", "Applying settings and rebooting");
         gv_reboot_requested = 1;
     }
@@ -1668,6 +1724,12 @@ void start_ap_mode()
 
     // format the main part of the form
     ets_sprintf(gv_large_buffer,
+                "<head>"
+                "<title>JBHASD Device Setup</title>"
+                "<meta charset=\"utf-8\">"
+                "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+                "</head>"
+                "<body>"
                 "<h2>%s Setup</h2>"
                 "<form action=\"/\" method=\"post\">"
                 "<div>"
@@ -1683,7 +1745,7 @@ void start_ap_mode()
                 "    <input type=\"text\" value=\"%s\" maxlength=\"%d\" name=\"password\">"
                 "</div>"
                 "<div>"
-                "<button>Apply Settings</button>"
+                "<button class=\"btn btn-primary\">Apply Settings</button>"
                 "</div>"
                 "<div>"
                 "    <label>JSON Config</label>"
@@ -1694,7 +1756,8 @@ void start_ap_mode()
                 "</pre>"
                 "</div>"
                 "<br><br>"
-                "</form>",
+                "</form>"
+                "</body>",
         gv_mdns_hostname,
         gv_device.zone,
         MAX_FIELD_LEN,
@@ -1777,9 +1840,6 @@ void sta_handle_json() {
         pretty = atoi(gv_web_server.arg("pretty").c_str());
     }
 
-    // Return current status as standard
-    gv_web_server.send(200, "text/html", get_json_status(pretty));
-
     // reboot if directed
     if (gv_web_server.hasArg("reboot")) {
         log_message("Received reboot command");
@@ -1792,16 +1852,14 @@ void sta_handle_json() {
     if (gv_web_server.hasArg("apmode")) {
         log_message("Received apmode command");
         gv_device.force_apmode_onboot = 1;
-        update_config("force_apmode_onboot", NULL, 1);
-        save_config();
+        update_config("force_apmode_onboot", NULL, 1, 1);
         gv_reboot_requested = 1;
     }
 
     // factory reset if directed
     if (gv_web_server.hasArg("reset")) {
         log_message("Received reset command");
-        strcpy(gv_config, "Factory Reset");
-        save_config();
+        reset_config();
         gv_reboot_requested = 1;
     }
 
@@ -1809,9 +1867,13 @@ void sta_handle_json() {
     if (gv_web_server.hasArg("config")) {
         log_message("Received configure command");
         strcpy(gv_config, gv_web_server.arg("config").c_str());
-        save_config();
+        update_config("provisioned", NULL, 1, 1);
         gv_reboot_requested = 1;
     }
+
+    // Return current status as standard
+    gv_web_server.send(200, "text/html", get_json_status(pretty));
+
 }
 
 // Function: start_wifi_sta_mode
@@ -1924,7 +1986,7 @@ void setup()
     gv_mode = MODE_INIT;
 
     // Get the config at this stage
-    // as start_serial needs profiles setup
+    // as start_serial needs config setup
     load_config();
     start_serial();
 
@@ -1962,17 +2024,15 @@ void setup()
     // remain in AP mode
     if (gv_device.force_apmode_onboot == 1) {
         log_message("Detected forced AP Mode");
-        update_config("force_apmode_onboot", NULL, 0);
-        save_config();
+        update_config("force_apmode_onboot", NULL, 0, 1);
         start_ap_mode();
         return;
     }
 
-    // If we have no SSID provisioned
+    // If we have no zone provisioned
     // then we go straight for AP mode
     if (strlen(gv_device.wifi_ssid) == 0) {
-        log_message("No legit config present.. going directly to AP mode");
-        reset_config();
+        log_message("No WiFI SSID provisioned.. going directly to AP mode");
         start_ap_mode();
         return;
     }
