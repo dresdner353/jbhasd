@@ -124,7 +124,6 @@ struct gpio_led {
     unsigned char red_pin;   // Red pin
     unsigned char green_pin; // Green pin
     unsigned char blue_pin;  // Blue pin
-    unsigned char manual_pin;  // manual toggle
     char program[2048]; // default program
 
     // Hue + RGB values
