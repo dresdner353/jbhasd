@@ -1063,9 +1063,6 @@ void setup_leds()
         set_led_program(gpio_led,
                         gpio_led->program);
 
-        // Only service led pins with set names
-        // Allows for the config to disable hard-coded
-        // defaults
         log_message("Setting up LED:%s, initial value:%d",
                     gpio_led->name,
                     gpio_led->current_state);
@@ -1084,11 +1081,6 @@ void setup_leds()
             log_message("    LED Blue pin:%d",
                         gpio_led->blue_pin);
             pinMode(gpio_led->blue_pin, OUTPUT);
-        }
-        if (gpio_led->manual_pin != NO_PIN) {
-            log_message("    Manual pin:%d",
-                        gpio_led->manual_pin);
-            pinMode(gpio_led->manual_pin, INPUT_PULLUP);
         }
     }
 }
@@ -1244,6 +1236,19 @@ const char *get_json_status(int pretty)
             obj["temp"] = gpio_sensor->f2;
             break;
         }
+    }
+
+    // LED RGB section
+    JsonArray& rgbs_arr = json_status.createNestedArray("rgb");
+
+    for (gpio_led = LIST_NEXT(gv_device.led_list);
+         gpio_led != gv_device.led_list;
+         gpio_led = LIST_NEXT(gpio_led)) {
+
+        JsonObject& obj = rgbs_arr.createNestedObject();
+        obj["name"] = gpio_led->name;
+        obj["program"] = gpio_led->program;
+        obj["state"] = gpio_led->current_state;
     }
 
     // Format string in compact or prety format
@@ -1412,6 +1417,7 @@ void reset_config()
     // last field on most calls is 0 to 
     // delay EEPROM commit per call
     strcpy(gv_config, "{}");
+    update_config("name", gv_mdns_hostname, 0, 0);
     update_config("zone", "Needs Setup", 0, 0);
     update_config("wifi_ssid", "", 0, 0);
     update_config("wifi_password", "", 0, 0);
@@ -1564,6 +1570,22 @@ void load_config()
                 gpio_sensor->sensor_variant = DHT21;
                 gpio_sensor->sensor_pin = th_pin;
                 gpio_sensor->temp_offset = th_temp_offset;
+            }
+
+            if (!strcmp(control_type, "rgb")) {
+                const int red_pin = control["red_pin"];
+                const int green_pin = control["green_pin"];
+                const int blue_pin = control["blue_pin"];
+                const char* program = control["program"];
+
+                gpio_led = gpio_led_alloc();
+                LIST_INSERT(gv_device.led_list, gpio_led);
+
+                strcpy(gpio_led->name, control_name);
+                strcpy(gpio_led->program, program);
+                gpio_led->red_pin = red_pin;
+                gpio_led->green_pin = green_pin;
+                gpio_led->blue_pin = blue_pin;
             }
         }
     }
@@ -1747,6 +1769,8 @@ void start_ap_mode()
                 "<div>"
                 "<button class=\"btn btn-primary\">Apply Settings</button>"
                 "</div>"
+                "<br><br>"
+                "<br><br>"
                 "<div>"
                 "    <label>JSON Config</label>"
                 "</div>"
@@ -1755,7 +1779,6 @@ void start_ap_mode()
                 "%s"
                 "</pre>"
                 "</div>"
-                "<br><br>"
                 "</form>"
                 "</body>",
         gv_mdns_hostname,
@@ -1864,9 +1887,13 @@ void sta_handle_json() {
     }
 
     // config update
+    // Copy over specified config
+    // flag as provisioned
+    // Also set name to actual device name
     if (gv_web_server.hasArg("config")) {
         log_message("Received configure command");
         strcpy(gv_config, gv_web_server.arg("config").c_str());
+        update_config("name", gv_mdns_hostname, 0, 0);
         update_config("provisioned", NULL, 1, 1);
         gv_reboot_requested = 1;
     }
@@ -2002,13 +2029,10 @@ void setup()
                 ESP.getFreeHeap(),
                 ESP.getResetReason().c_str());
 
-    // Set MDNS hostname based on prefix, chip ID and zone
-    // will also use this for AP SSID
-    // and OTA mode
+    // Set MDNS hostname based on prefix and chip ID
     ets_sprintf(gv_mdns_hostname,
-                "ESP-%08X-%s",
-                ESP.getChipId(),
-                gv_device.zone);
+                "ESP8266-%08X",
+                ESP.getChipId());
 
     // Init Push IP
     gv_push_ip[0] = '\0';
