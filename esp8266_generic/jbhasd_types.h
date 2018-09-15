@@ -108,9 +108,7 @@ struct gpio_sensor {
 // as it matches the lower octet of the set colour
 // value
 
-# define MAX_PWM_VALUE 1023
-
-#define MAX_LED_STEPS 20
+#define MAX_PWM_VALUE 1023
 
 struct led_program_step {
     unsigned int colour;
@@ -118,25 +116,18 @@ struct led_program_step {
     int pause; // msec gap at end of RGB fade
 };
 
-struct gpio_led {
-    struct gpio_led *prev, *next;
+struct gpio_rgb {
+    struct gpio_rgb *prev, *next;
     char name[MAX_FIELD_LEN];
     unsigned char red_pin;   // Red pin
     unsigned char green_pin; // Green pin
     unsigned char blue_pin;  // Blue pin
     char program[2048]; // default program
+    char *program_ptr;
 
     // Hue + RGB values
     // for current colour
-    unsigned int current_state;
-
-    // array of program steps that is iterated
-    // to produce light shift sequences
-    // step_index is the current active 
-    // step
-    struct led_program_step steps[MAX_LED_STEPS];
-    int num_steps;
-    int step_index;
+    unsigned int current_colour;
 
     // arrays of desired and current states
     // for pins
@@ -144,9 +135,24 @@ struct gpio_led {
     unsigned short desired_states[3];
     unsigned short current_states[3];
 
+    // current step
+    // Tracks logical step in program
+    // from 0 upward
+    int step;
+
+    // Determined if we discover we encounter an end
+    // of program while extracting first step
+    // used to drive a bypass of the set_rgb_state()
+    // call
+    int single_step;
+
     // msec timestamp for tracking fade 
-    // delay and pauses
     unsigned long timestamp;
+
+    // delay and pauses
+    // in msecs
+    int fade_delay;
+    int pause;
 };
 
 
@@ -170,7 +176,7 @@ struct device_profile {
     int provisioned;
     struct gpio_switch *switch_list;
     struct gpio_sensor *sensor_list;
-    struct gpio_led *led_list;
+    struct gpio_rgb *rgb_list;
 };
 
 struct device_profile gv_device;
