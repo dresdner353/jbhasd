@@ -223,10 +223,12 @@ void handle_telnet_sessions()
                 }
                 telnet_clients[i] = telnet_server.available();
                 ets_sprintf(gv_small_buffer,
-                            "JBHASD %s Logging Console client %d/%d\r\n",
-                            gv_mdns_hostname,
+                            "JBHASD Logging Console client %d/%d\r\n"
+                            "Name:%s Zone:%s\r\n",
                             i + 1,
-                            MAX_TELNET_CLIENTS);
+                            MAX_TELNET_CLIENTS,
+                            gv_mdns_hostname,
+                            gv_device.zone);
                 telnet_clients[i].write((uint8_t*)gv_small_buffer, 
                                         strlen(gv_small_buffer));
                 continue;
@@ -967,11 +969,15 @@ void set_rgb_state(struct gpio_rgb *gpio_rgb)
         strcpy(step_buffer, gpio_rgb->program_ptr);
 
         // Detect single-step programs
-        // we found no step separator
-        // so if the program pointer is pointing
-        // to the start, then the entire program is a 
-        // single step
-        if (gpio_rgb->program_ptr == gpio_rgb->program) {
+        // we found no step separator in the above check
+        // So if the program pointer is pointing
+        // to the start, then the entire program is  
+        // then a single step.
+        // But if that single step uses the random keyword
+        // we dont treat it as a single step 
+        // because it changes each time its run
+        if (gpio_rgb->program_ptr == gpio_rgb->program &&
+            strncmp(step_buffer, "random", 5) != 0) {
             gpio_rgb->single_step = 1;
         }
 
@@ -1011,7 +1017,11 @@ void set_rgb_state(struct gpio_rgb *gpio_rgb)
 
     // Extract colour value
     // sensitive to hex and decimal
-    if (strlen(step_buffer) > 2 &&
+    // and also keyword random
+    if (!strncmp(step_buffer, "random", 5)) {
+        gpio_rgb->current_colour = random(0, 0xFFFFFF);
+    }
+    else if (strlen(step_buffer) > 2 &&
         step_buffer[0] == '0' &&
         (step_buffer[1] == 'x' || step_buffer[1] == 'X')) {
         // hex decode
@@ -1247,7 +1257,10 @@ const char *get_json_status(int pretty)
         JsonObject& obj = rgbs_arr.createNestedObject();
         obj["name"] = gpio_rgb->name;
         obj["program"] = gpio_rgb->program;
-        obj["current_colour"] = gpio_rgb->current_colour;
+        ets_sprintf(gv_small_buffer,
+                    "0x%08X",
+                    gpio_rgb->current_colour);
+        obj["current_colour"] = gv_small_buffer;
         obj["step"] = gpio_rgb->step;
     }
 
@@ -2031,7 +2044,7 @@ void setup()
 
     // Set MDNS hostname based on prefix and chip ID
     ets_sprintf(gv_mdns_hostname,
-                "ESP8266-%08X",
+                "JBHASD-%08X",
                 ESP.getChipId());
 
     // Init Push IP
