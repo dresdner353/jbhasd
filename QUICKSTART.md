@@ -15,9 +15,11 @@ zeroconf
 cherrypy
 
 Then to run the web server:
+```
 cd <your work dir>
 git clone https://github.com/dresdner353/jbhasd.git
 python3 jbhasd/jbhasd_web_server.py
+```
 
 .. if it works, point your browser as localhost:8080 or your machines IP:8080. If its working, 
 you should see a page with a gray gradient background with a timestamp top-right.
@@ -40,7 +42,7 @@ The web server script is split into several separate threads that each perform a
 
 Discovery:
 The script uses zeroconf to discover the devices by their common "JBHASD" type attribute. 
-It then establishes the URL by combining IP, advertised port and "/json" to form http://ip:port/json. 
+It then establishes the URL by combining IP, advertised port to form http://ip:port. 
 This URL is added to a global set of discovered URLs.
 
 Probe:
