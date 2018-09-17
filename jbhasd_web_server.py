@@ -871,37 +871,36 @@ def probe_devices():
             for control in json_data['controls']:
                 control_name = control['name']
                 control_type = control['type']
-                #control_state = int(control['state'])
- 
-                # Record analytics
-                #csv_row = "%d,%d,%s,%s,%s,%s,%s,%d" % (2,
-                #                                       status_ts, 
-                #                                       zone_name, 
-                #                                       device_name, 
-                #                                       control_name, 
-                #                                       "", 
-                #                                       "",
-                #                                       control_state)
-                #analytics_file.write("%s\n" % (csv_row)) 
-                #analytics_file.flush()
 
-            # Iterate sensors and record analytics
-            #for sensor in json_data['sensors']:
-            #    sensor_name = sensor['name']
-            #    sensor_type = sensor['type']
-            #    if sensor_type == "temp/humidity":
-            #        temp = sensor['temp']
-            #        humidity = sensor['humidity']
-            #        csv_row = "%d,%d,%s,%s,%s,%s,%s,%d" % (1,
-            #                                               status_ts, 
-            #                                               zone_name, 
-            #                                               device_name, 
-            #                                               sensor_name, 
-            #                                               temp, 
-            #                                               humidity,
-            #                                               0)
-            #        analytics_file.write("%s\n" % (csv_row)) 
-            #        analytics_file.flush()
+                if (control_type == 'switch'):
+                    control_state = int(control['state'])
+ 
+                    # Record analytics
+                    csv_row = "%d,%d,%s,%s,%s,%s,%s,%d" % (2,
+                                                           status_ts, 
+                                                           zone_name, 
+                                                           device_name, 
+                                                           control_name, 
+                                                           "", 
+                                                           "",
+                                                           control_state)
+                    analytics_file.write("%s\n" % (csv_row)) 
+                    analytics_file.flush()
+
+
+                if (control_type == 'temp/humidity'):
+                    temp = control['temp']
+                    humidity = control['humidity']
+                    csv_row = "%d,%d,%s,%s,%s,%s,%s,%d" % (1,
+                                                           status_ts, 
+                                                           zone_name, 
+                                                           device_name, 
+                                                           control_name, 
+                                                           temp, 
+                                                           humidity,
+                                                           0)
+                    analytics_file.write("%s\n" % (csv_row)) 
+                    analytics_file.flush()
 
         print("%s Probe.. successful:%d failed:%d "
               "changed:%d purged:%d" % (time.asctime(),
