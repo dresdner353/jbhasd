@@ -14,7 +14,7 @@ import random
 
 from zeroconf import ServiceInfo, Zeroconf
 
-json_status_tmpl = '{ "name": "__DEVICE_NAME__", "zone": "__ZONE__", "ota_enabled" : 1, "telnet_enabled" : 1, "manual_switches_enabled" : 1, "temp_offset" : "0", "ssid" : "cormac-L", "profile" : "Sonoff S20", "controls": [], "sensors": [] }'
+json_status_tmpl = '{ "name": "__DEVICE_NAME__", "zone": "__ZONE__", "ota_enabled" : 1, "telnet_enabled" : 1, "manual_switches_enabled" : 1, "ssid" : "XXXX", "controls": [] }'
 
 us_states_list = ['Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado', 'Connecticut', 'Delaware', 'Florida', 'Georgia', 'Hawaii', 'Idaho', 'Illinois', 'Indiana', 'Iowa', 'Kansas', 'Kentucky', 'Louisiana', 'Maine', 'Maryland', 'Massachusetts', 'Michigan', 'Minnesota', 'Mississippi', 'Missouri', 'Montana', 'Nebraska', 'Nevada', 'New Hampshire', 'New Jersey', 'New Mexico', 'New York', 'North Carolina', 'North Dakota', 'Ohio', 'Oklahoma', 'Oregon', 'Pennsylvania', 'Rhode Island', 'South Carolina', 'South Dakota', 'Tennessee', 'Texas', 'Utah', 'Vermont', 'Virginia', 'Washington', 'West Virginia', 'Wisconsin', 'Wyoming', 'District of Columbia', 'Puerto Rico', 'Guam', 'American Samoa', 'U.S. Virgin Islands', 'Northern Mariana Islands']
 
@@ -74,7 +74,7 @@ def change_device_status():
         num_ports = len(ports_list)
 
         # controls
-        num_devices_to_change = random.randint(0, 10)
+        num_devices_to_change = random.randint(0, 40)
         print("Changing controls for %d devices" % (num_devices_to_change))
         for i in range(0, num_devices_to_change):
             port_index = random.randint(1, 10000000) % num_ports
@@ -86,32 +86,21 @@ def change_device_status():
                                                    device_json['name']))
             for j in range(0, num_controls_to_change):
                 control_index = random.randint(1, 10000000) % num_controls_in_device
-                control_state = random.randint(0, 100) % 2
-                print("Changing control %s state to %d" % (device_json['controls'][control_index]['name'], 
-                                                           control_state))
-                device_json['controls'][control_index]['state'] = control_state
+                control_type = device_json['controls'][control_index]['type']
+                if control_type == 'switch':
+                    control_state = random.randint(0, 100) % 2
+                    print("Changing switch %s state to %d" % (device_json['controls'][control_index]['name'], 
+                                                              control_state))
+                    device_json['controls'][control_index]['state'] = control_state
 
-        # sensors
-        num_devices_to_change = random.randint(0, 10)
-        print("Changing sensors for %d devices" % (num_devices_to_change))
-        for i in range(0, num_devices_to_change):
-            port_index = random.randint(1, 10000000) % num_ports
-            port = ports_list[port_index]
-            device_json = json_status_dict[port]
-            num_sensors_in_device = len(device_json['sensors'])
-            num_sensors_to_change = random.randint(1, 10000000) % (num_sensors_in_device + 1)
-            print("Changing %d sensors for %s" % (num_sensors_to_change, 
-                                                   device_json['name']))
-            for j in range(0, num_sensors_to_change):
-                sensor_index = random.randint(1, 10000000) % num_sensors_in_device
-                # Generate randome temp and humidity
-                sensor_temp = "%.2f" % (random.uniform(-30, 95))
-                sensor_humidity = "%.2f" % (random.uniform(0, 100))
-                print("Changing sensor %s temp:%s humidity:%s" % (device_json['sensors'][sensor_index]['name'], 
-                                                                  sensor_temp,
-                                                                  sensor_humidity))
-                device_json['sensors'][sensor_index]['temp'] = sensor_temp
-                device_json['sensors'][sensor_index]['humidity'] = sensor_humidity
+                if control_type == 'temp/humidity':
+                    sensor_temp = "%.2f" % (random.uniform(-30, 95))
+                    sensor_humidity = "%.2f" % (random.uniform(0, 100))
+                    print("Changing sensor %s temp:%s humidity:%s" % (device_json['controls'][control_index]['name'], 
+                                                                      sensor_temp,
+                                                                      sensor_humidity))
+                    device_json['controls'][control_index]['temp'] = sensor_temp
+                    device_json['controls'][control_index]['humidity'] = sensor_humidity
 
         time.sleep(10)
 
@@ -136,7 +125,7 @@ num_rivers = len(irish_rivers_list)
 
 for id in range(0, num_states):
     # DNS-SD/MDNS
-    instance = 'jbhasd_sim%d' % (id)
+    instance = 'JBHASD-BEEFED%02X' % (id)
     port = 9000 + id
 
     zone = us_states_list[id]
@@ -151,22 +140,24 @@ for id in range(0, num_states):
     # PIck a number and then random index
     # We then module cycle through that index 
     # naming controls after the list entry
-    num_controls = random.randint(0, 5) 
+    num_controls = random.randint(1, 10) 
     control_index = random.randint(0, 1000000) % num_counties
-    for i in range(0, num_controls):
-        control_state = random.randint(0, 100) % 2
-        control_name = irish_counties_list[control_index]
-        json_data['controls'].append({'name': control_name, 'type' : 'switch', 'state' : control_state})
-        control_index = (control_index + 1) % num_counties
-
-    num_sensors = random.randint(0, 5) 
     sensor_index = random.randint(0, 1000000) % num_rivers
-    for i in range(0, num_sensors):
-        sensor_temp = "%.2f" % (random.uniform(-30, 95))
-        sensor_humidity = "%.2f" % (random.uniform(0, 100))
-        sensor_name = irish_rivers_list[sensor_index]
-        json_data['sensors'].append({'name': sensor_name, 'type' : 'temp/humidity', 'temp' : sensor_temp, 'humidity' : sensor_humidity})
-        sensor_index = (sensor_index + 1) % num_rivers
+    for i in range(0, num_controls):
+        control_type = random.randint(0, 100) % 2
+        if control_type == 0:
+            # switch
+            control_state = random.randint(0, 100) % 2
+            control_name = irish_counties_list[control_index]
+            json_data['controls'].append({'name': control_name, 'type' : 'switch', 'state' : control_state})
+            control_index = (control_index + 1) % num_counties
+        else:
+            # sensor
+            sensor_temp = "%.2f" % (random.uniform(-30, 95))
+            sensor_humidity = "%.2f" % (random.uniform(0, 100))
+            sensor_name = irish_rivers_list[sensor_index]
+            json_data['controls'].append({'name': sensor_name, 'type' : 'temp/humidity', 'temp' : sensor_temp, 'humidity' : sensor_humidity})
+            sensor_index = (sensor_index + 1) % num_rivers
 
     json_status_dict[port] = json_data
 
@@ -182,7 +173,7 @@ cherrypy.engine.start()
 
 for id in range(0, num_states):
     # DNS-SD/MDNS
-    instance = 'jbhasd_sim%d' % (id)
+    instance = 'JBHASD-BEEFED%02X' % (id)
     svc_type = 'JBHASD'
     mdns_svc = '_' + svc_type + '._tcp.local.'
     mdns_host = instance + '.local.'
