@@ -8,111 +8,177 @@ The main objective of the project is to create firmware sketches for ESP-8266 de
 
 There's some great existing options for home automation stacks out there and protocols such as MQTT. There are also some very powerful firmware sketches and LUA/Node-MCU scripts for the ESP-8266. However I wanted to build a lean simplified model that made it easier to manage during setup. The objective was to use a JSON status string served via URL from the device as a means of presenting the  capabilities to a querying server. The discovery would be based on DNS-SD/Zeroconf. 
 
-## Flashing the Firmware to ESP8266 Devices
-The esp8266_generic folder contains an Arduino sketch you can flash to any ESP-8266 device. It has 4 profiles or pin assignmenets built in for ESP-01, Sonoff Basic, Sonoff S20 and H801 Wifi LED Controller devices. All these profiles are doing is defining the pin assignments in terms of switches, LEDS, and sensors. You can easily edit the fletch to define additional profiles based around your devices and configurations.
+## Quick Summary of the Setup Steps
+- The generic firmware is flashed to any ESP-8266 Device
+- The device should power up in AP mode with SSID JBHASD-XXXXXXXX where XXXXXXXX is the CPU ID of the ESP8266
+- You connect to the SSID where you can then set Zone, Wifi SSID and Password and apply changes
+- The device then reboots and connects to your network in STA mode (WiFI client)
+- You can then access the device with a JSON GET-based API and manage it from there
+- MDNS and DNS-SD ae built-in and an accompanying web server can be used as a hub for the devices providing a web portal, means of managing automation and even downloading config data to newlty attached or reset devices
 
-## Configuring A Device
-When you power up the device, the LED flashes at a medium speed and you have 5 seconds to ground GPIO-0 to put it into a config mode where it then acts as an open wireless AP. The LED will start flashing at a fast rate once the device enters this AP mode.
+## Using AP Mode to Configuring WiFI
+When you first power up the device after flashing, it should auto launch as a open wireless AP. The SSID will be of the format "JBHASD-XXXXXXXX". 
 
-Note: For a first-time flash, the device will detect no config present and automatically enter this AP mode. It's possible you will not see any LED flashing at this stage simply because the required profile is not yet set and the correct LED GPIO assignments are therefore unknown. If you search for wifi SSIDs, you should see "ESP-ddddddd-Unknown". Select and you should get directed to an initial setup screen.
+After connecting to the SSID, you should be dropped into a config page that lets you set three fields.. zone, WiFI SSID and password. 
 
-The initial config step is to select the desired device profile. Selct the desired profile and click apply. The page will refresh and you are then shown the config options for that profile. For Wi-Fi, you configure the desired SSID and password. You also set a zone name which for intents and purposes is the either a room name or a common name you wants for devices in a single area. There are several additional features such as a toggle to enable/disable OTA mode and telnet loging mode. Finally, you get to set names for the associated switch relays and their initial power-up states. You can also set the names for any defined sensors. Any switch or sensor name left blank is your means of disabling it.
+You then click apply, it saves the config to eeprom and reboots. The device should then reboot, enter STA mode and connect to your configured WiFI router as a client. If you need to access the AP mode again, power-cycle the device and ground GPIO-0 within the first 5 seconds and it should re-enter AP mode. 
 
-You click apply, it saves the config to eeprom and reboots. If the reboot is not interrupted with another GPIO-0 ground, the device will start in WiFI STA mode after 5 seconds, connecting to the configured WiFI and registering for self discovery. While connecting to WiFI, the LED flashes as a slower rate and then issues burst of quick flashes once it connects to WiFI. 
+At this stage, all you have is a device that connects to your WiFI. It is not yet configured in terms of pin asignments for switches and sensors.
 
-If you need to re-configure, just reset the mains and press the button (or ground GPIO-0) within 5 seconds to get AP mode activated to let you jump in and edit settings. 
+But you can now communicate to the device and see its status information
 
-## OTA Update
-The sketch also supports OTA updating once it gets into STA mode. This makes the task of updating firmware much easier. I've only used the Arduino IDE for this but it discovers the devices without issue and lets you select the network port for flashing. This OTA updating can also be disabled in config.
+## Getting the Device JSON Status
 
-## Telnet Logging
-The telnet logging interface runs on telnet port 23 that acts as a debug feed from the device showing all logging messages to connected clients. This activates after the device has connected to WiFI. Up to that point, logging is performed via the serial interface. To use this you just telnet to the device IP and will see a stream of debug activity as the sketch does it's thing. You can also disable telnet logging in AP mode which will restrict logging to the serial interface only. 
-
-## Communicating with JBHASD Devices
-Once the devices are connected to your WiFI, you can determine the assigned IP addresses and access their JSON URLs to see the device details. Then you can use GET or POST requests on that same URL to pass in the desired control and state you wish to turn on or off any given switch. The response each time will be the current overall state. An example of the JSON status string:
+So for this example, we'll assume a device was configured and successfully connected to the WiFI network. Also the IP was determined to be 192.168.12.145. So a simple GET on the URL will return a JSON status string detailling the particulars of this device.
 
 ```
-$ curl 'http://192.168.12.165/json'
-
-{ "name": "esp8266-9825072-Attic", "zone": "Attic", "ota_enabled" : 1, 
-"controls": [{ "name": "A", "type": "switch", "state": 1 }, 
-{ "name": "B", "type": "switch", "state": 0 }, 
-{ "name": "C", "type": "switch", "state": 0 }, 
-{ "name": "D", "type": "switch", "state": 0 }], 
-"sensors": [{ "name": "Temp", "type": "temp/humidity", "humidity": "47.29", "temp": "24.20" }, 
-{ "name": "Wilma", "type": "temp/humidity", "humidity": "7.50", "temp": "67.25" }], 
-"system" : { "reset_reason" : "Software/System restart", "free_heap" : 30712, 
-"chip_id" : 9825072, "flash_id" : 1327328, "flash_size" : 1048576, 
-"flash_real_size" : 1048576, "flash_speed" : 40000000, "cycle_count" : 248706992 } }
+$ curl 'http://192.168.12.145?pretty=1'
+{
+  "name": "JBHASD-00072D6D",
+  "zone": "ESP-01",
+  "wifi_ssid": "XXX",
+  "ota_enabled": 1,
+  "telnet_enabled": 1,
+  "mdns_enabled": 1,
+  "manual_switches_enabled": 1,
+  "configured": 0,
+  "system": {
+    "compile_date": "Sep 17 2018 21:34:16",
+    "reset_reason": "Software/System restart",
+    "free_heap": 22816,
+    "chip_id": 470381,
+    "flash_id": 1327343,
+    "flash_size": 1048576,
+    "flash_real_size": 1048576,
+    "flash_speed": 40000000,
+    "cycle_count": 2062378582,
+    "millis": 5140614
+  },
+  "controls": []
+}
 ```
-The response will list the device name, zone, OTA state, controls and sensors. Each control lists its type (can be 'switch' or 'led') and given state. The sensors list their type (only temp/humidity for now) and the humidity and temp values in Celsius. There is also a sub-struct of system details showing reset reasons, free heap etc. All this system detail was taken from the variety of calls you can make on the ESP global object. 
 
-Then to demo the toggling of a switch using GET, you use the control and state fields in the GET URL. Note the changes to control "A" on each response:
+The section above for controls is where we would normally see details on any switches, sensors etc that are being managed by this device. Given this is a clean setup, no such detail is defined yet. Also the "configured" attribute of this device is set to 0 which confirms that no full device configuration has been pushed to this device.
+
+The pretty=1 args to this call could be omitted or passed with a 0 value and it will then return the JSON status as a single string without the pretty formatting. Use whateveer you prefer. 
+
+## Pushing Configuration to the Device
+
+The example below is how you would cofiguration to a given device and setup its GPIO pins to control any attached hardware or onboard features.
+
 ```
-$ curl 'http://192.168.12.165/json?control=A&state=0'
-
-{ "name": "esp8266-9825072-Attic", "zone": "Attic", "ota_enabled" : 1, 
-"controls": [{ "name": "A", "type": "switch", "state": 0 }, 
-{ "name": "B", "type": "switch", "state": 0 }, 
-{ "name": "C", "type": "switch", "state": 0 }, 
-{ "name": "D", "type": "switch", "state": 0 }], 
-"sensors": [{ "name": "Temp", "type": "temp/humidity", "humidity": "47.29", "temp": "24.20" }, 
-{ "name": "Wilma", "type": "temp/humidity", "humidity": "72.50", "temp": "20.25" }], 
-"system" : { "reset_reason" : "Software/System restart", "free_heap" : 30560, 
-"chip_id" : 9825072, "flash_id" : 1327328, "flash_size" : 1048576, 
-"flash_real_size" : 1048576, "flash_speed" : 40000000, "cycle_count" : 4038990944 } }
-
-$ curl 'http://192.168.12.165/json?control=A&state=1'
-
-{ "name": "esp8266-9825072-Attic", "zone": "Attic", "ota_enabled" : 1, 
-"controls": [{ "name": "A", "type": "switch", "state": 1 }, 
-{ "name": "B", "type": "switch", "state": 0 }, 
-{ "name": "C", "type": "switch", "state": 0 }, 
-{ "name": "D", "type": "switch", "state": 0 }], 
-"sensors": [{ "name": "Temp", "type": "temp/humidity", "humidity": "47.40", "temp": "24.29" }, 
-{ "name": "Wilma", "type": "temp/humidity", "humidity": "28.50", "temp": "59.25" }], 
-"system" : { "reset_reason" : "Software/System restart", "free_heap" : 30560, 
-"chip_id" : 9825072, "flash_id" : 1327328, "flash_size" : 1048576, 
-"flash_real_size" : 1048576, "flash_speed" : 40000000, "cycle_count" : 1636317248 } }
+curl -G  "http://192.168.12.165/json" --data-urlencode 'config={ "zone" : "Prototype 1", "wifi_ssid" : "XXX", "wifi_password" : "XXX", "ota_enabled" : 1, "telnet_enabled" : 1, "mdns_enabled" : 1, "manual_switches_enabled" : 1, "boot_pin" : 0, "wifi_led_pin" : 13, "force_apmode_onboot" : 0, "controls" : [ { "name" : "Relay", "type" : "switch", "sw_mode" : "toggle", "sw_state" : 0, "sw_relay_pin" : 12, "sw_led_pin" : 13, "sw_man_pin" : 0 }, { "name" : "Temp", "type" : "temp/humidity", "th_variant" : "DHT21", "th_temp_offset" : 0, "th_pin" : 14 } ] }'
 ```
-The examples above are all GET-based but the ESP8266 webserver supports GET and POST simultaneously.
+In the above example, the device in question is a Sonoff Basic switch. This device has a single relay for controlling mains appliances. It's GPIO-12 is the pin for this relay. There is also an onboard LED that is tied to GPIO-13 and an onboard button which is connected to GPIO-0. That variant of the Sonoff also has a spare accesible GPIO-14 pin via the header solder points on the board. 
 
-## Using Device Discovery
-Python3 script zero_discover.py is a very simple application of the zeroconf in a python script to discover these JBHASD devices on your LAN. 
+The config arg to the device passed a JSON config record that specifies the devices zone, wifi_ssid and password. So while you have already set this via AP mode, this config step lets you re-assign it if desired. Then following this are a series of enabled options for OTA, telnet, MDNS and manual switches. More on these later.
 
-## The Web Server
-Python3 script jbhasd_web_server.py is a simple web server running on port 8080 and acts a console for both seeing detected devices and  controlling them manually and automatically. The web engine is using cherrypy and also using jquery for background reloading on the client browser.
+The "boot_pin" specifies the assigned pin used for putting the device into AP mode when it is first booted. This is nearly the same GPIO-0 pin as used for flashing. So it typically matches at least one onboard switch on most devices or at least something that can be attached to available pinouts on the board. The "wifi_led_pin" represents the LED used for displaying WiFI connect status. That same LED provides visual feedback when the device is being booted and entering AP mode. 
 
-When you start up the script, it begins using zeroconf to discover the JBHASD devices and then probes their status URL to determine the capabilities. In the background the script will probe/re-probe of each detected devices every 10 seconds. Devices that clock up 30+ seconds of no response are struck off the register.
+Ignore "force_apmode_onboot" for now. 
 
-You get two views for the web interface. The Zone view is the default shown when you browse to http://ip:8080 or to http://ip:8080/zone. A CSS widget panel is shown per JBHASD zone. In that panel will be all switches and sensors. If you configure multiple separate devices with the same zone name, then they will appear as a single zon panel on the web interface with a unified set of switch and sensor data shown. 
+We're now at the controls array and what you can see is a JSON record for a control named 'Relay' or type 'switch'. The switch is in 'toggle' mode, meaning it's assigned manual pin toggles between on/off. The relay pin is set to 12, LED pin to 13 and manual pin to 0. 
 
-The Device view http://ip:8080/device shows each device in it's own panel. This view has more detail including a reboot switch and ap mode switch per device. There is also a URL link on each panel that will open a new browser window/tab to the raw JSON URL direct from the device. Finally, there is a Control Panel widget also shown on this page that details the number of devices being tracked, the sunset time and Lights on offset and a reboot option that will initiate the reboot of all tracked devices.
+So with that control configured, the device will boot and configure a switch called Relay that drives the onboard relay via GPIO-12 and match the on/off state of that relay with the onboard LED (GPIO-13). Pressing the onboard flash button (GPIO-0) will act as a toggle-on and off button for the relay.
 
-On the client browser side, the web page refreshes every 10 seconds using a background GET. So it gives you a seamless updating of the console as devices come and go or change state. 
+Next up is the configuration for a DHT21 temperature sensor that is using the additonal GPIO-14. This sets the sensor name to Temp, its type to temp/humidity and then the desired pin and sensor variant required. There is also a temperature offset if the sensor accuracy needs adjustment. 
 
-## Lighting Automation 
-The web server has an internal register of devices for automation and this simply turns on/off the desired switches at the appropriate time. You can set specific times during the day for this automation or use a keyword "sunset" which uses a calculated time as an offset from the day's given sunset time. You get to set a URL to retrieve the sunset time for your region and configre the minutes +/-offset.
+With those settings applied, when this device boots again, it will flash the GPIO-13 LED at a medium rate for 5 seconds giving you time to ground GPIO-0 (boot_pin) and put the device into AP Mode. If you activate that boot PIN during that initial 5 seconds, the LED flashing will go to a fast rate to indicate AP mode. If you leave that boot sequence alone, after 5 seconds, the initial medium flashing rate will drop to a slower rate to indicate that the WiFI connect stage has started and it will issue a quick burst of flashes to indicate that the device has successfully conected to wifi. 
 
-## Simulating Devices
-Script jbhasd_device_sim.py can be used to simulate a set of fake JBHASD devices. So if you want to test out the basic idea on its own even without an actual ESP-8266 device, download and run both the web server and device sim scripts on the same LAN. You will need python3, and handful of packages added such as zeroconf & cherrypy. The scripts can be run on the same machine or on different machines. Then on the webserver machine http://ip:8080 you should see a dashboard of detected devices using names from US states and switch names for Irish counties. The switch states will update at random as the simulator is randomly changing states which are then detected by the web server. If you kill the simulator script, you will see the webserver report probe failures and within 30 seconds purge all devices that are no longer responding. 
+Once it reboots, the following JSON is now returned when the device is probed.. 
 
-A link to some photos of the prototypes and enclosures I've built to date..
-https://goo.gl/photos/uwRadttk9wY7vvGm6
+```
+$ curl "http://192.168.12.165/?pretty=1"
+{
+  "name": "JBHASD-0095EB30",
+  "zone": "Prototype 1",
+  "wifi_ssid": "XXX",
+  "ota_enabled": 1,
+  "telnet_enabled": 1,
+  "mdns_enabled": 1,
+  "manual_switches_enabled": 1,
+  "configured": 1,
+  "system": {
+    "compile_date": "Sep 17 2018 21:34:58",
+    "reset_reason": "Software/System restart",
+    "free_heap": 22672,
+    "chip_id": 9825072,
+    "flash_id": 1327328,
+    "flash_size": 1048576,
+    "flash_real_size": 1048576,
+    "flash_speed": 40000000,
+    "cycle_count": 2442867768,
+    "millis": 7373141
+  },
+  "controls": [
+    {
+      "name": "Relay",
+      "type": "switch",
+      "state": 0,
+      "context": "init",
+      "behaviour": "toggle"
+    },
+    {
+      "name": "Temp",
+      "type": "temp/humidity",
+      "humidity": 62.8,
+      "temp": 21.8
+    }
+  ]
+}
+```
 
-## TODO
-Nothing is perfect and one always strives for improvement :). So in no particular order, here are some enhancements I'd like to address in the future:
+So now, we have a populated 'controls' array being return and this is crucial as it plays a role in how this device is then integrated with hub-type applications that need to manipulate the device. 
 
-- Move to a JSON config file in the sketch, stored in the SPIFFS instead of EEPROM
-- Add some CSS to the AP mode device web interface
-- Evolve the profile model away from in-memory arrays to JSON documents that can be pushed to the devices and stored in SPIFFS
-  - This would mean that the entire pin assignments could be changed without reflashing a device
-- Give the python web server a JSON config file that it uses to save preferences
-  - This would pave the way for adding automation rules around discovered devices instead of having to edit the script
-- Implement proper long poll on the web server so that it updates instantly when any device state changes
-- Sort out Analytics support on web server end:
-  - Write rotating CSV files based on time and number of line limits
-  - Purge mechanism for older CSV files
-  - Assume an analytics system will pull and delete files from the server
-  - Commit Elasticsearch scripts and related material for collecting analytics from JBHASD devices
-- Examine intergation with Node Red for those that prefer to do things that way
+## Manipulating controls on the Device
+In the above example, we set up a Sonoff Basic device with its relay put to use and also leveraged the spare GPIO pin for a temperature device.
+
+Now we can instruct the relay to turn on.. 
+
+```
+$ curl "http://192.168.12.165?pretty=1&control=Relay&state=1"
+{
+  "name": "JBHASD-0095EB30",
+  "zone": "Prototype 1",
+  "wifi_ssid": "XXX",
+  "ota_enabled": 1,
+  "telnet_enabled": 1,
+  "mdns_enabled": 1,
+  "manual_switches_enabled": 1,
+  "configured": 1,
+  "system": {
+    "compile_date": "Sep 17 2018 21:34:58",
+    "reset_reason": "Software/System restart",
+    "free_heap": 22656,
+    "chip_id": 9825072,
+    "flash_id": 1327328,
+    "flash_size": 1048576,
+    "flash_real_size": 1048576,
+    "flash_speed": 40000000,
+    "cycle_count": 1194599308,
+    "millis": 7894409
+  },
+  "controls": [
+    {
+      "name": "Relay",
+      "type": "switch",
+      "state": 1,
+      "context": "network",
+      "behaviour": "toggle"
+    },
+    {
+      "name": "Temp",
+      "type": "temp/humidity",
+      "humidity": 62.9,
+      "temp": 22
+    }
+  ]
+}
+```
+
+The use of control=<name> informs the device which control we are manipulating and the the state=1 is used to put that selected control into a state of 1. That turns on the relay.
+  
+You will also notice that we get back the updated JSON status immediately and the "Relay" control shows its new state of 1. 
+
+
+TO BE CONTINUED
