@@ -1224,14 +1224,12 @@ const char *get_json_status(int pretty)
         obj["behaviour"] = get_sw_behaviour(gpio_switch->switch_behaviour);
     }
 
-    // sensors section
-    JsonArray& sensors_arr = json_status.createNestedArray("sensors");
-
+    // sensors
     for (gpio_sensor = LIST_NEXT(gv_device.sensor_list);
          gpio_sensor != gv_device.sensor_list;
          gpio_sensor = LIST_NEXT(gpio_sensor)) {
 
-        JsonObject& obj = sensors_arr.createNestedObject();
+        JsonObject& obj = controls_arr.createNestedObject();
         obj["name"] = gpio_sensor->name;
 
         switch (gpio_sensor->sensor_type) {
@@ -1247,15 +1245,14 @@ const char *get_json_status(int pretty)
         }
     }
 
-    // LED RGB section
-    JsonArray& rgbs_arr = json_status.createNestedArray("rgb");
-
+    // rgb
     for (gpio_rgb = LIST_NEXT(gv_device.rgb_list);
          gpio_rgb != gv_device.rgb_list;
          gpio_rgb = LIST_NEXT(gpio_rgb)) {
 
-        JsonObject& obj = rgbs_arr.createNestedObject();
+        JsonObject& obj = controls_arr.createNestedObject();
         obj["name"] = gpio_rgb->name;
+        obj["type"] = "rgb";
         obj["program"] = gpio_rgb->program;
         ets_sprintf(gv_small_buffer,
                     "0x%08X",
