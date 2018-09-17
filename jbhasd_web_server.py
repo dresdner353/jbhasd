@@ -291,32 +291,32 @@ def set_default_config():
     gv_json_config['sunset']['lights_on_offset'] = -1800
 
     # Timed switches
-    gv_json_config['timers'] = []
+    gv_json_config['switch_timers'] = []
 
-    gv_json_config['timers'].append (
+    gv_json_config['switch_timers'].append (
             { 'zone' : 'Livingroom', 
-              'switch' : 'Uplighter', 
+              'control' : 'Uplighter', 
               'on' : 'sunset', 
               'off' : '0100', 
             })
 
-    gv_json_config['timers'].append (
+    gv_json_config['switch_timers'].append (
             { 'zone' : 'Livingroom', 
-              'switch' : 'Window Lights', 
+              'control' : 'Window Lights', 
               'on' : 'sunset', 
               'off' : '0100', 
             })
 
-    gv_json_config['timers'].append (
+    gv_json_config['switch_timers'].append (
             { 'zone' : 'Playroom', 
-              'switch' : 'Uplighter', 
+              'control' : 'Uplighter', 
               'on' : 'sunset', 
               'off' : '0100', 
             })
 
-    gv_json_config['timers'].append (
+    gv_json_config['switch_timers'].append (
             { 'zone' : 'Kitchen', 
-              'switch' : 'Counter Lights', 
+              'control' : 'Counter Lights', 
               'on' : 'sunset', 
               'off' : '0100', 
             })
@@ -428,7 +428,7 @@ def sunset_api_time_to_epoch(time_str):
 
 
 def check_switch(zone_name, 
-                 switch_name, 
+                 control_name, 
                  current_time, 
                  control_state,
                  control_context):
@@ -442,7 +442,7 @@ def check_switch(zone_name,
     desired_state = -1
 
     # cater for manual over-rides
-    dict_key = '%s:%s' % (zone_name, switch_name)
+    dict_key = '%s:%s' % (zone_name, control_name)
     #print("Key %s" % (dict_key))
     now = time.time()
     if control_context == 'manual':
@@ -464,8 +464,8 @@ def check_switch(zone_name,
                 # override still in effect
                 return -1
 
-    for timer in gv_json_config['timers']:
-        if timer['zone'] == zone_name and timer['switch'] == switch_name:
+    for timer in gv_json_config['switch_timers']:
+        if timer['zone'] == zone_name and timer['control'] == control_name:
             # have a match
             # desired state will have a value now
             # so we assume off initially
@@ -503,6 +503,46 @@ def check_switch(zone_name,
 
     #print("return %d" % (desired_state))
     return desired_state
+
+
+def check_rgb(zone_name, 
+              control_name, 
+              current_time, 
+              control_program):
+
+    global gv_sunset_on_time
+
+    desired_program = ""
+
+    for timer in gv_json_config['rgb_timers']:
+        if timer['zone'] == zone_name and timer['control'] == control_name:
+
+            # we can now assert a default of off
+            desired_program = timer['off_program']
+
+            # sunset keyword replacemenet with
+            # dynamic sunset offset time
+            if (timer['on'] == "sunset"):
+                on_time = gv_sunset_on_time
+            else:
+                on_time = int(timer['on'])
+
+            off_time = int(timer['off'])
+
+            if (on_time <= off_time):
+                if (current_time >= on_time and 
+                    current_time < off_time):
+                    desired_program = timer['on_program']
+            else:
+                if (current_time > on_time):
+                    desired_program = timer['on_program']
+                else:
+                    if (current_time < on_time and
+                        current_time < off_time):
+                        desired_program = timer['on_program']
+
+    #print("return %s" % (desired_program))
+    return desired_program
 
 
 class MyZeroConfListener(object):  
@@ -600,7 +640,7 @@ def check_automated_devices():
         # for analytics
         status_ts = gv_jbhasd_device_ts_dict[device_name]
 
-        # Switch status check 
+        # Control status check 
         for control in json_data['controls']:
             control_name = control['name']
             control_type = control['type']
@@ -641,6 +681,35 @@ def check_automated_devices():
                     if (json_data is not None):
                         gv_jbhasd_device_status_dict[device_name] = json_data
                         gv_jbhasd_device_ts_dict[device_name] = int(time.time())
+
+            if control_type == 'rgb':
+                control_program = control['program']
+
+                desired_program = check_rgb(zone_name, 
+                                          control_name,
+                                          current_time,
+                                          control_program)
+ 
+                # If switch state not in desired state
+                # update and recache the status
+                if (desired_program != "" and 
+                    control_program != desired_program):
+                    print("%s Automatically setting %s/%s to program:%s" % (time.asctime(),
+                                                                            zone_name,
+                                                                            control_name,
+                                                                            desired_program))
+                    control_safe = urllib.parse.quote_plus(control_name)
+                    command_url = '%s?control=%s&program=%s' % (url,
+                                                                control_safe,
+                                                                desired_program)
+                    print("%s Issuing command url:%s" % (time.asctime(),
+                                                         command_url))
+
+                    json_data = fetch_url(command_url, gv_http_timeout_secs, 1)
+                    if (json_data is not None):
+                        gv_jbhasd_device_status_dict[device_name] = json_data
+                        gv_jbhasd_device_ts_dict[device_name] = int(time.time())
+
     return
 
 
@@ -705,6 +774,33 @@ def probe_devices():
                     control_changes += 1
 
                 gv_jbhasd_device_status_dict[device_name] = json_data
+
+                # Provision unprovisioned devices
+                # Look for provisioned field set to 0
+                if ('provisioned' in json_data and
+                        json_data['provisioned'] == 0):
+                    print("%s Device %s needs setup" % (time.asctime(), device_name))
+                    if (device_name in gv_json_config['device_config']): 
+                        # matched to stored profile
+                        print("%s Matched device %s to stored profile.. provisioning" % (time.asctime(), device_name))
+                        # Extract JSON config in string form
+                        # make web-safe and format the provision URL
+                        device_config = json.dumps(gv_json_config['device_config'][device_name])
+                        config_safe = urllib.parse.quote_plus(device_config)
+                        prov_url = '%s?config=%s' % (url,
+                                                     config_safe)
+                        # fire config at device
+                        # no need to capture response
+                        json_data = fetch_url(prov_url, gv_http_timeout_secs, 1)
+
+                        # Purge URL from discovered URL set
+                        # and related dictionaries
+                        # We want to leave it resurface again 
+                        del gv_jbhasd_device_url_dict[device_name]
+                        del gv_jbhasd_device_ts_dict[device_name]
+                        del gv_jbhasd_device_status_dict[device_name]
+                        gv_jbhasd_zconf_url_set.remove(url)
+
             else:
                 print("%s Failed to get status on %s" % (time.asctime(),
                                                          url))
@@ -775,37 +871,37 @@ def probe_devices():
             for control in json_data['controls']:
                 control_name = control['name']
                 control_type = control['type']
-                control_state = int(control['state'])
+                #control_state = int(control['state'])
  
                 # Record analytics
-                csv_row = "%d,%d,%s,%s,%s,%s,%s,%d" % (2,
-                                                       status_ts, 
-                                                       zone_name, 
-                                                       device_name, 
-                                                       control_name, 
-                                                       "", 
-                                                       "",
-                                                       control_state)
-                analytics_file.write("%s\n" % (csv_row)) 
-                analytics_file.flush()
+                #csv_row = "%d,%d,%s,%s,%s,%s,%s,%d" % (2,
+                #                                       status_ts, 
+                #                                       zone_name, 
+                #                                       device_name, 
+                #                                       control_name, 
+                #                                       "", 
+                #                                       "",
+                #                                       control_state)
+                #analytics_file.write("%s\n" % (csv_row)) 
+                #analytics_file.flush()
 
             # Iterate sensors and record analytics
-            for sensor in json_data['sensors']:
-                sensor_name = sensor['name']
-                sensor_type = sensor['type']
-                if sensor_type == "temp/humidity":
-                    temp = sensor['temp']
-                    humidity = sensor['humidity']
-                    csv_row = "%d,%d,%s,%s,%s,%s,%s,%d" % (1,
-                                                           status_ts, 
-                                                           zone_name, 
-                                                           device_name, 
-                                                           sensor_name, 
-                                                           temp, 
-                                                           humidity,
-                                                           0)
-                    analytics_file.write("%s\n" % (csv_row)) 
-                    analytics_file.flush()
+            #for sensor in json_data['sensors']:
+            #    sensor_name = sensor['name']
+            #    sensor_type = sensor['type']
+            #    if sensor_type == "temp/humidity":
+            #        temp = sensor['temp']
+            #        humidity = sensor['humidity']
+            #        csv_row = "%d,%d,%s,%s,%s,%s,%s,%d" % (1,
+            #                                               status_ts, 
+            #                                               zone_name, 
+            #                                               device_name, 
+            #                                               sensor_name, 
+            #                                               temp, 
+            #                                               humidity,
+            #                                               0)
+            #        analytics_file.write("%s\n" % (csv_row)) 
+            #        analytics_file.flush()
 
         print("%s Probe.. successful:%d failed:%d "
               "changed:%d purged:%d" % (time.asctime(),
@@ -854,8 +950,7 @@ def build_zone_web_page(num_cols):
         json_data = gv_jbhasd_device_status_dict[device_name]
         device_name = json_data['name']
         zone_name = json_data['zone']
-        device_size = (len(json_data['controls']) + 
-                       len(json_data['sensors']) + 1)
+        device_size = (len(json_data['controls']) + 1)
 
         if (zone_name in zone_size_dict):
             zone_size_dict[zone_name] += device_size
@@ -970,7 +1065,7 @@ def build_zone_web_page(num_cols):
 
             if (zone == zone_name):
                 # Sensors
-                for sensor in json_data['sensors']:
+                for sensor in json_data['controls']:
                     sensor_name = sensor['name']
                     sensor_type = sensor['type']
 
@@ -996,6 +1091,22 @@ def build_zone_web_page(num_cols):
 
                         dashboard_col_list[col_index] += '<tr><td></td></tr>'
                         dashboard_col_list[col_index] += '<tr><td></td></tr>'
+
+                    if (sensor_type == 'rgb'):
+                        current_colour = sensor['current_colour']
+
+                        dashboard_col_list[col_index] += (
+                                '<tr>'
+                                '<td class="dash-label">%s</td>'
+                                '<td style="color:#%s" align="center">'
+                                '&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;'
+                                '</td>'
+                                '</tr>') % (sensor_name,
+                                            current_colour[4:])
+
+                        dashboard_col_list[col_index] += '<tr><td></td></tr>'
+                        dashboard_col_list[col_index] += '<tr><td></td></tr>'
+
 
         # terminate the zone table and container div
         dashboard_col_list[col_index] += '</table></div>'
@@ -1070,8 +1181,7 @@ def build_device_web_page(num_cols):
     for device_name in device_list:
         json_data = gv_jbhasd_device_status_dict[device_name]
         device_name = json_data['name']
-        device_size = (len(json_data['controls']) + 
-                       len(json_data['sensors']) + 2)
+        device_size = (len(json_data['controls']) + 2)
         device_size_dict[device_name] = device_size
 
     # start the dash-box widget
@@ -1162,8 +1272,9 @@ def build_device_web_page(num_cols):
         # start the dash-box widget
         dashboard_col_list[col_index] += (
                 '<div class="dash-box">'
-                '<p class="dash-title">%s</p>'
-                '<table border="0" padding="3" width="100%%">') % (device_name)
+                '<p class="dash-title">%s<br>%s</p>'
+                '<table border="0" padding="3" width="100%%">') % (device_name,
+                                                                   zone_name)
 
         dashboard_col_list[col_index] += (
                 '<tr>'
@@ -1291,7 +1402,7 @@ def build_device_web_page(num_cols):
         dashboard_col_list[col_index] += '<tr><td></td></tr>'
 
         # Sensors
-        for sensor in json_data['sensors']:
+        for sensor in json_data['controls']:
             sensor_name = sensor['name']
             sensor_type = sensor['type']
 
@@ -1314,6 +1425,21 @@ def build_device_web_page(num_cols):
                         '</tr>') % (sensor_name,
                                     temp,
                                     humidity)
+
+                dashboard_col_list[col_index] += '<tr><td></td></tr>'
+                dashboard_col_list[col_index] += '<tr><td></td></tr>'
+
+            if (sensor_type == 'rgb'):
+                current_colour = sensor['current_colour']
+
+                dashboard_col_list[col_index] += (
+                        '<tr>'
+                        '<td class="dash-label">%s</td>'
+                        '<td style="color:#%s" align="center">'
+                        '&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;'
+                        '</td>'
+                        '</tr>') % (sensor_name,
+                                    current_colour[4:])
 
                 dashboard_col_list[col_index] += '<tr><td></td></tr>'
                 dashboard_col_list[col_index] += '<tr><td></td></tr>'
