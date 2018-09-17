@@ -1193,7 +1193,7 @@ const char *get_json_status(int pretty)
     json_status["telnet_enabled"] = gv_device.telnet_enabled;
     json_status["mdns_enabled"] = gv_device.mdns_enabled;
     json_status["manual_switches_enabled"] = gv_device.manual_switches_enabled;
-    json_status["provisioned"] = gv_device.provisioned;
+    json_status["configured"] = gv_device.configured;
 
     // system section
     JsonObject& system = json_status.createNestedObject("system");
@@ -1438,11 +1438,11 @@ void reset_config()
     update_config("boot_pin", NULL, 0, 0);
     update_config("wifi_led_pin", NULL, NO_PIN, 0);
 
-    // Mark provisioned state to 0 to label 
+    // Mark configured state to 0 to label 
     // ready for auto-config
     // also set last field to 1 to commit 
     // the lot to EEPROM
-    update_config("provisioned", NULL, 0, 1);
+    update_config("configured", NULL, 0, 1);
 }
 
 
@@ -1517,7 +1517,7 @@ void load_config()
     gv_device.boot_program_pin = json_cfg["boot_pin"];
     gv_device.wifi_led_pin = json_cfg["wifi_led_pin"];
     gv_device.force_apmode_onboot = json_cfg["force_apmode_onboot"];
-    gv_device.provisioned = json_cfg["provisioned"];
+    gv_device.configured = json_cfg["configured"];
 
     JsonArray& controls = json_cfg["controls"];
     if (controls.success()) {
@@ -1896,15 +1896,26 @@ void sta_handle_json() {
         gv_reboot_requested = 1;
     }
 
+    // mark for reconfigure
+    // just a case of setting configured 
+    // field to 0. No need to even save or 
+    // reboot
+    // Device will work fine until detected and 
+    // reconfigured
+    if (gv_web_server.hasArg("reconfig")) {
+        log_message("Received reconfigure command");
+        gv_device.configured = 0;
+    }
+
     // config update
     // Copy over specified config
-    // flag as provisioned
+    // flag as configured
     // Also set name to actual device name
     if (gv_web_server.hasArg("config")) {
         log_message("Received configure command");
         strcpy(gv_config, gv_web_server.arg("config").c_str());
         update_config("name", gv_mdns_hostname, 0, 0);
-        update_config("provisioned", NULL, 1, 1);
+        update_config("configured", NULL, 1, 1);
         gv_reboot_requested = 1;
     }
 
@@ -2063,10 +2074,10 @@ void setup()
         return;
     }
 
-    // If we have no zone provisioned
+    // If we have no zone set
     // then we go straight for AP mode
     if (strlen(gv_device.wifi_ssid) == 0) {
-        log_message("No WiFI SSID provisioned.. going directly to AP mode");
+        log_message("No WiFI SSID set.. going directly to AP mode");
         start_ap_mode();
         return;
     }
