@@ -9,6 +9,45 @@
 // Values for pins are unsigned char 0-255 and NO_PIN(255) acts
 // as the unset value
 
+
+// Value used to define an unset PIN
+// using 255 as we're operating in unsigned char
+#define NO_PIN 255
+
+// EEPROM Configuration
+// It uses a struct of fields which is cast directly against
+// the eeprom array. The marker field is used to store a dummy
+// value as a means of detecting legit config on the first boot.
+// That marker value can be changed as config is remodelled
+// to ensure a first read is interpreted as blank/invalid and
+// config is then reset
+
+#define MAX_FIELD_LEN 30
+#define MAX_CONFIG_LEN 2048
+
+#define LIST_SELFLINK(head) { \
+    (head)->prev = (head); \
+    (head)->next = (head); \
+}
+
+#define LIST_INSERT(head, item) { \
+    (item)->next = (head); \
+    (item)->prev = (head)->prev; \
+    (item)->prev->next = item; \
+    (head)->prev = (item); \
+}
+
+#define LIST_REMOVE(item) { \
+    (item)->prev->next = (item)->next; \
+    (item)->next->prev = (item)->prev; \
+    (item)->next = NULL; \
+    (item)->prev = NULL; \
+}
+
+#define LIST_NEXT(item) (item)->next
+
+#define LIST_PREV(item) (item)->prev
+
 // Context type for tracking how
 // a switch was activated
 enum switch_state_context {
@@ -24,11 +63,11 @@ enum switch_behaviour {
 };
 
 struct gpio_switch {
-    char *name;
+    struct gpio_switch *prev, *next;
+    char name[MAX_FIELD_LEN];
     unsigned char relay_pin; // output pin used for relay
     unsigned char led_pin; // output pin used for LED
     unsigned char manual_pin; // input pin used for manual toggle
-    unsigned char initial_state;
     unsigned char current_state;
     enum switch_behaviour switch_behaviour; 
     enum switch_state_context state_context;
@@ -46,10 +85,12 @@ enum gpio_sensor_type {
 // name, type, variant, pin, struct/class obj ref
 // and 2 floats to hold values
 struct gpio_sensor {
-    char *name;
+    struct gpio_sensor *prev, *next;
+    char name[MAX_FIELD_LEN];
     enum gpio_sensor_type sensor_type;
     unsigned char sensor_variant; // DHT11 DHT22, DHT21 etc
     unsigned char sensor_pin; // pin for sensor
+    float temp_offset;
     void *ref; // point to allocated reference struct/class
 
     // value place holders
@@ -67,9 +108,7 @@ struct gpio_sensor {
 // as it matches the lower octet of the set colour
 // value
 
-# define MAX_PWM_VALUE 1023
-
-#define MAX_LED_STEPS 20
+#define MAX_PWM_VALUE 1023
 
 struct led_program_step {
     unsigned int colour;
@@ -77,25 +116,18 @@ struct led_program_step {
     int pause; // msec gap at end of RGB fade
 };
 
-struct gpio_led {
-    char *name;
+struct gpio_rgb {
+    struct gpio_rgb *prev, *next;
+    char name[MAX_FIELD_LEN];
     unsigned char red_pin;   // Red pin
     unsigned char green_pin; // Green pin
     unsigned char blue_pin;  // Blue pin
-    unsigned char manual_pin;  // manual toggle
-    char *init_program; // default program
+    char program[2048]; // default program
+    char *program_ptr;
 
     // Hue + RGB values
     // for current colour
-    unsigned int current_state;
-
-    // array of program steps that is iterated
-    // to produce light shift sequences
-    // step_index is the current active 
-    // step
-    struct led_program_step steps[MAX_LED_STEPS];
-    int num_steps;
-    int step_index;
+    unsigned int current_colour;
 
     // arrays of desired and current states
     // for pins
@@ -103,58 +135,51 @@ struct gpio_led {
     unsigned short desired_states[3];
     unsigned short current_states[3];
 
+    // current step
+    // Tracks logical step in program
+    // from 0 upward
+    int step;
+
+    // Determined if we discover we encounter an end
+    // of program while extracting first step
+    // used to drive a bypass of the set_rgb_state()
+    // call
+    int single_step;
+
     // msec timestamp for tracking fade 
-    // delay and pauses
     unsigned long timestamp;
+
+    // delay and pauses
+    // in msecs
+    int fade_delay;
+    int pause;
 };
 
-// Value used to define an unset PIN
-// using 255 as we're operating in unsigned char
-#define NO_PIN 255
 
-// EEPROM Configuration
-// It uses a struct of fields which is cast directly against
-// the eeprom array. The marker field is used to store a dummy
-// value as a means of detecting legit config on the first boot.
-// That marker value can be changed as config is remodelled
-// to ensure a first read is interpreted as blank/invalid and
-// config is then reset
-
-#define MAX_FIELD_LEN 20
-#define MAX_SWITCHES 5
-#define MAX_SENSORS 5
-#define MAX_LEDS 5
-#define MAX_PROGRAM_LEN 100
-#define CFG_MARKER_VAL 0x16
 
 // Software Version
 // Crude compile-time grab of date and time
 // into string
-const char *gw_sw_compile_date = __DATE__ " " __TIME__;
+const char *gv_sw_compile_date = __DATE__ " " __TIME__;
 
-// Pointer to selected profile
-// This will set at load_config() stage
-struct device_gpio_profile *gv_profile = NULL;
-
-// config struct that we cast into EEPROM
-struct eeprom_config {
-    unsigned char marker;
-    char profile[MAX_FIELD_LEN];
+struct device_profile {
     char zone[MAX_FIELD_LEN];
     char wifi_ssid[MAX_FIELD_LEN];
     char wifi_password[MAX_FIELD_LEN];
-    char switch_names[MAX_SWITCHES][MAX_FIELD_LEN];
-    unsigned char switch_initial_states[MAX_SWITCHES];
-    unsigned char switch_behaviours[MAX_SWITCHES];
-    char sensor_names[MAX_SENSORS][MAX_FIELD_LEN];
-    char temp_offset[MAX_FIELD_LEN];
-    char led_names[MAX_LEDS][MAX_FIELD_LEN];
-    char led_programs[MAX_LEDS][MAX_PROGRAM_LEN];
-    unsigned char ota_enabled;
-    unsigned char telnet_enabled;
-    unsigned char manual_switches_enabled;
-    unsigned char force_apmode_onboot;
-} gv_config;
+    int ota_enabled;
+    int telnet_enabled;
+    int mdns_enabled;
+    int manual_switches_enabled;
+    int boot_program_pin;
+    int wifi_led_pin;
+    int force_apmode_onboot;
+    int configured;
+    struct gpio_switch *switch_list;
+    struct gpio_sensor *sensor_list;
+    struct gpio_rgb *rgb_list;
+};
+
+struct device_profile gv_device;
 
 // Runtime mode
 // using bitmasks so new modes need to 
