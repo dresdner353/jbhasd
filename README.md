@@ -134,7 +134,7 @@ $ curl "http://192.168.12.165/?pretty=1"
 }
 ```
 
-So now, we have a populated 'controls' array being return and this is crucial as it plays a role in how this device is then integrated with hub-type applications that need to manipulate the device. 
+So now, we have a populated 'controls' array being returned that describes the available controls. This is crucial as it plays a role later on in how this device is then integrated with hub-type applications that need to discover and manipulate devices. 
 
 ## Manipulating controls on the Device
 In the above example, we set up a Sonoff Basic device with its relay put to use and also leveraged the spare GPIO pin for a temperature device.
