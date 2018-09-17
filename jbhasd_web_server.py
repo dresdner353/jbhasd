@@ -559,9 +559,9 @@ class MyZeroConfListener(object):
             url = "http://%s:%d/json" % (address, port)
             if not url in gv_jbhasd_zconf_url_set:
                 gv_jbhasd_zconf_url_set.add(url)
-                print("%s Discovered device..\n  name:%s \n  URL:%s" % (time.asctime(),
-                                                                        name, 
-                                                                        url))
+                print("%s Discovered device..name:%s URL:%s" % (time.asctime(),
+                                                                name,
+                                                                url))
 
         return
 
@@ -775,14 +775,14 @@ def probe_devices():
 
                 gv_jbhasd_device_status_dict[device_name] = json_data
 
-                # Provision unprovisioned devices
-                # Look for provisioned field set to 0
-                if ('provisioned' in json_data and
-                        json_data['provisioned'] == 0):
-                    print("%s Device %s needs setup" % (time.asctime(), device_name))
+                # Provision unconfigured devices
+                # Look for configured field set to 0
+                if ('configured' in json_data and
+                        json_data['configured'] == 0):
+                    print("%s Device %s needs configuration" % (time.asctime(), device_name))
                     if (device_name in gv_json_config['device_config']): 
                         # matched to stored profile
-                        print("%s Matched device %s to stored profile.. provisioning" % (time.asctime(), device_name))
+                        print("%s Matched device %s to stored profile.. configuring" % (time.asctime(), device_name))
                         # Extract JSON config in string form
                         # make web-safe and format the provision URL
                         device_config = json.dumps(gv_json_config['device_config'][device_name])
