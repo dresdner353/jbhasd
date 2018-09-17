@@ -79,7 +79,7 @@ In the above example, the device in question is a Sonoff Basic switch. This devi
 
 The config arg to the device passed a JSON config record that specifies the devices zone, wifi_ssid and password. So while you have already set this via AP mode, this config step lets you re-assign it if desired. Then following this are a series of enabled options for OTA, telnet, MDNS and manual switches. More on these later.
 
-The "boot_pin" specifies the assigned pin used for putting the device into AP mode when it is first booted. This is nearly the same GPIO-0 pin as used for flashing. So it typically matches at least one onboard switch on most devices or at least something that can be attached to available pinouts on the board. The "wifi_led_pin" represents the LED used for displaying WiFI connect status. That same LED provides visual feedback when the device is being booted and entering AP mode. 
+The "boot_pin" specifies the assigned pin used for putting the device into AP mode when it is first booted. This is the same GPIO-0 pin as used for flashing. So it typically matches at least one onboard switch on most devices or at least something that can be attached to available pinouts on the board. The "wifi_led_pin" represents the LED used for displaying WiFI connect status. That same LED provides visual feedback when the device is being booted and entering AP mode. 
 
 Ignore "force_apmode_onboot" for now. 
 
