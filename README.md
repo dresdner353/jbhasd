@@ -67,11 +67,13 @@ The pretty=1 args to this call could be omitted or passed with a 0 value and it 
 The example below is how you would cofiguration to a given device and setup its GPIO pins to control any attached hardware or onboard features.
 
 ```
-curl -G  "http://192.168.12.165/json" --data-urlencode 'config={ "zone" : "Prototype 1", "wifi_ssid" : "XXX",
-"wifi_password" : "XXX", "ota_enabled" : 1, "telnet_enabled" : 1, "mdns_enabled" : 1, "manual_switches_enabled" : 1,
-"boot_pin" : 0, "wifi_led_pin" : 13, "force_apmode_onboot" : 0, "controls" : [ { "name" : "Relay", "type" : "switch",
-"sw_mode" : "toggle", "sw_state" : 0, "sw_relay_pin" : 12, "sw_led_pin" : 13, "sw_man_pin" : 0 }, { "name" : "Temp", 
-"type" : "temp/humidity", "th_variant" : "DHT21", "th_temp_offset" : 0, "th_pin" : 14 } ] }'
+curl -G  "http://192.168.12.165/json" --data-urlencode 'config={ "zone" : "Prototype 1", 
+"wifi_ssid" : "XXX", "wifi_password" : "XXX", "ota_enabled" : 1, "telnet_enabled" : 1, 
+"mdns_enabled" : 1, "manual_switches_enabled" : 1, "boot_pin" : 0, "wifi_led_pin" : 13, 
+"force_apmode_onboot" : 0, "controls" : [ { "name" : "Relay", "type" : "switch", 
+"sw_mode" : "toggle", "sw_state" : 0, "sw_relay_pin" : 12, "sw_led_pin" : 13, 
+"sw_man_pin" : 0 }, { "name" : "Temp", "type" : "temp/humidity", "th_variant" : "DHT21", 
+"th_temp_offset" : 0, "th_pin" : 14 } ] }'
 ```
 In the above example, the device in question is a Sonoff Basic switch. This device has a single relay for controlling mains appliances. It's GPIO-12 is the pin for this relay. There is also an onboard LED that is tied to GPIO-13 and an onboard button which is connected to GPIO-0. That variant of the Sonoff also has a spare accesible GPIO-14 pin via the header solder points on the board. 
 
