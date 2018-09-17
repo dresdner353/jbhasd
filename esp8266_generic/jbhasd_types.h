@@ -173,7 +173,7 @@ struct device_profile {
     int boot_program_pin;
     int wifi_led_pin;
     int force_apmode_onboot;
-    int provisioned;
+    int configured;
     struct gpio_switch *switch_list;
     struct gpio_sensor *sensor_list;
     struct gpio_rgb *rgb_list;
