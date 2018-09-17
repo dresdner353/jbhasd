@@ -83,7 +83,7 @@ The "boot_pin" specifies the assigned pin used for putting the device into AP mo
 
 Ignore "force_apmode_onboot" for now. 
 
-We're now at the controls array and what you can see is a JSON record for a control named 'Relay' or type 'switch'. The switch is in 'toggle' mode, meaning it's assigned manual pin toggles between on/off. The relay pin is set to 12, LED pin to 13 and manual pin to 0. 
+We're now at the controls array and what you can see is a JSON sub-object for a control named 'Relay' or type 'switch'. The switch is in 'toggle' mode, meaning it's assigned manual pin toggles between on/off. The relay pin is set to 12, LED pin to 13 and manual pin to 0. 
 
 So with that control configured, the device will boot and configure a switch called Relay that drives the onboard relay via GPIO-12 and match the on/off state of that relay with the onboard LED (GPIO-13). Pressing the onboard flash button (GPIO-0) will act as a toggle-on and off button for the relay.
 
