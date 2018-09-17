@@ -182,7 +182,7 @@ $ curl "http://192.168.12.165?pretty=1&control=Relay&state=1"
 }
 ```
 
-The use of control=<name> informs the device which control we are manipulating and the the state=1 is used to put that selected control into a state of 1. That turns on the relay.
+The use of control=name informs the device which control we are manipulating and the the state=1 is used to put that selected control into a state of 1. That turns on the relay.
   
 You will also notice that we get back the updated JSON status immediately and the "Relay" control shows its new state of 1. 
 
