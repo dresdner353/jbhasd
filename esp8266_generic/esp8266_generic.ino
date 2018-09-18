@@ -359,6 +359,7 @@ void check_manual_switches()
     WiFiClient wifi_client;
     int rc;
     struct gpio_switch *gpio_switch;
+    struct gpio_rgb *gpio_rgb;
     char post_buffer[50];
 
     if (!gv_device.manual_switches_enabled) {
@@ -379,9 +380,7 @@ void check_manual_switches()
          gpio_switch != gv_device.switch_list;
          gpio_switch = LIST_NEXT(gpio_switch)) {
 
-        // Only work with entries with a set switchname
-        // and manual pin
-        // Excludes non-relevant or config-disabled entries
+        // Only work with entries with a manual pin
         if (gpio_switch->manual_pin != NO_PIN) {
             button_state = digitalRead(gpio_switch->manual_pin);
             if (button_state == LOW) {
@@ -418,6 +417,23 @@ void check_manual_switches()
                     }
                     break;
                 }
+            }
+        }
+    }
+    
+    for (gpio_rgb = LIST_NEXT(gv_device.rgb_list);
+         gpio_rgb != gv_device.rgb_list;
+         gpio_rgb = LIST_NEXT(gpio_rgb)) {
+
+        // Only work with entries with a manual pin
+        if (gpio_rgb->manual_pin != NO_PIN) {
+            button_state = digitalRead(gpio_rgb->manual_pin);
+            if (button_state == LOW) {
+                log_message("Detected manual push on rgb:%s pin:%d",
+                            gpio_rgb->name,
+                            gpio_rgb->manual_pin);
+                set_rgb_random_program(gpio_rgb);
+                took_action = 1; // note any activity
             }
         }
     }
@@ -902,6 +918,80 @@ void set_rgb_program(struct gpio_rgb *gpio_rgb,
     set_rgb_state(gpio_rgb);
 }
 
+
+// Function set_rgb_random_program
+// Generates a simple random program for the given RGB
+void set_rgb_random_program(struct gpio_rgb *gpio_rgb)
+{
+    static int variant = 0;
+
+    log_message("set_rgb_random_program(name=%s, variant=%d)",
+                gpio_rgb->name, 
+                variant);
+
+    switch(variant) {
+      case 0:
+        // White fixed
+        strcpy(gv_large_buffer, "0xFFFFFF");
+        break;
+
+      case 1:
+        // Red
+        strcpy(gv_large_buffer, "0xFF0000");
+        break;
+
+      case 2:
+        // Green
+        strcpy(gv_large_buffer, "0x00FF00");
+        break;
+
+      case 3:
+        // Blue
+        strcpy(gv_large_buffer, "0x0000FF");
+        break;
+
+      case 4:
+        // Random 1 second
+        // no fade
+        strcpy(gv_large_buffer, "random;0;1000");
+        break;
+
+      case 5:
+        // Random 1 second
+        // 3ms fade
+        strcpy(gv_large_buffer, "random;3;1000");
+        break;
+
+      case 6:
+        // Random 200ms
+        // no fade
+        strcpy(gv_large_buffer, "random;0;200");
+        break;
+
+      case 7:
+        // Random 200ms
+        // 1ms fade
+        strcpy(gv_large_buffer, "random;1;200");
+        break;
+
+      case 8:
+        // RGB cycle
+        // 10ms fade
+        strcpy(gv_large_buffer, "0xFF0000;10;0,0x00FF00;10;0,0x0000FF;10;0");
+        break;
+
+      case 9:
+        strcpy(gv_large_buffer, "0x000000");
+        // Off
+    }
+
+    set_rgb_program(gpio_rgb, gv_large_buffer);
+
+    // rotate between 10 variants
+    variant = (variant + 1) % 10;
+}
+
+
 // Function: set_rgb_state
 // Sets the LED to its next/first program step
 // also applies msec interval counting for pauses
@@ -1090,6 +1180,11 @@ void setup_rgbs()
             log_message("    LED Blue pin:%d",
                         gpio_rgb->blue_pin);
             pinMode(gpio_rgb->blue_pin, OUTPUT);
+        }
+        if (gpio_rgb->manual_pin != NO_PIN) {
+            log_message("    Manual pin:%d",
+                        gpio_rgb->manual_pin);
+            pinMode(gpio_rgb->manual_pin, INPUT_PULLUP);
         }
     }
 }
@@ -1542,19 +1637,15 @@ void load_config()
             if (!strcmp(control_type, "switch")) {
                 // switch
                 const char* sw_mode = control["sw_mode"];
-                const int sw_state = control["sw_state"];
-                const int sw_relay_pin = control["sw_relay_pin"];
-                const int sw_led_pin = control["sw_led_pin"];
-                const int sw_man_pin = control["sw_man_pin"];
 
                 gpio_switch = gpio_switch_alloc();
                 LIST_INSERT(gv_device.switch_list, gpio_switch);
 
                 strcpy(gpio_switch->name, control_name);
-                gpio_switch->relay_pin = sw_relay_pin;
-                gpio_switch->led_pin = sw_led_pin;
-                gpio_switch->manual_pin = sw_man_pin;
-                gpio_switch->current_state = sw_state;
+                gpio_switch->relay_pin = control["sw_relay_pin"];
+                gpio_switch->led_pin = control["sw_led_pin"];
+                gpio_switch->manual_pin = control["sw_man_pin"];
+                gpio_switch->current_state = control["sw_state"];
 
                 gpio_switch->switch_behaviour = SW_BHVR_TOGGLE;
                 if (!strcmp(sw_mode, "on")) {
@@ -1567,35 +1658,30 @@ void load_config()
             }
 
             if (!strcmp(control_type, "temp/humidity")) {
-                const int th_pin = control["th_pin"];
-                const char *th_variant = control["th_variant"];
-                const float th_temp_offset = control["th_temp_offset"];
-
                 gpio_sensor = gpio_sensor_alloc();
                 LIST_INSERT(gv_device.sensor_list, gpio_sensor);
 
                 // FIXME on sensor variant parsing 
+                // Hard-coded to DHT21 for now
+                const char *th_variant = control["th_variant"];
+                gpio_sensor->sensor_variant = DHT21;
+
                 strcpy(gpio_sensor->name, control_name);
                 gpio_sensor->sensor_type = GP_SENS_TYPE_DHT;
-                gpio_sensor->sensor_variant = DHT21;
-                gpio_sensor->sensor_pin = th_pin;
-                gpio_sensor->temp_offset = th_temp_offset;
+                gpio_sensor->sensor_pin = control["th_pin"];
+                gpio_sensor->temp_offset = control["th_temp_offset"];
             }
 
             if (!strcmp(control_type, "rgb")) {
-                const int red_pin = control["red_pin"];
-                const int green_pin = control["green_pin"];
-                const int blue_pin = control["blue_pin"];
-                const char* program = control["program"];
-
                 gpio_rgb = gpio_rgb_alloc();
                 LIST_INSERT(gv_device.rgb_list, gpio_rgb);
 
                 strcpy(gpio_rgb->name, control_name);
-                strcpy(gpio_rgb->program, program);
-                gpio_rgb->red_pin = red_pin;
-                gpio_rgb->green_pin = green_pin;
-                gpio_rgb->blue_pin = blue_pin;
+                gpio_rgb->red_pin = control["red_pin"];
+                gpio_rgb->green_pin = control["green_pin"];
+                gpio_rgb->blue_pin = control["blue_pin"];
+                gpio_rgb->manual_pin = control["manual_pin"];
+                strcpy(gpio_rgb->program, control["program"]);
             }
         }
     }
