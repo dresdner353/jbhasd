@@ -122,6 +122,7 @@ struct gpio_rgb {
     unsigned char red_pin;   // Red pin
     unsigned char green_pin; // Green pin
     unsigned char blue_pin;  // Blue pin
+    unsigned char manual_pin; // Random Program
     char program[2048]; // default program
     char *program_ptr;
 
