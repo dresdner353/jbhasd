@@ -108,8 +108,9 @@ void start_serial()
 // Telnet server
 // Used for logging diversion from serial
 // to connected clients
-WiFiServer telnet_server(23);
-WiFiClient telnet_clients[MAX_TELNET_CLIENTS];
+WiFiServer gv_telnet_server(23);
+WiFiClient gv_telnet_clients[MAX_TELNET_CLIENTS];
+int gv_num_telnet_clients = 0;
 
 // Function: log_message
 // Wraps calls to Serial.print or connected
@@ -126,6 +127,14 @@ void log_message(char *format, ... )
     unsigned long secs;
     unsigned long msecs;
     unsigned long remainder;
+    
+    if (gv_logging == LOGGING_NW_CLIENT &&
+        gv_num_telnet_clients == 0) {
+        // No logging to do if we have no
+        // network clients
+        return;
+    }
+
 
     // Timestamp
     // Break down relative msecs
@@ -169,11 +178,11 @@ void log_message(char *format, ... )
 
       case LOGGING_NW_CLIENT:
         for(i = 0; i < MAX_TELNET_CLIENTS; i++) {
-            if (telnet_clients[i] && 
-                telnet_clients[i].connected()) {
-                telnet_clients[i].write((uint8_t*)log_buf, 
+            if (gv_telnet_clients[i] && 
+                gv_telnet_clients[i].connected()) {
+                gv_telnet_clients[i].write((uint8_t*)log_buf, 
                                         strlen(log_buf));
-                telnet_clients[i].flush();
+                gv_telnet_clients[i].flush();
             }
         }
         break;
@@ -193,8 +202,8 @@ void start_telnet()
     }
 
     // start telnet server
-    telnet_server.begin();
-    telnet_server.setNoDelay(true);
+    gv_telnet_server.begin();
+    gv_telnet_server.setNoDelay(true);
 
     gv_logging = LOGGING_NW_CLIENT;
 }
@@ -213,15 +222,17 @@ void handle_telnet_sessions()
     }
 
     // check for new sessions
-    if (telnet_server.hasClient()) {
+    if (gv_telnet_server.hasClient()) {
         for(i = 0; i < MAX_TELNET_CLIENTS; i++) {
             // find free/disconnected spot
-            if (!telnet_clients[i] || 
-                !telnet_clients[i].connected()) {
-                if(telnet_clients[i]) {
-                    telnet_clients[i].stop();
+            if (!gv_telnet_clients[i] || 
+                !gv_telnet_clients[i].connected()) {
+                if(gv_telnet_clients[i]) {
+                    gv_telnet_clients[i].stop();
+                    gv_num_telnet_clients--;
                 }
-                telnet_clients[i] = telnet_server.available();
+                gv_telnet_clients[i] = gv_telnet_server.available();
+                gv_num_telnet_clients++;
                 ets_sprintf(gv_small_buffer,
                             "JBHASD Logging Console client %d/%d\r\n"
                             "Name:%s Zone:%s\r\n",
@@ -229,14 +240,14 @@ void handle_telnet_sessions()
                             MAX_TELNET_CLIENTS,
                             gv_mdns_hostname,
                             gv_device.zone);
-                telnet_clients[i].write((uint8_t*)gv_small_buffer, 
+                gv_telnet_clients[i].write((uint8_t*)gv_small_buffer, 
                                         strlen(gv_small_buffer));
                 continue;
             }
         }
 
         //no free/disconnected slot so reject
-        WiFiClient serverClient = telnet_server.available();
+        WiFiClient serverClient = gv_telnet_server.available();
         ets_sprintf(gv_small_buffer,
                     "JBHASD %s Logging Console.. no available slots\r\n",
                     gv_mdns_hostname);
@@ -247,12 +258,12 @@ void handle_telnet_sessions()
 
     //check clients for data
     for (i = 0; i < MAX_TELNET_CLIENTS; i++) {
-        if (telnet_clients[i] && 
-            telnet_clients[i].connected()) {
-            if(telnet_clients[i].available()) {
+        if (gv_telnet_clients[i] && 
+            gv_telnet_clients[i].connected()) {
+            if(gv_telnet_clients[i].available()) {
                 // throw away any data
-                while(telnet_clients[i].available()) {
-                    telnet_clients[i].read();
+                while(gv_telnet_clients[i].available()) {
+                    gv_telnet_clients[i].read();
                 }
             }
         }
