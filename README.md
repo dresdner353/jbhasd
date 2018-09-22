@@ -141,8 +141,8 @@ In the above example, we set up a Sonoff Basic device with its relay put to use 
 
 Now we can instruct the relay to turn on.. 
 
-$ curl "http://192.168.12.165?pretty=1&**control=Relay&state=1**"
 ```
+$ curl "http://192.168.12.165?pretty=1&control=Relay&state=1"
 {
   "name": "JBHASD-0095EB30",
   "zone": "Prototype 1",
