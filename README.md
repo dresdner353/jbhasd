@@ -14,7 +14,7 @@ There's some great existing options for home automation stacks out there and pro
 - You connect to the SSID where you can then set Zone, Wifi SSID and Password and apply changes
 - The device then reboots and connects to your network in STA mode (WiFI client)
 - You can then access the device with a JSON GET-based API and manage it from there
-- MDNS and DNS-SD ae built-in and an accompanying web server can be used as a hub for the devices providing a web portal, means of managing automation and even downloading config data to newlty attached or reset devices
+- MDNS and DNS-SD are built-in and an accompanying web server can be used as a hub for the devices providing a web portal, means of managing automation and even downloading config data to newlty attached or reset devices
 
 ## Using AP Mode to Configuring WiFI
 When you first power up the device after flashing, it should auto launch as a open wireless AP. The SSID will be of the format "JBHASD-XXXXXXXX". 
