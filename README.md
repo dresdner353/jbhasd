@@ -60,7 +60,7 @@ $ curl 'http://192.168.12.145?pretty=1'
 
 The section above for controls is where we would normally see details on any switches, sensors etc that are being managed by this device. Given this is a clean setup, no such detail is defined yet. Also the "configured" attribute of this device is set to 0 which confirms that no full device configuration has been pushed to this device.
 
-The pretty=1 args to this call could be omitted or passed with a 0 value and it will then return the JSON status as a single string without the pretty formatting. Use whateveer you prefer. 
+The pretty=1 args to this call could be omitted or passed with a 0 value and it will then return the JSON status as a single string without the pretty formatting. Use whatever you prefer. 
 
 ## Pushing Configuration to the Device
 
