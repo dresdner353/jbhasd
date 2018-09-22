@@ -19,9 +19,9 @@ There's some great existing options for home automation stacks out there and pro
 ## Using AP Mode to Configuring WiFI
 When you first power up the device after flashing, it should auto launch as a open wireless AP. The SSID will be of the format "JBHASD-XXXXXXXX". 
 
-After connecting to the SSID, you should be dropped into a config page that lets you set three fields.. zone, WiFI SSID and password. 
+After connecting to the SSID, you get captive-DNS dropped into a config page that lets you set three fields.. zone, WiFI SSID and password. 
 
-You then click apply, it saves the config to eeprom and reboots. The device should then reboot, enter STA mode and connect to your configured WiFI router as a client. If you need to access the AP mode again, power-cycle the device and ground GPIO-0 within the first 5 seconds and it should re-enter AP mode. 
+You then click/tap an apply button to save the config and reboot. The device should then enter STA mode after reboot and connect to your configured WiFI router. If you need to access the AP mode again, power-cycle the device and ground GPIO-0 within the first 5 seconds and it should re-enter AP mode. 
 
 At this stage, all you have is a device that connects to your WiFI. It is not yet configured in terms of pin asignments for switches and sensors.
 
@@ -75,23 +75,23 @@ curl -G  "http://192.168.12.165/json" --data-urlencode 'config={ "zone" : "Proto
 "sw_man_pin" : 0 }, { "name" : "Temp", "type" : "temp/humidity", "th_variant" : "DHT21", 
 "th_temp_offset" : 0, "th_pin" : 14 } ] }'
 ```
-In the above example, the device in question is a Sonoff Basic switch. This device has a single relay for controlling mains appliances. It's GPIO-12 is the pin for this relay. There is also an onboard LED that is tied to GPIO-13 and an onboard button which is connected to GPIO-0. That variant of the Sonoff also has a spare accesible GPIO-14 pin via the header solder points on the board. 
+In the above example, the device in question is a Sonoff Basic switch. This device has a single relay for controlling mains appliances. It's GPIO-12 is the pin for this relay. There is also an onboard LED that is tied to GPIO-13 and an onboard button which is connected to GPIO-0. That variant of the Sonoff also has a spare accessible GPIO-14 pin via the header solder points on the board. 
 
-The config arg to the device passed a JSON config record that specifies the devices zone, wifi_ssid and password. So while you have already set this via AP mode, this config step lets you re-assign it if desired. Then following this are a series of enabled options for OTA, telnet, MDNS and manual switches. More on these later.
+The config arg to the device passes a JSON config record that specifies the devices zone, wifi_ssid and password. So while you have already set this via AP mode, this config step lets you re-assign it if desired. Then following this are a series of enabled options for OTA, telnet, MDNS and manual switches. More on these later.
 
 The "boot_pin" specifies the assigned pin used for putting the device into AP mode when it is first booted. This is the same GPIO-0 pin as used for flashing. So it typically matches at least one onboard switch on most devices or at least something that can be attached to available pinouts on the board. The "wifi_led_pin" represents the LED used for displaying WiFI connect status. That same LED provides visual feedback when the device is being booted and entering AP mode. 
 
 Ignore "force_apmode_onboot" for now. 
 
-We're now at the controls array and what you can see is a JSON sub-object for a control named 'Relay' or type 'switch'. The switch is in 'toggle' mode, meaning it's assigned manual pin toggles between on/off. The relay pin is set to 12, LED pin to 13 and manual pin to 0. 
+We're now at the controls array and what you can see is a JSON sub-object for a control named 'Relay' of type 'switch'. The switch is in 'toggle' mode, meaning it's assigned manual pin toggles between on/off. The relay pin is set to 12, LED pin to 13 and manual pin to 0. 
 
 So with that control configured, the device will boot and configure a switch called Relay that drives the onboard relay via GPIO-12 and match the on/off state of that relay with the onboard LED (GPIO-13). Pressing the onboard flash button (GPIO-0) will act as a toggle-on and off button for the relay.
 
-Next up is the configuration for a DHT21 temperature sensor that is using the additonal GPIO-14. This sets the sensor name to Temp, its type to temp/humidity and then the desired pin and sensor variant required. There is also a temperature offset if the sensor accuracy needs adjustment. 
+Next up is the configuration for a DHT21 temperature sensor that is using the additonal GPIO-14. This sets the sensor name to Temp, its type to "temp/humidity" and then the desired pin and sensor variant required. There is also a temperature offset if the sensor accuracy needs adjustment. 
 
-With those settings applied, when this device boots again, it will flash the GPIO-13 LED at a medium rate for 5 seconds giving you time to ground GPIO-0 (boot_pin) and put the device into AP Mode. If you activate that boot PIN during that initial 5 seconds, the LED flashing will go to a fast rate to indicate AP mode. If you leave that boot sequence alone, after 5 seconds, the initial medium flashing rate will drop to a slower rate to indicate that the WiFI connect stage has started and it will issue a quick burst of flashes to indicate that the device has successfully conected to wifi. 
+With the config applied, the device saves the config to EEPROM and reboots again, it will flash the GPIO-13 LED at a medium rate for 5 seconds giving you time to ground GPIO-0 (boot_pin) and put the device into AP Mode. If you activate that boot PIN during that initial 5 seconds, the LED flashing will go to a fast rate to indicate AP mode. If you leave that boot sequence alone, after 5 seconds, the initial medium flashing rate will drop to a slower rate to indicate that the WiFI connect stage has started and it will issue a quick burst of flashes to indicate that the device has successfully conected to wifi. 
 
-Once it reboots, the following JSON is now returned when the device is probed.. 
+Once it reboots again, the following JSON is returned when the device is probed.. 
 
 ```
 $ curl "http://192.168.12.165/?pretty=1"
@@ -141,8 +141,8 @@ In the above example, we set up a Sonoff Basic device with its relay put to use 
 
 Now we can instruct the relay to turn on.. 
 
+$ curl "http://192.168.12.165?pretty=1&**control=Relay&state=1**"
 ```
-$ curl "http://192.168.12.165?pretty=1&control=Relay&state=1"
 {
   "name": "JBHASD-0095EB30",
   "zone": "Prototype 1",
