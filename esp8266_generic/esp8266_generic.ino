@@ -1672,10 +1672,20 @@ void load_config()
                 gpio_sensor = gpio_sensor_alloc();
                 LIST_INSERT(gv_device.sensor_list, gpio_sensor);
 
-                // FIXME on sensor variant parsing 
-                // Hard-coded to DHT21 for now
                 const char *th_variant = control["th_variant"];
-                gpio_sensor->sensor_variant = DHT21;
+
+                // Default
+                gpio_sensor->sensor_variant = DHT11;
+
+                if (!strcmp(th_variant, "DHT11")) {
+                    gpio_sensor->sensor_variant = DHT11;
+                }
+                else if (!strcmp(th_variant, "DHT21")) {
+                    gpio_sensor->sensor_variant = DHT21;
+                }
+                else if (!strcmp(th_variant, "DHT22")) {
+                    gpio_sensor->sensor_variant = DHT22;
+                }
 
                 strcpy(gpio_sensor->name, control_name);
                 gpio_sensor->sensor_type = GP_SENS_TYPE_DHT;
