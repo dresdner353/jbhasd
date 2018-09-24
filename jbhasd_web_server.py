@@ -1705,6 +1705,9 @@ class web_console_api_handler(object):
     index._cp_config = {'tools.trailing_slash.on': False}
 
 
+class web_console_ota_handler(object):
+    pass
+
 def web_server():
 
     print("%s Starting console web server on port %d" % (time.asctime(),
@@ -1753,6 +1756,17 @@ def web_server():
     # webhook for API
     cherrypy.tree.mount(web_console_api_handler(), '/')
     cherrypy.tree.mount(web_console_api_handler(), '/api')
+
+    # webhook for OTA
+    ota_conf = {
+       '/': {
+           'tools.staticdir.on': True,
+           'tools.staticdir.dir': gv_home_dir + '/ota',
+           'tools.staticdir.index': 'index.html',
+       }
+    }
+
+    cherrypy.tree.mount(web_console_ota_handler(), '/ota', ota_conf)
 
     # Cherrypy main loop
     cherrypy.engine.start()
