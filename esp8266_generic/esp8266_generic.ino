@@ -14,6 +14,7 @@
 #include <DHT.h>
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
+#include <ESP8266httpUpdate.h>
 #include <ArduinoJson.h>
 #include "jbhasd_types.h"
 
@@ -2024,6 +2025,28 @@ void sta_handle_json() {
         update_config("name", gv_mdns_hostname, 0, 0);
         update_config("configured", NULL, 1, 1);
         gv_reboot_requested = 1;
+    }
+    if (gv_web_server.hasArg("ota")) {
+        log_message("Received OTA command");
+        log_message("Trying for OTA from IP:%s port:%d path:%s",
+                    gv_push_ip,
+                    gv_push_port,
+                    gv_web_server.arg("ota").c_str());
+        t_httpUpdate_return ret = 
+            ESPhttpUpdate.update(gv_push_ip, 
+                                 gv_push_port, 
+                                 gv_web_server.arg("ota").c_str());
+        switch(ret) {
+          case HTTP_UPDATE_FAILED:
+            log_message("OTA Update failed.");
+            break;
+          case HTTP_UPDATE_NO_UPDATES:
+            log_message("No OTA Update");
+            break;
+          case HTTP_UPDATE_OK:
+            log_message("OTA Update OK"); 
+            break;
+        }
     }
 
     // Return current status as standard
