@@ -161,7 +161,7 @@ struct gpio_rgb {
 // Software Version
 // Crude compile-time grab of date and time
 // into string
-const char *gv_sw_compile_date = __DATE__ " " __TIME__;
+const char *gv_sw_compile_date = "JBHASD-VERSION " __DATE__ " " __TIME__;
 
 struct device_profile {
     char zone[MAX_FIELD_LEN];
