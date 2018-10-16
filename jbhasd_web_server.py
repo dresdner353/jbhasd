@@ -726,20 +726,35 @@ def configure_device(url, device_name):
         except:
             pass
 
-        # Scan through device controls
-        # and update defaults from profile
+        # Scan through device specific controls
+        # and update defaults taken from profile
+        # Given this is a list, we can't do any kind 
+        # of update as one list will clobber the other.
+        # So for each control in the device specific list
+        # we determine its custom name and then locate it 
+        # in the main config and update the contents
+        # That lets the device config over-ride any or all 
+        # of the attributes in the original profile.
+        # The only special treatment is the custom_name
+        # which lets us rename the control to a desired
+        # alternative but we have to match on the original profile
+        # name to start
         for control in device_specific_dict['controls']:
             control_name = control['name']
-            control_enabled = control['enabled']
 
             # Custom name is optional but we just 
             # default to existing name if not present
+            # also remove that custom_name field
+            # from dict as it will not be sent to the device
             if 'custom_name' in control:
                 custom_name = control['custom_name']
                 del control['custom_name']
             else:
                 custom_name = control_name
 
+            # Iterate the device profile controls
+            # match on name, update with the device specific
+            # values and over-ride name
             for config_control in config_dict['controls']:
                 if config_control['name'] == control_name:
                     config_control.update(control)
@@ -747,7 +762,7 @@ def configure_device(url, device_name):
 
 
         device_config = json.dumps(config_dict)
-        print(device_config)
+        #print(device_config)
 
         config_safe = urllib.parse.quote_plus(device_config)
         prov_url = '%s?config=%s' % (url,
@@ -1282,10 +1297,31 @@ def build_device_web_page(num_cols):
             '</td>'
             '</tr>') % (jquery_click_id)
 
+    # reconfig URL for all devices
+    href_url = ('/api?device=all&reconfig=1')
+
+    # jquery code for click
+    reconfig_str = click_get_reload_template
+    jquery_click_id = 'reconfig_all'
+    reconfig_str = reconfig_str.replace("__ID__", jquery_click_id)
+    reconfig_str = reconfig_str.replace("__ACTION_URL__", href_url)
+    jquery_str += reconfig_str
+
+    dashboard_col_list[0] += (
+            '<tr>'
+            '<td class="dash-label">Reconfigure All</td>'
+            '<td align="center">'
+            '<label class="switch">'
+            '<input type="checkbox" id="%s">'
+            '<div class="slider round"></div>'
+            '</label>'
+            '</td>'
+            '</tr>') % (jquery_click_id)
+
     dashboard_col_list[0] += '</table></div>'
 
     # account for size of master dash box
-    dashboard_col_size_dict[0] += 5 
+    dashboard_col_size_dict[0] += 6 
 
     for device_name in device_list:
         json_data = gv_jbhasd_device_status_dict[device_name]
@@ -1340,6 +1376,31 @@ def build_device_web_page(num_cols):
         dashboard_col_list[col_index] += (
                 '<tr>'
                 '<td class="dash-label">Reboot</td>'
+                '<td align="center">'
+                '<label class="switch">'
+                '<input type="checkbox" id="%s">'
+                '<div class="slider round"></div>'
+                '</label>'
+                '</td>'
+                '</tr>') % (jquery_click_id)
+
+        # reconfig URL
+        # carries device name and reconfig=1
+        # directive
+        url_safe_device = urllib.parse.quote_plus(device_name)
+        href_url = ('/api?device=%s'
+                    '&reconfig=1') % (url_safe_device)
+
+        # jquery code for reboot click
+        reconfig_str = click_get_reload_template
+        jquery_click_id = 'reconfig_device%d' % (device_id)
+        reconfig_str = reconfig_str.replace("__ID__", jquery_click_id)
+        reconfig_str = reconfig_str.replace("__ACTION_URL__", href_url)
+        jquery_str += reconfig_str
+
+        dashboard_col_list[col_index] += (
+                '<tr>'
+                '<td class="dash-label">Reconfigure</td>'
                 '<td align="center">'
                 '<label class="switch">'
                 '<input type="checkbox" id="%s">'
@@ -1521,10 +1582,19 @@ def build_device_web_page(num_cols):
     return web_page_str
 
 
-def process_console_action(device, zone, control, reboot, apmode, state, program):
+def process_console_action(
+        device, 
+        zone, 
+        control, 
+        reboot, 
+        reconfig, 
+        apmode, 
+        state, 
+        program):
 
     command_url_list = []
     reboot_all = 0
+    reconfig_all = 0
 
     if (device is not None and
         reboot is not None):
@@ -1547,6 +1617,28 @@ def process_console_action(device, zone, control, reboot, apmode, state, program
                                        device))
 
             command_url_list.append('%s?reboot=1' % (url))
+            
+    if (device is not None and
+        reconfig is not None):
+
+        if device == 'all':
+            print("%s Reconfiguring all devices" % (time.asctime()))
+            reconfig_all = 1
+            for device in gv_jbhasd_device_url_dict:
+                url = gv_jbhasd_device_url_dict[device]
+
+                print("%s Reconfiguring %s" % (time.asctime(),
+                                               device))
+
+                command_url_list.append('%s?reconfig=1' % (url))
+
+        elif device in gv_jbhasd_device_url_dict:
+            url = gv_jbhasd_device_url_dict[device]
+
+            print("%s Reconfiguring %s" % (time.asctime(),
+                                           device))
+
+            command_url_list.append('%s?reconfig=1' % (url))
 
     if (device is not None and
         apmode is not None):
@@ -1612,7 +1704,7 @@ def process_console_action(device, zone, control, reboot, apmode, state, program
 
     # If a reboot all was performed
     # we need to wipe the dicts now
-    if (reboot_all == 1):
+    if (reboot_all == 1 or reconfig_all == 1):
         reset_all_dicts()
 
     return 
@@ -1717,6 +1809,7 @@ class web_console_api_handler(object):
               state=None, 
               program=None, 
               reboot=None,
+              reconfig=None,
               update=None,
               apmode=None):
 
@@ -1734,6 +1827,7 @@ class web_console_api_handler(object):
                                zone, 
                                control, 
                                reboot, 
+                               reconfig,
                                apmode, 
                                state, 
                                program)
