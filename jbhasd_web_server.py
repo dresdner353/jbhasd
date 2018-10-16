@@ -293,35 +293,11 @@ def set_default_config():
     # Timed switches
     gv_json_config['switch_timers'] = []
 
-    gv_json_config['switch_timers'].append (
-            { 'zone' : 'Livingroom', 
-              'control' : 'Uplighter', 
-              'on' : 'sunset', 
-              'off' : '0100', 
-            })
+    # Device config
+    gv_json_config['device_profiles'] = []
+    gv_json_config['devices'] = []
 
-    gv_json_config['switch_timers'].append (
-            { 'zone' : 'Livingroom', 
-              'control' : 'Window Lights', 
-              'on' : 'sunset', 
-              'off' : '0100', 
-            })
-
-    gv_json_config['switch_timers'].append (
-            { 'zone' : 'Playroom', 
-              'control' : 'Uplighter', 
-              'on' : 'sunset', 
-              'off' : '0100', 
-            })
-
-    gv_json_config['switch_timers'].append (
-            { 'zone' : 'Kitchen', 
-              'control' : 'Counter Lights', 
-              'on' : 'sunset', 
-              'off' : '0100', 
-            })
-
-    save_config()
+    #save_config()
 
 
 def load_config():
@@ -334,7 +310,9 @@ def load_config():
         gv_json_config = json.loads(config_data)
     except:
         print("%s failed to load config" % (time.asctime()))
-        set_default_config()
+        #set_default_config()
+        sys.exit(-1)
+
 
 def save_config():
     print("%s Saving config to %s" % (time.asctime(),
@@ -345,6 +323,7 @@ def save_config():
                                        sort_keys=True)
         outfile.write(indented_json_str)
         outfile.close()
+
 
 # Sunset globals
 gv_last_sunset_check = -1
@@ -713,6 +692,87 @@ def check_automated_devices():
     return
 
 
+def configure_device(url, device_name):
+
+    print("%s Configure device %s" % (time.asctime(), device_name))
+    if (device_name in gv_json_config['devices']): 
+        # matched to stored profile
+        print("%s Matched device %s to stored profile.. configuring" % (time.asctime(), device_name))
+        # Extract JSON config for device and profile
+        # This is based on taking the profile as the baseline
+        # and updating as defined by the device dict
+        # Pythons deepcopy and update dict calls play a stormer
+        # here for us
+        profile_name = gv_json_config['devices'][device_name]['profile']
+        config_dict = copy.deepcopy(gv_json_config['device_profiles'][profile_name])
+        device_specific_dict = copy.deepcopy(gv_json_config['devices'][device_name])
+
+        # Indicate the origin profile
+        config_dict['profile'] = profile_name
+
+        # Set mandatory zone, wifi creds
+        config_dict['zone'] = device_specific_dict['zone']
+        config_dict['wifi_ssid'] = device_specific_dict['wifi_ssid']
+        config_dict['wifi_password'] = device_specific_dict['wifi_password']
+
+        # Optional over-rides
+        # protect in try as they keys may not exist in 
+        # device dict
+        try:
+            config_dict['telnet_enabled'] = device_specific_dict['telnet_enabled']
+            config_dict['ota_enabled'] = device_specific_dict['ota_enabled']
+            config_dict['mdns_enabled'] = device_specific_dict['mdns_enabled']
+            config_dict['manual_switches_enabled'] = device_specific_dict['manual_switches_enabled']
+        except:
+            pass
+
+        # Scan through device controls
+        # and update defaults from profile
+        for control in device_specific_dict['controls']:
+            control_name = control['name']
+            control_enabled = control['enabled']
+
+            # Custom name is optional but we just 
+            # default to existing name if not present
+            if 'custom_name' in control:
+                custom_name = control['custom_name']
+                del control['custom_name']
+            else:
+                custom_name = control_name
+
+            for config_control in config_dict['controls']:
+                if config_control['name'] == control_name:
+                    config_control.update(control)
+                    config_control['name'] = custom_name
+
+
+        device_config = json.dumps(config_dict)
+        print(device_config)
+
+        config_safe = urllib.parse.quote_plus(device_config)
+        prov_url = '%s?config=%s' % (url,
+                                     config_safe)
+        # fire config at device
+        # no need to capture response
+        json_data = fetch_url(prov_url, gv_http_timeout_secs, 1)
+
+        # Purge URL from discovered URL set in case its 
+        # already present
+        # We want to leave it resurface again 
+        try:
+            del gv_jbhasd_device_url_dict[device_name]
+            del gv_jbhasd_device_ts_dict[device_name]
+            del gv_jbhasd_device_status_dict[device_name]
+            gv_jbhasd_zconf_url_set.remove(url)
+        except:
+            pass
+
+    else:
+        print("%s ERROR %s not found in device config" % (time.asctime(), device_name))
+
+    return
+
+
 def probe_devices():
     # iterate set of discovered device URLs
     # and probe their status values, storing in a dictionary
@@ -758,48 +818,28 @@ def probe_devices():
             json_data = fetch_url(url_w_update, gv_http_timeout_secs, 1)
             if (json_data is not None):
                 device_name = json_data['name']
-                gv_jbhasd_device_url_dict[device_name] = url
-                gv_jbhasd_device_ts_dict[device_name] = int(time.time())
-                successful_probes += 1
-
-                # check the json we got back against what we have 
-                # stored. But only compare controls for now  
-                # if its a first time store, then its a change
-                if (device_name in gv_jbhasd_device_status_dict):
-                    controls_same = json_is_the_same(json_data['controls'], 
-                                                     gv_jbhasd_device_status_dict[device_name]['controls'])
-                    if (controls_same == 0):
-                        control_changes += 1
-                else:
-                    control_changes += 1
-
-                gv_jbhasd_device_status_dict[device_name] = json_data
-
-                # Provision unconfigured devices
-                # Look for configured field set to 0
                 if ('configured' in json_data and
                         json_data['configured'] == 0):
-                    print("%s Device %s needs configuration" % (time.asctime(), device_name))
-                    if (device_name in gv_json_config['device_config']): 
-                        # matched to stored profile
-                        print("%s Matched device %s to stored profile.. configuring" % (time.asctime(), device_name))
-                        # Extract JSON config in string form
-                        # make web-safe and format the provision URL
-                        device_config = json.dumps(gv_json_config['device_config'][device_name])
-                        config_safe = urllib.parse.quote_plus(device_config)
-                        prov_url = '%s?config=%s' % (url,
-                                                     config_safe)
-                        # fire config at device
-                        # no need to capture response
-                        json_data = fetch_url(prov_url, gv_http_timeout_secs, 1)
+                    # Configure device
+                    configure_device(url, device_name)
+                else:
+                    # Record what we found
+                    gv_jbhasd_device_url_dict[device_name] = url
+                    gv_jbhasd_device_ts_dict[device_name] = int(time.time())
+                    successful_probes += 1
 
-                        # Purge URL from discovered URL set
-                        # and related dictionaries
-                        # We want to leave it resurface again 
-                        del gv_jbhasd_device_url_dict[device_name]
-                        del gv_jbhasd_device_ts_dict[device_name]
-                        del gv_jbhasd_device_status_dict[device_name]
-                        gv_jbhasd_zconf_url_set.remove(url)
+                    # check the json we got back against what we have 
+                    # stored. But only compare controls for now  
+                    # if its a first time store, then its a change
+                    if (device_name in gv_jbhasd_device_status_dict):
+                        controls_same = json_is_the_same(json_data['controls'], 
+                                                         gv_jbhasd_device_status_dict[device_name]['controls'])
+                        if (controls_same == 0):
+                            control_changes += 1
+                    else:
+                        control_changes += 1
+
+                    gv_jbhasd_device_status_dict[device_name] = json_data
 
             else:
                 print("%s Failed to get status on %s" % (time.asctime(),
