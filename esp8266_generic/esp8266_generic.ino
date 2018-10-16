@@ -1640,11 +1640,18 @@ void load_config()
     for (JsonObject& control : controls) {
         const char* control_name = control["name"];
         const char* control_type = control["type"];
+        const int enabled = control["enabled"];
 
         if (control_name && control_type) {
-            log_message("Control:%s, Type:%s",
+            log_message("Control:%s, Type:%s Enabled:%d",
                         control_name, 
-                        control_type);
+                        control_type,
+                        enabled);
+
+            if (!enabled) {
+                log_message("disabled.. ignoring");
+                continue;
+            }
 
             if (!strcmp(control_type, "switch")) {
                 // switch
