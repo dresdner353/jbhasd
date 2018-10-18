@@ -944,60 +944,60 @@ void set_rgb_random_program(struct gpio_rgb *gpio_rgb)
     switch(variant) {
       case 0:
         // White fixed
-        strcpy(gv_large_buffer, "0xFFFFFF");
+        strcpy(gv_small_buffer, "0xFFFFFF");
         break;
 
       case 1:
         // Red
-        strcpy(gv_large_buffer, "0xFF0000");
+        strcpy(gv_small_buffer, "0xFF0000");
         break;
 
       case 2:
         // Green
-        strcpy(gv_large_buffer, "0x00FF00");
+        strcpy(gv_small_buffer, "0x00FF00");
         break;
 
       case 3:
         // Blue
-        strcpy(gv_large_buffer, "0x0000FF");
+        strcpy(gv_small_buffer, "0x0000FF");
         break;
 
       case 4:
         // Random 1 second
         // no fade
-        strcpy(gv_large_buffer, "random;0;1000");
+        strcpy(gv_small_buffer, "random;0;1000");
         break;
 
       case 5:
         // Random 1 second
         // 3ms fade
-        strcpy(gv_large_buffer, "random;3;1000");
+        strcpy(gv_small_buffer, "random;3;1000");
         break;
 
       case 6:
         // Random 200ms
         // no fade
-        strcpy(gv_large_buffer, "random;0;200");
+        strcpy(gv_small_buffer, "random;0;200");
         break;
 
       case 7:
         // Random 200ms
         // 1ms fade
-        strcpy(gv_large_buffer, "random;1;200");
+        strcpy(gv_small_buffer, "random;1;200");
         break;
 
       case 8:
         // RGB cycle
         // 10ms fade
-        strcpy(gv_large_buffer, "0xFF0000;10;0,0x00FF00;10;0,0x0000FF;10;0");
+        strcpy(gv_small_buffer, "0xFF0000;10;0,0x00FF00;10;0,0x0000FF;10;0");
         break;
 
       case 9:
-        strcpy(gv_large_buffer, "0x000000");
+        strcpy(gv_small_buffer, "0x000000");
         // Off
     }
 
-    set_rgb_program(gpio_rgb, gv_large_buffer);
+    set_rgb_program(gpio_rgb, gv_small_buffer);
 
     // rotate between 10 variants
     variant = (variant + 1) % 10;
@@ -1602,6 +1602,8 @@ void load_config()
     }
 
     // JSON parse from config
+    // Assuming 4k is fine for the overheads
+    // we might encounter
     const int capacity = 4096;
     DynamicJsonBuffer gv_json_buffer(capacity);
     JsonObject& json_cfg = 
@@ -1614,8 +1616,17 @@ void load_config()
     }
 
     // Standard top-level string and int fields
-    strcpy(gv_device.zone, json_cfg["zone"]);
+
+    // Wifi SSID is the main man here.. if empty, we
+    // reset
     strcpy(gv_device.wifi_ssid, json_cfg["wifi_ssid"]);
+    if (strlen(gv_device.wifi_ssid) == 0) {
+        log_message("Empty WiFI SSID.. resetting");
+        reset_config();
+        return;
+    }
+
+    strcpy(gv_device.zone, json_cfg["zone"]);
     strcpy(gv_device.wifi_password, json_cfg["wifi_password"]);
     gv_device.ota_enabled = json_cfg["ota_enabled"];
     gv_device.telnet_enabled = json_cfg["telnet_enabled"];
@@ -1742,14 +1753,9 @@ void ap_handle_root()
 
     // check for post args
 
-    if (gv_web_server.hasArg("zone")) {
+    if (gv_web_server.hasArg("ssid")) {
         // actual normal config updates
         apply_config = 1;
-
-        update_config("zone", 
-                      gv_web_server.arg("zone").c_str(),
-                      0,
-                      0);
 
         update_config("wifi_ssid", 
                       gv_web_server.arg("ssid").c_str(),
@@ -1880,10 +1886,6 @@ void start_ap_mode()
                 "<h2>%s Setup</h2>"
                 "<form action=\"/\" method=\"post\">"
                 "<div>"
-                "    <label>Zone:</label>"
-                "    <input type=\"text\" value=\"%s\" maxlength=\"%d\" name=\"zone\">"
-                "</div>"
-                "<div>"
                 "    <label>WIFI SSID:</label>"
                 "    <input type=\"text\" value=\"%s\" maxlength=\"%d\" name=\"ssid\">"
                 "</div>"
@@ -1907,8 +1909,6 @@ void start_ap_mode()
                 "</form>"
                 "</body>",
         gv_mdns_hostname,
-        gv_device.zone,
-        MAX_FIELD_LEN,
         gv_device.wifi_ssid,
         MAX_FIELD_LEN,
         gv_device.wifi_password,
@@ -2028,7 +2028,10 @@ void sta_handle_json() {
     // Also set name to actual device name
     if (gv_web_server.hasArg("config")) {
         log_message("Received configure command");
-        strcpy(gv_config, gv_web_server.arg("config").c_str());
+        strncpy(gv_config, 
+                gv_web_server.arg("config").c_str(),
+                MAX_CONFIG_LEN);
+        gv_config[MAX_CONFIG_LEN - 1] = '\0';
         update_config("name", gv_mdns_hostname, 0, 0);
         update_config("configured", NULL, 1, 1);
         gv_reboot_requested = 1;
@@ -2181,6 +2184,10 @@ void setup()
     // timers resetting the device
     ESP.wdtDisable();
     ESP.wdtEnable(WDTO_8S);
+
+    // Disable WiFI storing of settings in 
+    // flash. We do this ourselves
+    WiFi.persistent(false);
 
     log_message("Device boot: ChipId:%u FreeHeap:%u ResetReason:%s",
                 ESP.getChipId(),
