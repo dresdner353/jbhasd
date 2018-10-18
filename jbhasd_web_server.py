@@ -520,7 +520,7 @@ def check_rgb(zone_name,
                         current_time < off_time):
                         desired_program = timer['on_program']
 
-    #print("return %s" % (desired_program))
+    #print("return rgb program %s" % (desired_program))
     return desired_program
 
 
@@ -761,8 +761,19 @@ def configure_device(url, device_name):
                     config_control['name'] = custom_name
 
 
-        device_config = json.dumps(config_dict)
-        #print(device_config)
+        # Format indented and unindented
+        # Send unindented
+        device_config = json.dumps(
+                config_dict,
+                sort_keys=True)
+        indented_device_config = json.dumps(
+                config_dict, 
+                indent=4, 
+                sort_keys=True)
+        print("%s Sending config (%d bytes):\n%s\n" % (
+            time.asctime(), 
+            len(device_config),
+            indented_device_config))
 
         config_safe = urllib.parse.quote_plus(device_config)
         prov_url = '%s?config=%s' % (url,
