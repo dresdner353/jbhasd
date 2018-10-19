@@ -264,7 +264,8 @@ gv_config_file = gv_home_dir + '/.jbhasd_web_server'
 gv_json_config = {}
 
 def set_default_config():
-    global gv_config_file, gv_json_config
+    global gv_config_file
+    global gv_json_config
 
     print("%s Setting config defaults" % (time.asctime()))
     gv_json_config = {}
@@ -297,32 +298,48 @@ def set_default_config():
     gv_json_config['device_profiles'] = []
     gv_json_config['devices'] = []
 
-    #save_config()
 
-
-def load_config():
-    global gv_config_file, gv_json_config
+def load_config(config_file):
 
     print("%s Loading config from %s" % (time.asctime(),
-                                         gv_config_file))
+                                         config_file))
     try:
-        config_data = open(gv_config_file).read()
-        gv_json_config = json.loads(config_data)
-    except:
-        print("%s failed to load config" % (time.asctime()))
-        #set_default_config()
-        sys.exit(-1)
+        config_data = open(config_file).read()
+        json_config = json.loads(config_data)
+    except Exception as ex: 
+        print("%s load config failed: %s" % (
+            time.asctime(),
+            ex))
+        json_config = None
+
+    return json_config
 
 
-def save_config():
+def save_config(json_config, config_file):
     print("%s Saving config to %s" % (time.asctime(),
-                                      gv_config_file))
+                                      config_file))
     with open(gv_config_file, 'w') as outfile:
-        indented_json_str = json.dumps(gv_json_config, 
+        indented_json_str = json.dumps(json_config, 
                                        indent=4, 
                                        sort_keys=True)
         outfile.write(indented_json_str)
         outfile.close()
+
+
+def manage_config():
+    global gv_json_config
+    last_check = 0
+
+    # 5-second check for config changes
+    while (1):
+        config_last_modified = os.path.getmtime(gv_config_file)
+        if config_last_modified > last_check:
+            json_config = load_config(gv_config_file)
+            if json_config is not None:
+                gv_json_config = json_config
+                last_check = config_last_modified
+
+        time.sleep(5)
 
 
 # Sunset globals
@@ -365,8 +382,10 @@ gv_manual_switch_expiry_period = 3600 * 5
 def reset_all_dicts():
     # wipe all dicts for tracked devices, states etc
 
-    global gv_jbhasd_device_url_dict, gv_jbhasd_device_status_dict
-    global gv_manual_switch_dict, gv_manual_switch_expiry_ts_dict
+    global gv_jbhasd_device_url_dict
+    global gv_jbhasd_device_status_dict
+    global gv_manual_switch_dict
+    global gv_manual_switch_expiry_ts_dict
     global gv_jbhasd_zconf_url_set
 
     print("%s Resetting all dictionaries" % (time.asctime()))
@@ -412,7 +431,10 @@ def check_switch(zone_name,
                  control_state,
                  control_context):
 
-    global gv_sunset_on_time, gv_manual_switch_dict, gv_manual_switch_expiry_ts_dict, gv_manual_switch_expiry_period
+    global gv_sunset_on_time
+    global gv_manual_switch_dict
+    global gv_manual_switch_expiry_ts_dict
+    global gv_manual_switch_expiry_period
 
     # represents state of switch
     # -1 do nothing.. not matched
@@ -464,9 +486,9 @@ def check_switch(zone_name,
             if (timer['on'] == "sunset"):
                 on_time = gv_sunset_on_time
             else:
-                on_time = int(timer['on'])
+                on_time = int(timer['on'].replace(':', ''))
 
-            off_time = int(timer['off'])
+            off_time = int(timer['off'].replace(':', ''))
 
             if (on_time <= off_time):
                 if (current_time >= on_time and 
@@ -504,9 +526,9 @@ def check_rgb(zone_name,
             if (timer['on'] == "sunset"):
                 on_time = gv_sunset_on_time
             else:
-                on_time = int(timer['on'])
+                on_time = int(timer['on'].replace(':', ''))
 
-            off_time = int(timer['off'])
+            off_time = int(timer['off'].replace(':', ''))
 
             if (on_time <= off_time):
                 if (current_time >= on_time and 
@@ -535,12 +557,13 @@ class MyZeroConfListener(object):
         if info is not None:
             address = socket.inet_ntoa(info.address)
             port = info.port
-            url = "http://%s:%d/json" % (address, port)
+            url = "http://%s:%d" % (address, port)
             if not url in gv_jbhasd_zconf_url_set:
                 gv_jbhasd_zconf_url_set.add(url)
-                print("%s Discovered device..name:%s URL:%s" % (time.asctime(),
-                                                                name,
-                                                                url))
+                print("%s Discovered %s (%s)" % (
+                    time.asctime(),
+                    name,
+                    url))
 
         return
 
@@ -804,8 +827,10 @@ def probe_devices():
     # and probe their status values, storing in a dictionary
     # Also calculate sunset time every 6 hours as part of automated 
     # management of devices
-    global gv_last_sunset_check, gv_json_config
-    global gv_sunset_on_time, gv_actual_sunset_time 
+    global gv_last_sunset_check
+    global gv_json_config
+    global gv_sunset_on_time
+    global gv_actual_sunset_time 
 
     # loop forever
     while (1):
@@ -1918,12 +1943,17 @@ def web_server():
     cherrypy.engine.block()
 
 # main()
-load_config()
 
 # Analytics
 analytics_file = open("analytics.csv", "a")
 
 thread_list = []
+
+# config thread
+config_t = threading.Thread(target = manage_config)
+config_t.daemon = True
+config_t.start()
+thread_list.append(config_t)
 
 # device discovery thread
 discover_t = threading.Thread(target = discover_devices)
