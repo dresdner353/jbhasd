@@ -1182,16 +1182,19 @@ void setup_rgbs()
             log_message("    LED Red pin:%d",
                         gpio_rgb->red_pin);
             pinMode(gpio_rgb->red_pin, OUTPUT);
+            analogWrite(gpio_rgb->red_pin, 0);
         }
         if (gpio_rgb->green_pin != NO_PIN) {
             log_message("    LED Green pin:%d",
                         gpio_rgb->green_pin);
             pinMode(gpio_rgb->green_pin, OUTPUT);
+            analogWrite(gpio_rgb->green_pin, 0);
         }
         if (gpio_rgb->blue_pin != NO_PIN) {
             log_message("    LED Blue pin:%d",
                         gpio_rgb->blue_pin);
             pinMode(gpio_rgb->blue_pin, OUTPUT);
+            analogWrite(gpio_rgb->blue_pin, 0);
         }
         if (gpio_rgb->manual_pin != NO_PIN) {
             log_message("    Manual pin:%d",
