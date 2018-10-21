@@ -11,7 +11,7 @@ There's some great existing options for home automation stacks out there and pro
 ## Quick Summary of the Setup Steps
 - The generic firmware is flashed to any ESP-8266 Device
 - The device should power up in AP mode with SSID JBHASD-XXXXXXXX where XXXXXXXX is the CPU ID of the ESP8266
-- You connect to the SSID where you can then set Zone, Wifi SSID and Password and apply changes
+- You connect to the SSID where you can then set Wifi SSID and Password and apply changes
 - The device then reboots and connects to your network in STA mode (WiFI client)
 - You can then access the device with a JSON GET-based API and manage it from there
 - MDNS and DNS-SD are built-in and an accompanying web server can be used as a hub for the devices providing a web portal, means of managing automation and even downloading config data to newlty attached or reset devices
@@ -64,7 +64,7 @@ The pretty=1 args to this call could be omitted or passed with a 0 value and it 
 
 ## Pushing Configuration to the Device
 
-The example below is how you would cofiguration to a given device and setup its GPIO pins to control any attached hardware or onboard features.
+The example below is how you would push cofiguration to a given device and set up it's GPIO pins to control any attached hardware or onboard features.
 
 ```
 curl -G  "http://192.168.12.165/json" --data-urlencode 'config={ "zone" : "Prototype 1", 
@@ -75,7 +75,7 @@ curl -G  "http://192.168.12.165/json" --data-urlencode 'config={ "zone" : "Proto
 "sw_man_pin" : 0 }, { "name" : "Temp", "type" : "temp/humidity", "th_variant" : "DHT21", 
 "th_temp_offset" : 0, "th_pin" : 14 } ] }'
 ```
-In the above example, the device in question is a Sonoff Basic switch. This device has a single relay for controlling mains appliances. It's GPIO-12 is the pin for this relay. There is also an onboard LED that is tied to GPIO-13 and an onboard button which is connected to GPIO-0. That variant of the Sonoff also has a spare accessible GPIO-14 pin via the header solder points on the board. 
+In the above example, the device in question is a Sonoff Basic switch. This device has a single relay for controlling mains appliances. GPIO-12 is the pin for this relay. There is also an onboard LED that is tied to GPIO-13 and an onboard button which is connected to GPIO-0. That variant of the Sonoff also has a spare accessible GPIO-14 pin via the header solder points on the board. 
 
 The config arg to the device passes a JSON config record that specifies the devices zone, wifi_ssid and password. So while you have already set this via AP mode, this config step lets you re-assign it if desired. Then following this are a series of enabled options for OTA, telnet, MDNS and manual switches. More on these later.
 
@@ -134,7 +134,7 @@ $ curl "http://192.168.12.165/?pretty=1"
 }
 ```
 
-So now, we have a populated 'controls' array being returned that describes the available controls. This is crucial as it plays a role later on in how this device is then integrated with hub-type applications that need to discover and manipulate devices. 
+So now, we have a populated 'controls' array being returned that describes the available controls. This is crucial as it plays a role later on in how this device is then integrated with hub-type applications that need to discover capabilities and manipulate specific devices and controls. 
 
 ## Manipulating controls on the Device
 In the above example, we set up a Sonoff Basic device with its relay put to use and also leveraged the spare GPIO pin for a temperature device.
