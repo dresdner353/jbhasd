@@ -411,16 +411,23 @@ def get_ip():
     return ip
 
 
-def sunset_api_time_to_epoch(time_str):
+def sunset_api_time_to_epoch(time_str, local_timezone):
+    print(time_str)
     # decode UTC time from string, strip last 6 chars first
     ts_datetime = datetime.datetime.strptime(time_str[:-6], 
                                              '%Y-%m-%dT%H:%M:%S')
-    # Adjust for UTC source timezone (strp is local based)
-    from_zone = tz.tzutc()
+    # Adjust for UTC source timezone and local timezone
+    # Some odd stuff observed here in that tz.tzlocal() did
+    # not seem to react to actual local timezone on raspberry
+    # pi. So I used tz.gettz to explicitly get UTC and a parm
+    # string for local timezone and throw that into config
+    from_zone = tz.gettz('UTC')
+    to_zone = tz.gettz(local_timezone)
     ts_datetime = ts_datetime.replace(tzinfo=from_zone)
+    ts_datetime = ts_datetime.astimezone(to_zone)
 
     # Epoch extraction
-    epoch_time = time.mktime(ts_datetime.timetuple())
+    epoch_time = int(time.mktime(ts_datetime.timetuple()))
 
     return epoch_time
 
@@ -842,9 +849,12 @@ def probe_devices():
             json_data = fetch_url(gv_json_config['sunset']['url'], 20, 1)
             if json_data is not None:
                 sunset_str = json_data['results']['sunset']
-                sunset_ts = sunset_api_time_to_epoch(sunset_str)
+                sunset_ts = sunset_api_time_to_epoch(
+                        sunset_str,
+                        gv_json_config['timezone'])
                 sunset_local_time = time.localtime(sunset_ts)
-                sunset_offset_local_time = time.localtime(sunset_ts + gv_json_config['sunset']['lights_on_offset'])
+                sunset_offset_local_time = time.localtime(
+                        sunset_ts + gv_json_config['sunset']['lights_on_offset'])
                 gv_sunset_on_time = int(time.strftime("%H%M", sunset_offset_local_time))
                 gv_actual_sunset_time = time.strftime("%H:%M", sunset_local_time)
                 print("%s Sunset on-time is %s (with offset of %d seconds)" % (time.asctime(),
@@ -1212,10 +1222,13 @@ def build_zone_web_page(num_cols):
                                 '<tr>'
                                 '<td class="dash-label">%s</td>'
                                 '<td style="color:#%s" align="center">'
-                                '&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;'
+                                '<span title="%s">'
+                                '&#x2B24;&#x2B24;&#x2B24;&#x2B24;&#x2B24;'
+                                '</span>'
                                 '</td>'
                                 '</tr>') % (sensor_name,
-                                            current_colour[4:])
+                                            current_colour[4:],
+                                            current_colour)
 
                         dashboard_col_list[col_index] += '<tr><td></td></tr>'
                         dashboard_col_list[col_index] += '<tr><td></td></tr>'
@@ -1595,10 +1608,13 @@ def build_device_web_page(num_cols):
                         '<tr>'
                         '<td class="dash-label">%s</td>'
                         '<td style="color:#%s" align="center">'
-                        '&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;'
+                        '<span title="%s">'
+                        '&#x2B24;&#x2B24;&#x2B24;&#x2B24;&#x2B24;'
+                        '</span>'
                         '</td>'
                         '</tr>') % (sensor_name,
-                                    current_colour[4:])
+                                    current_colour[4:],
+                                    current_colour)
 
                 dashboard_col_list[col_index] += '<tr><td></td></tr>'
                 dashboard_col_list[col_index] += '<tr><td></td></tr>'
