@@ -39,7 +39,7 @@ time.sleep(discovery_secs)
 
 print( "Discovered..")
 for url in url_set:
-    reboot_url = '%s/json?reboot=1' % (url)
+    reboot_url = '%s?reboot=1' % (url)
     print(reboot_url)
 
     response = None
