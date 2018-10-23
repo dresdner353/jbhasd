@@ -14,8 +14,6 @@ import random
 
 from zeroconf import ServiceInfo, Zeroconf
 
-json_status_tmpl = '{ "name": "__DEVICE_NAME__", "zone": "__ZONE__", "ota_enabled" : 1, "telnet_enabled" : 1, "manual_switches_enabled" : 1, "ssid" : "XXXX", "controls": [] }'
-
 us_states_list = ['Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado', 'Connecticut', 'Delaware', 'Florida', 'Georgia', 'Hawaii', 'Idaho', 'Illinois', 'Indiana', 'Iowa', 'Kansas', 'Kentucky', 'Louisiana', 'Maine', 'Maryland', 'Massachusetts', 'Michigan', 'Minnesota', 'Mississippi', 'Missouri', 'Montana', 'Nebraska', 'Nevada', 'New Hampshire', 'New Jersey', 'New Mexico', 'New York', 'North Carolina', 'North Dakota', 'Ohio', 'Oklahoma', 'Oregon', 'Pennsylvania', 'Rhode Island', 'South Carolina', 'South Dakota', 'Tennessee', 'Texas', 'Utah', 'Vermont', 'Virginia', 'Washington', 'West Virginia', 'Wisconsin', 'Wyoming', 'District of Columbia', 'Puerto Rico', 'Guam', 'American Samoa', 'U.S. Virgin Islands', 'Northern Mariana Islands']
 
 irish_counties_list = ['Antrim', 'Armagh', 'Carlow', 'Cavan', 'Clare', 'Cork', 'Derry', 'Donegal', 'Down', 'Dublin', 'Fermanagh', 'Galway', 'Kerry', 'Kildare', 'Kilkenny', 'Laois', 'Leitrim', 'Limerick', 'Longford', 'Louth', 'Mayo', 'Meath', 'Monaghan', 'Offaly', 'Roscommon', 'Sligo', 'Tipperary', 'Tyrone', 'Waterford', 'Westmeath', 'Wexford', 'Wicklow']
@@ -131,10 +129,10 @@ for id in range(0, num_states):
     zone = us_states_list[id]
     print("Generating cherrypy server.. %s zone:%s port:%d" % (instance, zone, port))
 
-    json_status = json_status_tmpl
-    json_status = json_status.replace("__DEVICE_NAME__", instance)
-    json_status = json_status.replace("__ZONE__", zone)
-    json_data = json.loads(json_status)
+    json_data = {}
+    json_data['name'] = instance
+    json_data['zone'] = zone
+    json_data['controls'] = []
 
     # Generate controls
     # PIck a number and then random index
