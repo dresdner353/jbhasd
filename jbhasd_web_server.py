@@ -969,27 +969,30 @@ def probe_devices():
             status_ts = gv_jbhasd_device_ts_dict[device_name]
 
             # system details
-            device_millis = json_data['system']['millis']
-            free_heap = json_data['system']['free_heap']
-            csv_row = "%d,%d,%s,%s,%s,%s,%s,%d" % (3,
-                                                   status_ts, 
-                                                   zone_name, 
-                                                   device_name, 
-                                                   "", 
-                                                   "", 
-                                                   "",
-                                                   device_millis)
-            analytics_file.write("%s\n" % (csv_row)) 
-            csv_row = "%d,%d,%s,%s,%s,%s,%s,%d" % (4,
-                                                   status_ts, 
-                                                   zone_name, 
-                                                   device_name, 
-                                                   "", 
-                                                   "", 
-                                                   "",
-                                                   free_heap)
-            analytics_file.write("%s\n" % (csv_row)) 
-            analytics_file.flush()
+            # 'system' section may not be present 
+            # for say simulated devices
+            if 'system' in json_data:
+                device_millis = json_data['system']['millis']
+                free_heap = json_data['system']['free_heap']
+                csv_row = "%d,%d,%s,%s,%s,%s,%s,%d" % (3,
+                                                       status_ts, 
+                                                       zone_name, 
+                                                       device_name, 
+                                                       "", 
+                                                       "", 
+                                                       "",
+                                                       device_millis)
+                analytics_file.write("%s\n" % (csv_row)) 
+                csv_row = "%d,%d,%s,%s,%s,%s,%s,%d" % (4,
+                                                       status_ts, 
+                                                       zone_name, 
+                                                       device_name, 
+                                                       "", 
+                                                       "", 
+                                                       "",
+                                                       free_heap)
+                analytics_file.write("%s\n" % (csv_row)) 
+                analytics_file.flush()
 
             # Switch status check 
             for control in json_data['controls']:
