@@ -3,7 +3,6 @@
 # and print their details and URLs
 # waits a long time and exits
 
-from six.moves import input  
 from zeroconf import ServiceBrowser, Zeroconf
 import socket
 import time
@@ -25,20 +24,20 @@ class MyListener(object):
         address = socket.inet_ntoa(info.address)
         port = info.port
         url = 'http://%s:%d' % (address, port)
+        server = info.server
         url_set.add(url)
-        print("\nDiscovered: %s\nURL: %s\nInfo:%s\n" % (name, url, info))
-        json_url = '%s/json' % (url)
+        print("\nDiscovered: %s URL: %s" % (server, url))
 
         response = None
         try:
-            response = urllib.request.urlopen(json_url, 
+            response = urllib.request.urlopen(url, 
                                               timeout = http_timeout_secs)
         except:
-            print("Error in urlopen (%s)" % (json_url))
+            print("Error in urlopen (%s)" % (url))
 
         if response is not None:
             response_str = response.read()
-            print("%s\n%s\n" % (json_url, response_str))
+            print("%s" % (response_str))
 
 zeroconf = Zeroconf()  
 listener = MyListener()  
