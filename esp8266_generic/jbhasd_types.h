@@ -25,28 +25,7 @@
 #define MAX_FIELD_LEN 30
 #define MAX_CONFIG_LEN 2048
 
-#define LIST_SELFLINK(head) { \
-    (head)->prev = (head); \
-    (head)->next = (head); \
-}
 
-#define LIST_INSERT(head, item) { \
-    (item)->next = (head); \
-    (item)->prev = (head)->prev; \
-    (item)->prev->next = item; \
-    (head)->prev = (item); \
-}
-
-#define LIST_REMOVE(item) { \
-    (item)->prev->next = (item)->next; \
-    (item)->next->prev = (item)->prev; \
-    (item)->next = NULL; \
-    (item)->prev = NULL; \
-}
-
-#define LIST_NEXT(item) (item)->next
-
-#define LIST_PREV(item) (item)->prev
 
 // Context type for tracking how
 // a switch was activated
@@ -182,18 +161,13 @@ struct device_profile {
 
 struct device_profile gv_device;
 
-// Runtime mode
-// using bitmasks so new modes need to 
-// take unused bits. It's just a 1,2,4,8 sequence 
-// in hex
-#define MODE_INIT          0x01  // Boot mode
-#define MODE_WIFI_AP       0x02  // WiFI AP Mode (for config)
-#define MODE_WIFI_STA_DOWN 0x04  // WiFI station/client down
-#define MODE_WIFI_STA_UP   0x08  // WiFI station/client up (normal operation)
-#define MODE_WIFI_OTA      0x10  // OTA mode invoked from STA mode
-#define MODE_ALL           0xFF  // All states 
+#define RUN_STATE_INIT           HTM_RUN_STATE_00
+#define RUN_STATE_WIFI_AP        HTM_RUN_STATE_01
+#define RUN_STATE_WIFI_STA_DOWN  HTM_RUN_STATE_02
+#define RUN_STATE_WIFI_STA_UP    HTM_RUN_STATE_03
+#define RUN_STATE_WIFI_OTA       HTM_RUN_STATE_04
+#define RUN_STATE_ALL            HTM_RUN_STATE_ALL
 
-int gv_mode = MODE_INIT;
 int gv_reboot_requested = 0;
 
 #define LOGBUF_MAX 2048
@@ -211,14 +185,3 @@ enum gv_logging_enum gv_logging = LOGGING_NONE;
 
 // Web
 #define WEB_PORT 80
-
-// Main loop ticker timing
-struct loop_task {
-    char *name;
-    int mode_mask;
-    unsigned long millis_delay;
-    void (*fp)(void);
-    unsigned long last_call;
-    unsigned long num_calls;
-    unsigned long cpu_time;
-};
