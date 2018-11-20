@@ -16,7 +16,10 @@
 #include <ArduinoOTA.h>
 #include <ESP8266httpUpdate.h>
 #include <ArduinoJson.h>
+#include "HandyTaskMan.h"
 #include "jbhasd_types.h"
+
+HandyTaskMan TaskMan;
 
 // Function: get_sw_context
 // returns string for switch context enum 
@@ -76,7 +79,7 @@ int gv_push_port;
 // It seems best to use a single large and two
 // small buffers to do all string formatting for
 // web pages and JSON strings
-char gv_small_buffer[512];
+char gv_small_buffer[1024];
 char gv_large_buffer[4096];
 char gv_config[MAX_CONFIG_LEN];
 
@@ -113,14 +116,17 @@ WiFiServer gv_telnet_server(23);
 WiFiClient gv_telnet_clients[MAX_TELNET_CLIENTS];
 int gv_num_telnet_clients = 0;
 
-// Function: log_message
+// Function: vlog_message
 // Wraps calls to Serial.print or connected
-// network client
-void log_message(char *format, ... )
+// telnet client
+// takes form of typical vprintf-like function
+// with va_list passed in args where upper
+// function is managing he va_start/end
+void vlog_message(char *format, va_list args )
 {
     static char log_buf[LOGBUF_MAX + 1];
     int i;
-    va_list args;
+    int prefix_len;
     unsigned long now;
     unsigned long days;
     unsigned long hours;
@@ -129,13 +135,17 @@ void log_message(char *format, ... )
     unsigned long msecs;
     unsigned long remainder;
     
+    if (gv_logging == LOGGING_NONE) {
+        // Logging not enabled
+        return;
+    }
+
     if (gv_logging == LOGGING_NW_CLIENT &&
         gv_num_telnet_clients == 0) {
         // No logging to do if we have no
         // network clients
         return;
     }
-
 
     // Timestamp
     // Break down relative msecs
@@ -159,15 +169,15 @@ void log_message(char *format, ... )
                 secs,
                 msecs);
 
+    prefix_len = strlen(log_buf);
+
     // handle va arg list and write to buffer offset by 
     // existing timestamp length
-    va_start(args, format);
-    vsnprintf(log_buf + strlen(log_buf),
-              LOGBUF_MAX,
+    vsnprintf(log_buf + prefix_len,
+              LOGBUF_MAX - prefix_len,
               format,
               args);
     log_buf[LOGBUF_MAX] = 0; // force terminate last character
-    va_end(args);
 
     // CRLF termination
     strcat(log_buf, "\r\n");
@@ -190,6 +200,19 @@ void log_message(char *format, ... )
     }
 }
 
+// va_start/end wrapper for vlog_message()
+// used directly in this code as a top
+// level call point
+void log_message(char *format, ... )
+{
+    va_list args;
+
+    va_start(args, format);
+    vlog_message(format, args);
+    va_end(args);
+
+}
+
 
 // Function start_telnet
 // enables telnet server
@@ -207,6 +230,12 @@ void start_telnet()
     gv_telnet_server.setNoDelay(true);
 
     gv_logging = LOGGING_NW_CLIENT;
+
+    // Telnet Sessions every 1 second
+    TaskMan.add_task("Telnet Sessions",
+                     RUN_STATE_WIFI_STA_UP,
+                     1000,
+                     handle_telnet_sessions);
 }
 
 // Function handle_telnet_sessions
@@ -279,7 +308,9 @@ void set_switch_state(struct gpio_switch *gpio_switch,
                       enum switch_state_context context)
 {
     if (!gpio_switch) {
-        log_message("No switch specified");
+        // can get called with a find_switch() call
+        // used for gpio_switch arg
+        // So this can be NULL
         return;
     }
 
@@ -325,9 +356,9 @@ void setup_switches()
 
     log_message("setup_switches()");
 
-    for (gpio_switch = LIST_NEXT(gv_device.switch_list);
+    for (gpio_switch = HTM_LIST_NEXT(gv_device.switch_list);
          gpio_switch != gv_device.switch_list;
-         gpio_switch = LIST_NEXT(gpio_switch)) {
+         gpio_switch = HTM_LIST_NEXT(gpio_switch)) {
 
         log_message("Setting up switch:%s, state:%d",
                     gpio_switch->name,
@@ -359,11 +390,11 @@ void setup_switches()
     }
 }
 
-// Function: check_manual_switches
+// Function: loop_task_check_manual_switches
 // Scans the input pins of all switches and
 // invokes a toggle of the current state if it detects
 // LOW state
-void check_manual_switches()
+void loop_task_check_manual_switches()
 {
     int button_state;
     int took_action = 0;
@@ -380,7 +411,7 @@ void check_manual_switches()
 
     if (millis() - last_action_timestamp < 500) {
         // fast repeat switching bypassed
-        // the loop calls this function every 100ms
+        // the loop calls this function every 200ms
         // that will ensure a rapid response to a switch
         // press but we don't want 10 actions per second
         // so as soon as a switch is pressed, we want 500 msecs
@@ -388,9 +419,9 @@ void check_manual_switches()
         return;
     }
 
-    for (gpio_switch = LIST_NEXT(gv_device.switch_list);
+    for (gpio_switch = HTM_LIST_NEXT(gv_device.switch_list);
          gpio_switch != gv_device.switch_list;
-         gpio_switch = LIST_NEXT(gpio_switch)) {
+         gpio_switch = HTM_LIST_NEXT(gpio_switch)) {
 
         // Only work with entries with a manual pin
         if (gpio_switch->manual_pin != NO_PIN) {
@@ -433,9 +464,9 @@ void check_manual_switches()
         }
     }
     
-    for (gpio_rgb = LIST_NEXT(gv_device.rgb_list);
+    for (gpio_rgb = HTM_LIST_NEXT(gv_device.rgb_list);
          gpio_rgb != gv_device.rgb_list;
-         gpio_rgb = LIST_NEXT(gpio_rgb)) {
+         gpio_rgb = HTM_LIST_NEXT(gpio_rgb)) {
 
         // Only work with entries with a manual pin
         if (gpio_rgb->manual_pin != NO_PIN) {
@@ -456,7 +487,7 @@ void check_manual_switches()
         last_action_timestamp = millis();
 
         // Send update push if WiFI up
-        if (gv_mode == MODE_WIFI_STA_UP && 
+        if (TaskMan.get_run_state() == RUN_STATE_WIFI_STA_UP && 
             strlen(gv_push_ip) > 0) {
 
             // straight connection
@@ -509,9 +540,9 @@ void restore_wifi_led_state()
                  gv_led_state_reg[0]);
 
     // locate the switch by wifi LED pin in register
-    for (gpio_switch = LIST_NEXT(gv_device.switch_list);
+    for (gpio_switch = HTM_LIST_NEXT(gv_device.switch_list);
          gpio_switch != gv_device.switch_list;
-         gpio_switch = LIST_NEXT(gpio_switch)) {
+         gpio_switch = HTM_LIST_NEXT(gpio_switch)) {
         if (gpio_switch->led_pin == gv_device.wifi_led_pin) {
             found = 1;
             log_message("found switch:%s state:%d using WIFI LED", 
@@ -555,9 +586,9 @@ void setup_sensors()
     }
     first_run = 0;
 
-    for (gpio_sensor = LIST_NEXT(gv_device.sensor_list);
+    for (gpio_sensor = HTM_LIST_NEXT(gv_device.sensor_list);
          gpio_sensor != gv_device.sensor_list;
-         gpio_sensor = LIST_NEXT(gpio_sensor)) {
+         gpio_sensor = HTM_LIST_NEXT(gpio_sensor)) {
         log_message("Setting up sensor %s",
                     gpio_sensor->name);
 
@@ -626,9 +657,9 @@ void read_sensors()
 
     log_message("read_sensors()");
 
-    for (gpio_sensor = LIST_NEXT(gv_device.sensor_list);
+    for (gpio_sensor = HTM_LIST_NEXT(gv_device.sensor_list);
          gpio_sensor != gv_device.sensor_list;
-         gpio_sensor = LIST_NEXT(gpio_sensor)) {
+         gpio_sensor = HTM_LIST_NEXT(gpio_sensor)) {
         switch (gpio_sensor->sensor_type) {
           case GP_SENS_TYPE_DHT:
             dhtp = (DHT*)gpio_sensor->ref;
@@ -637,26 +668,18 @@ void read_sensors()
                 // Humidity
                 f1 = dhtp->readHumidity();
                 if (isnan(f1)) {
-                    log_message("Humidity sensor read failed for %s",
-                                gpio_sensor->name);
+                    log_message("  Humidity sensor read failed");
                 }
                 else {
-                    log_message("Humidity read from sensor %d.%02d",
-                                (int)f1,
-                                float_get_fp(f1, 2));
                     gpio_sensor->f1 = f1;
                 }
 
                 // Temp Celsius
                 f2 = dhtp->readTemperature();
                 if (isnan(f2)) {
-                    log_message("Temperature sensor read failed for %s",
-                                gpio_sensor->name);
+                    log_message("Temperature sensor read failed");
                 }
                 else {
-                    log_message("Temperature read from sensor %d.%02d",
-                                (int)f2,
-                                float_get_fp(f2, 2));
                     // record temp as read value offset
                     // by temp_offset in config
                     gpio_sensor->f2 = f2 +
@@ -669,9 +692,9 @@ void read_sensors()
                 gpio_sensor->f2 = ((ESP.getCycleCount() +
                                     ESP.getFreeHeap()) % 100) + 0.25;
             }
-            log_message("Sensor: %s "
-                        "Humidity: %d.%02d "
-                        "Temperature: %d.%02d "
+            log_message("Sensor:%s "
+                        "Humidity:%d.%02d "
+                        "Temperature:%d.%02d "
                         "(temp offset:%d.%02d)",
                         gpio_sensor->name,
                         (int)gpio_sensor->f1,
@@ -702,14 +725,15 @@ void parse_rgb_colour(unsigned int colour,
     float hue_factor;
     int hue;
 
+    log_message("parse_rgb_colour(0x%08X)", colour);
+
     // separate out hue from most significant octet and
     // RGB from lower 3 octets
     hue = (colour >> 24) & 0xFF;
     red = (colour >> 16) & 0xFF;
     green = (colour >> 8) & 0xFF;
     blue = colour & 0xFF;
-    log_message("Decoded RGB.. Value:0x%08X Hue:0x%02X Red:0x%02X Green:0x%02X Blue:0x%02X",
-                colour,
+    log_message("Decoded RGB.. Hue:0x%02X Red:0x%02X Green:0x%02X Blue:0x%02X",
                 hue,
                 red,
                 green,
@@ -872,9 +896,9 @@ void transition_rgb()
 {
     struct gpio_rgb *gpio_rgb;
 
-    for (gpio_rgb = LIST_NEXT(gv_device.rgb_list);
+    for (gpio_rgb = HTM_LIST_NEXT(gv_device.rgb_list);
          gpio_rgb != gv_device.rgb_list;
-         gpio_rgb = LIST_NEXT(gpio_rgb)) {
+         gpio_rgb = HTM_LIST_NEXT(gpio_rgb)) {
         if (strlen(gpio_rgb->program) > 0) {
             // Fade color if the current and desired states 
             // are not yet aligned
@@ -1162,19 +1186,22 @@ void set_rgb_state(struct gpio_rgb *gpio_rgb)
 void setup_rgbs()
 {
     struct gpio_rgb *gpio_rgb;
+    int rgb_count = 0;
 
     log_message("setup_rgbs()");
 
-    for (gpio_rgb = LIST_NEXT(gv_device.rgb_list);
+    for (gpio_rgb = HTM_LIST_NEXT(gv_device.rgb_list);
          gpio_rgb != gv_device.rgb_list;
-         gpio_rgb = LIST_NEXT(gpio_rgb)) {
+         gpio_rgb = HTM_LIST_NEXT(gpio_rgb)) {
+
+        rgb_count++;
 
         gpio_rgb->current_colour = 0;
 
         set_rgb_program(gpio_rgb,
                         gpio_rgb->program);
 
-        log_message("Setting up LED:%s, initial value:%d",
+        log_message("Setting up RGB:%s, initial value:%d",
                     gpio_rgb->name,
                     gpio_rgb->current_colour);
 
@@ -1202,6 +1229,22 @@ void setup_rgbs()
             pinMode(gpio_rgb->manual_pin, INPUT_PULLUP);
         }
     }
+
+    if (rgb_count > 0) {
+        // LED Transtions
+        // Requires no delay as the code uses
+        // its own internal msec scheduling
+        // Also runs in both STA modes
+        // and init mode ensuring LEDs start working right
+        // away at boot time even during the 5-sec AP mode
+        // wait
+        TaskMan.add_task("PWM LED Transitions",
+                         RUN_STATE_WIFI_STA_UP |
+                         RUN_STATE_WIFI_STA_DOWN |
+                         RUN_STATE_INIT,
+                         1,
+                         transition_rgb);
+    }
 }
 
 // Function: pin_in_use
@@ -1226,9 +1269,9 @@ int pin_in_use(int pin)
         return 1;
     }
 
-    for (gpio_switch = LIST_NEXT(gv_device.switch_list);
+    for (gpio_switch = HTM_LIST_NEXT(gv_device.switch_list);
          gpio_switch != gv_device.switch_list;
-         gpio_switch = LIST_NEXT(gpio_switch)) {
+         gpio_switch = HTM_LIST_NEXT(gpio_switch)) {
 
         if (gpio_switch->relay_pin == pin) {
             log_message("pin in use on switch %s relay ",
@@ -1249,9 +1292,9 @@ int pin_in_use(int pin)
         }
     }
 
-    for (gpio_sensor = LIST_NEXT(gv_device.sensor_list);
+    for (gpio_sensor = HTM_LIST_NEXT(gv_device.sensor_list);
          gpio_sensor != gv_device.sensor_list;
-         gpio_sensor = LIST_NEXT(gpio_sensor)) {
+         gpio_sensor = HTM_LIST_NEXT(gpio_sensor)) {
 
         if (gpio_sensor->sensor_pin == pin) {
             log_message("pin in use on sensor %s ",
@@ -1260,9 +1303,9 @@ int pin_in_use(int pin)
         }
     }
 
-    for (gpio_rgb = LIST_NEXT(gv_device.rgb_list);
+    for (gpio_rgb = HTM_LIST_NEXT(gv_device.rgb_list);
          gpio_rgb != gv_device.rgb_list;
-         gpio_rgb = LIST_NEXT(gpio_rgb)) {
+         gpio_rgb = HTM_LIST_NEXT(gpio_rgb)) {
 
         if (gpio_rgb->red_pin == pin ||
             gpio_rgb->green_pin == pin ||
@@ -1322,9 +1365,9 @@ const char *get_json_status(int pretty)
     JsonArray& controls_arr = json_status.createNestedArray("controls");
 
     // switches
-    for (gpio_switch = LIST_NEXT(gv_device.switch_list);
+    for (gpio_switch = HTM_LIST_NEXT(gv_device.switch_list);
          gpio_switch != gv_device.switch_list;
-         gpio_switch = LIST_NEXT(gpio_switch)) {
+         gpio_switch = HTM_LIST_NEXT(gpio_switch)) {
 
         JsonObject& obj = controls_arr.createNestedObject();
         obj["name"] = gpio_switch->name;
@@ -1335,9 +1378,9 @@ const char *get_json_status(int pretty)
     }
 
     // sensors
-    for (gpio_sensor = LIST_NEXT(gv_device.sensor_list);
+    for (gpio_sensor = HTM_LIST_NEXT(gv_device.sensor_list);
          gpio_sensor != gv_device.sensor_list;
-         gpio_sensor = LIST_NEXT(gpio_sensor)) {
+         gpio_sensor = HTM_LIST_NEXT(gpio_sensor)) {
 
         JsonObject& obj = controls_arr.createNestedObject();
         obj["name"] = gpio_sensor->name;
@@ -1356,9 +1399,9 @@ const char *get_json_status(int pretty)
     }
 
     // rgb
-    for (gpio_rgb = LIST_NEXT(gv_device.rgb_list);
+    for (gpio_rgb = HTM_LIST_NEXT(gv_device.rgb_list);
          gpio_rgb != gv_device.rgb_list;
-         gpio_rgb = LIST_NEXT(gpio_rgb)) {
+         gpio_rgb = HTM_LIST_NEXT(gpio_rgb)) {
 
         JsonObject& obj = controls_arr.createNestedObject();
         obj["name"] = gpio_rgb->name;
@@ -1419,9 +1462,11 @@ struct gpio_switch* find_switch(const char *name)
 {
     struct gpio_switch *gpio_switch;
 
-    for (gpio_switch = LIST_NEXT(gv_device.switch_list);
+    log_message("find_switch(%s)", name);
+
+    for (gpio_switch = HTM_LIST_NEXT(gv_device.switch_list);
          gpio_switch != gv_device.switch_list;
-         gpio_switch = LIST_NEXT(gpio_switch)) {
+         gpio_switch = HTM_LIST_NEXT(gpio_switch)) {
 
         if (!strcmp(gpio_switch->name, name)) {
             log_message("found");
@@ -1437,9 +1482,9 @@ struct gpio_rgb* find_led(const char *name)
 {
     struct gpio_rgb *gpio_rgb;
 
-    for (gpio_rgb = LIST_NEXT(gv_device.rgb_list);
+    for (gpio_rgb = HTM_LIST_NEXT(gv_device.rgb_list);
          gpio_rgb != gv_device.rgb_list;
-         gpio_rgb = LIST_NEXT(gpio_rgb)) {
+         gpio_rgb = HTM_LIST_NEXT(gpio_rgb)) {
 
         if (!strcmp(gpio_rgb->name, name)) {
             log_message("found");
@@ -1573,13 +1618,13 @@ void load_config()
 
     // Initialise lists for switches, sensors and LEDs
     gv_device.switch_list = gpio_switch_alloc();
-    LIST_SELFLINK(gv_device.switch_list);
+    HTM_LIST_SELFLINK(gv_device.switch_list);
 
     gv_device.sensor_list = gpio_sensor_alloc();
-    LIST_SELFLINK(gv_device.sensor_list);
+    HTM_LIST_SELFLINK(gv_device.sensor_list);
 
     gv_device.rgb_list = gpio_rgb_alloc();
-    LIST_SELFLINK(gv_device.rgb_list);
+    HTM_LIST_SELFLINK(gv_device.rgb_list);
 
     log_message("Read EEPROM data..(%d bytes)", sizeof(gv_config));
     EEPROM.begin(sizeof(gv_config));
@@ -1672,7 +1717,7 @@ void load_config()
                 const char* sw_mode = control["sw_mode"];
 
                 gpio_switch = gpio_switch_alloc();
-                LIST_INSERT(gv_device.switch_list, gpio_switch);
+                HTM_LIST_INSERT(gv_device.switch_list, gpio_switch);
 
                 strcpy(gpio_switch->name, control_name);
                 gpio_switch->relay_pin = control["sw_relay_pin"];
@@ -1692,7 +1737,7 @@ void load_config()
 
             if (!strcmp(control_type, "temp/humidity")) {
                 gpio_sensor = gpio_sensor_alloc();
-                LIST_INSERT(gv_device.sensor_list, gpio_sensor);
+                HTM_LIST_INSERT(gv_device.sensor_list, gpio_sensor);
 
                 const char *th_variant = control["th_variant"];
 
@@ -1717,7 +1762,7 @@ void load_config()
 
             if (!strcmp(control_type, "rgb")) {
                 gpio_rgb = gpio_rgb_alloc();
-                LIST_INSERT(gv_device.rgb_list, gpio_rgb);
+                HTM_LIST_INSERT(gv_device.rgb_list, gpio_rgb);
 
                 strcpy(gpio_rgb->name, control_name);
                 gpio_rgb->red_pin = control["red_pin"];
@@ -1747,8 +1792,10 @@ void load_config()
 // profile and re-displays the form with updated field layouts
 void ap_handle_root() 
 {
-    int i;
+    int i, num_networks;
     unsigned int led_value;
+    char *str_ptr;
+    char *selected_str;
 
     int apply_config = 0; // default
 
@@ -1776,6 +1823,74 @@ void ap_handle_root()
         gv_reboot_requested = 1;
     }
     else {
+        // Scan wifi network
+        log_message("scanning wifi networks");
+        num_networks = WiFi.scanNetworks();
+        log_message("found %d SSIDs", num_networks);
+
+        // Build combo list of discovered 
+        // networks and try to set current SSID
+        // as selected entry
+        str_ptr = gv_small_buffer;
+        gv_small_buffer[0] = '\0';
+
+        for (i = 0; i < num_networks; i++) {
+
+            // try to mark curent SSID selected
+            if (!strcmp(gv_device.wifi_ssid, WiFi.SSID(i).c_str())) {
+                selected_str = "selected";
+            }
+            else {
+                selected_str = "";
+            }
+
+            str_ptr += ets_sprintf(str_ptr,
+                                   "<option value=\"%s\" %s>%s</option>",
+                                   WiFi.SSID(i).c_str(),
+                                   selected_str,
+                                   WiFi.SSID(i).c_str());
+        }
+
+        ets_sprintf(gv_large_buffer,
+                    "<head>"
+                    "<title>JBHASD Device Setup</title>"
+                    "<meta charset=\"utf-8\">"
+                    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+                    "</head>"
+                    "<body>"
+                    "<h2>%s Setup</h2>"
+                    "<form action=\"/\" method=\"post\">"
+                    "<div>"
+                    "    <label>WIFI SSID:</label>"
+                    "    <select name=\"ssid\">"
+                    "    %s"
+                    "    </select>"
+                    "</div>"
+                    "<div>"
+                    "    <label>WIFI Password:</label>"
+                    "    <input type=\"text\" value=\"%s\" maxlength=\"%d\" name=\"password\">"
+                    "</div>"
+                    "<div>"
+                    "<button class=\"btn btn-primary\">Apply Settings</button>"
+                    "</div>"
+                    "<br><br>"
+                    "<br><br>"
+                    "<div>"
+                    "    <label>JSON Config</label>"
+                    "</div>"
+                    "<div>"
+                    "<pre>"
+                    "%s"
+                    "</pre>"
+                    "</div>"
+                    "</form>"
+                    "</body>",
+            gv_mdns_hostname,
+            gv_small_buffer,
+            gv_device.wifi_password,
+            MAX_FIELD_LEN,
+            gv_config);
+
         // Just return the pre-formatted web page we built at
         // setup
         gv_web_server.send(200, "text/html", gv_large_buffer);
@@ -1838,7 +1953,7 @@ void start_ota()
                        log_message("OTA Start");
 
                        // Change mode to lock in OTA behaviour
-                       gv_mode = MODE_WIFI_OTA;
+                       TaskMan.set_run_state(RUN_STATE_WIFI_OTA);
                        });
 
     ArduinoOTA.onEnd([]() {
@@ -1864,6 +1979,12 @@ void start_ota()
 
     ArduinoOTA.begin();
 
+    // OTA (STA) every 1s
+    TaskMan.add_task("OTA",
+                     RUN_STATE_WIFI_STA_UP | RUN_STATE_WIFI_OTA,
+                     1000,
+                     loop_task_ota);
+
     log_message("OTA service started");
 }
 
@@ -1876,47 +1997,8 @@ void start_ota()
 void start_ap_mode()
 {
     log_message("start_ap_mode()");
-    gv_mode = MODE_WIFI_AP;
+    TaskMan.set_run_state(RUN_STATE_WIFI_AP);
 
-    // format the main part of the form
-    ets_sprintf(gv_large_buffer,
-                "<head>"
-                "<title>JBHASD Device Setup</title>"
-                "<meta charset=\"utf-8\">"
-                "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-                "</head>"
-                "<body>"
-                "<h2>%s Setup</h2>"
-                "<form action=\"/\" method=\"post\">"
-                "<div>"
-                "    <label>WIFI SSID:</label>"
-                "    <input type=\"text\" value=\"%s\" maxlength=\"%d\" name=\"ssid\">"
-                "</div>"
-                "<div>"
-                "    <label>WIFI Password:</label>"
-                "    <input type=\"text\" value=\"%s\" maxlength=\"%d\" name=\"password\">"
-                "</div>"
-                "<div>"
-                "<button class=\"btn btn-primary\">Apply Settings</button>"
-                "</div>"
-                "<br><br>"
-                "<br><br>"
-                "<div>"
-                "    <label>JSON Config</label>"
-                "</div>"
-                "<div>"
-                "<pre>"
-                "%s"
-                "</pre>"
-                "</div>"
-                "</form>"
-                "</body>",
-        gv_mdns_hostname,
-        gv_device.wifi_ssid,
-        MAX_FIELD_LEN,
-        gv_device.wifi_password,
-        MAX_FIELD_LEN,
-        gv_config);
 
     // Activate AP mode
     WiFi.mode(WIFI_AP);
@@ -2077,7 +2159,7 @@ void start_wifi_sta_mode()
 
     // set state to track wifi down
     // will drive main loop to act accordingly
-    gv_mode = MODE_WIFI_STA_DOWN;
+    TaskMan.set_run_state(RUN_STATE_WIFI_STA_DOWN);
 
     // WIFI
     // Turn off first as it better 
@@ -2131,10 +2213,10 @@ void start_sta_mode_services()
 }
 
 
-// Function: check_boot_ap_switch
+// Function: loop_task_check_boot_switch
 // Checks for a pressed state on the boot program
 // pin to drive a switch to AP mode
-void check_boot_ap_switch()
+void loop_task_check_boot_switch()
 {
     static unsigned char pin_wait_timer = 25;
     int button_state;
@@ -2148,7 +2230,7 @@ void check_boot_ap_switch()
     // 25 calls against a 200msec call interval
     // is roughly 5 seconds
     if (pin_wait_timer > 0) {
-        log_message("Button wait #%d", pin_wait_timer);
+        log_message("Boot wait #%d", pin_wait_timer);
         button_state = digitalRead(gv_device.boot_program_pin);
         if (button_state == LOW) {
             log_message("Detected pin down.. going to AP mode");
@@ -2158,88 +2240,12 @@ void check_boot_ap_switch()
         pin_wait_timer--;
     }
     else {
-        log_message("Passed pin wait stage.. going to STA mode");
+        log_message("Passed boot wait stage.. going to STA mode");
         start_wifi_sta_mode();
     }
 }
 
-// Function: setup
-// Standard setup initialisation callback function
-// Does an initial config load and switch setup.
-// Then activates the boot GPIO pin for enabling ap
-// mode and also the LED indicator
-// It gives about 5 secs then for the pin to be pressed
-// to force us into AP mode, falling back on a normal
-// startup. If the config however is found to be reset
-// (wifi SSID blank), then it forces itself into AP mode
-void setup()
-{
-    gv_mode = MODE_INIT;
 
-    // Get the config at this stage
-    // as start_serial needs config setup
-    load_config();
-    start_serial();
-
-    // Watchdog timer reconfigure
-    // for longer period (8 seconds)
-    // Helps stop spontaneous watchdog
-    // timers resetting the device
-    ESP.wdtDisable();
-    ESP.wdtEnable(WDTO_8S);
-
-    // Disable WiFI storing of settings in 
-    // flash. We do this ourselves
-    WiFi.persistent(false);
-
-    log_message("Device boot: ChipId:%u FreeHeap:%u ResetReason:%s",
-                ESP.getChipId(),
-                ESP.getFreeHeap(),
-                ESP.getResetReason().c_str());
-
-    // Set MDNS hostname based on prefix and chip ID
-    ets_sprintf(gv_mdns_hostname,
-                "JBHASD-%08X",
-                ESP.getChipId());
-
-    // Init Push IP
-    gv_push_ip[0] = '\0';
-
-    // Set up status LED
-    pinMode(gv_device.wifi_led_pin, OUTPUT);
-
-    // forced AP mode from config
-    // Before we launch AP mode
-    // we first unset this option and save
-    // config.. that ensures that if power cycled, 
-    // the device will boot as normal and not 
-    // remain in AP mode
-    if (gv_device.force_apmode_onboot == 1) {
-        log_message("Detected forced AP Mode");
-        update_config("force_apmode_onboot", NULL, 0, 1);
-        start_ap_mode();
-        return;
-    }
-
-    // If we have no zone set
-    // then we go straight for AP mode
-    if (strlen(gv_device.wifi_ssid) == 0) {
-        log_message("No WiFI SSID set.. going directly to AP mode");
-        start_ap_mode();
-        return;
-    }
-
-    // Init Boot program pin for detecting manual
-    // jump to AP mode at boot stage
-    pinMode(gv_device.boot_program_pin, INPUT_PULLUP);
-
-    // Activate switches, leds and sensors
-    setup_switches();
-    setup_rgbs();
-    setup_sensors();
-
-    log_message("Setup stage complete");
-}
 
 // task loop state machine 
 // function wrappers
@@ -2253,7 +2259,7 @@ void loop_task_check_wifi_down(void)
     log_message("loop_task_check_wifi_down()");
     if (WiFi.status() != WL_CONNECTED) {
         log_message("WiFI is down");
-        gv_mode = MODE_WIFI_STA_DOWN;
+        TaskMan.set_run_state(RUN_STATE_WIFI_STA_DOWN);
 
         log_message("Connecting to Wifi SSID:%s, Password:%s",
                     gv_device.wifi_ssid,
@@ -2286,7 +2292,7 @@ void loop_task_check_wifi_up(void)
 
     if (status == WL_CONNECTED) {
         log_message("WiFI is up");
-        gv_mode = MODE_WIFI_STA_UP;
+        TaskMan.set_run_state(RUN_STATE_WIFI_STA_UP);
 
         // quick LED burst
         for (i = 1; i <= 50; i++) {
@@ -2363,209 +2369,164 @@ void loop_task_ap_reboot(void)
     gv_reboot_requested = 1;
 }
 
-// loop tasks
-// Each task lists its state machine modes (mask)
-// msec delay between calls
-// and handler function
-// most functions will work fine with 1ms delays
-// Others can easily wait longer
-// The LED transition was the one that had to get a 
-// zero delay to ensure it can compute timing correctly
-
-struct loop_task gv_loop_tasks[] = {
-    {
-        // Reboot
-        "Reboot",
-        MODE_ALL,           // Mode
-        5000,               // Every 5 seconds
-        loop_task_reboot    // Function
-    },
-
-    {
-        // AP auto-reboot
-        "AP Reboot Timer",
-        MODE_WIFI_AP,        // Mode
-        300000,              // msec delay 5 mins
-        loop_task_ap_reboot  // Function
-    },
-
-    {
-        // Web Server (AP)
-        "Webserver",
-        MODE_WIFI_AP | MODE_WIFI_STA_UP, // Mode
-        10,                              // msec delay
-        loop_task_webserver              // Function
-    },
-
-    {
-        // DNS Server
-        "DNS",
-        MODE_WIFI_AP,  // Mode
-        10,            // msec delay
-        loop_task_dns  // Function
-    },
-
-    {
-        // Init Mode button push
-        "Boot AP Switch",
-        MODE_INIT,         // Mode
-        200,               // msec delay every 1/5 sec
-        check_boot_ap_switch  // Function
-    },
-
-    {
-        // AP WiFI LED
-        "AP Status LED",
-        MODE_WIFI_AP,       // Mode
-        100,                // msec delay every 1/5 sec
-        loop_task_wifi_led  // Function
-    },
-
-    {
-        // STA WiFI LED
-        "STA Status LED",
-        MODE_WIFI_STA_DOWN, // Mode
-        1000,               // msec delay every sec
-        loop_task_wifi_led  // Function
-    },
-
-    {
-        // WiFI Check (While Down)
-        "WiFI Status Up Check",
-        MODE_WIFI_STA_DOWN,      // Mode
-        2000,                    // msec delay every 2 secs
-        loop_task_check_wifi_up  // Function
-    },
-
-    {
-        // Manual Switches
-        "Manual Switch Checks",
-        MODE_WIFI_STA_DOWN | MODE_WIFI_STA_UP,   // Mode
-        100,                                     // msec delay every 1/10 sec
-        check_manual_switches                    // Function
-    },
-
-    {
-        // WiFI Check (While Up)
-        "WiFI Status Down Check",
-        MODE_WIFI_STA_UP,          // Mode
-        10000,                     // msec delay every 10 secs
-        loop_task_check_wifi_down  // Function
-    },
-
-    {
-        // LED Transtions
-        // Requires no delay as the code uses 
-        // its own internal msec scheduling
-        // Also runs in both STA modes
-        // and init mode ensuring LEDs start working right
-        // away at boot time even during the 5-sec AP mode 
-        // wait
-        "PWM LED Transitions",
-        MODE_WIFI_STA_UP | MODE_WIFI_STA_DOWN | MODE_INIT, // Mode
-        0,                                                 // no delay
-        transition_rgb                                    // Function
-    },
-
-    {
-        // Telnet Sessions
-        "Telnet Sessions",
-        MODE_WIFI_STA_UP,      // Mode
-        1000,                  // msec delay every 1 second
-        handle_telnet_sessions // Function
-    },
-
-    {
-        // OTA (STA)
-        "OTA",
-        MODE_WIFI_STA_UP | MODE_WIFI_OTA,  // Mode
-        1,                                 // 1 msec delay
-        loop_task_ota                      // Function
-    },
-
-    {
-        // Task Stat logging
-        "Stat Logging",
-        MODE_ALL,           // Mode
-        30000,              // Every 30 seconds
-        loop_task_log_stats // Function
-    },
-
-    {
-        // terminator.. never delete
-        "Terminator",
-        MODE_INIT,
-        0,
-        NULL // null func ptr terminates loop
-    }
-};
-
 void loop_task_log_stats(void)
 {
-    int i = 0;
+    TaskMan.log_stats();
+}
 
-    log_message("loop_task_log_stats()");
-    while (gv_loop_tasks[i].fp != NULL) {
-        if (gv_loop_tasks[i].num_calls > 0) {
-            log_message("  Task:%s Calls:%u CpuTime:%u",
-                        gv_loop_tasks[i].name,
-                        gv_loop_tasks[i].num_calls,
-                        gv_loop_tasks[i].cpu_time);
-        }
+// Function: setup
+// Standard setup initialisation callback function
+// Does an initial config load and switch setup.
+// Then activates the boot GPIO pin for enabling ap
+// mode and also the LED indicator
+// It gives about 5 secs then for the pin to be pressed
+// to force us into AP mode, falling back on a normal
+// startup. If the config however is found to be reset
+// (wifi SSID blank), then it forces itself into AP mode
+void setup()
+{
+    // Get the config at this stage
+    // as start_serial needs config setup
+    load_config();
+    start_serial();
 
-        gv_loop_tasks[i].num_calls = 0;
-        gv_loop_tasks[i].cpu_time = 0;
-        i++;
+    TaskMan.set_logger(vlog_message);
+    TaskMan.set_run_state(RUN_STATE_INIT);
+
+    // Reboot Check every 5s
+    TaskMan.add_task("Reboot Check",
+                     RUN_STATE_ALL,
+                     5000,
+                     loop_task_reboot);
+
+    // AP auto-reboot after 5 mins
+    TaskMan.add_task("AP Reboot Timer",
+                     RUN_STATE_WIFI_AP,
+                     300000,
+                     loop_task_ap_reboot);
+
+    // Web Server (AP) every 50 ms
+    TaskMan.add_task("Webserver",
+                     RUN_STATE_WIFI_AP |
+                     RUN_STATE_WIFI_STA_UP,
+                     50,
+                     loop_task_webserver);
+
+    // DNS Server every 50ms
+    TaskMan.add_task("DNS",
+                     RUN_STATE_WIFI_AP,
+                     50,
+                     loop_task_dns);
+
+    // Init Mode button push every 200ms
+    TaskMan.add_task("Boot AP Switch",
+                     RUN_STATE_INIT,
+                     200,
+                     loop_task_check_boot_switch);
+
+    // AP WiFI LED every 100 ms (fast)
+    TaskMan.add_task("AP Status LED",
+                     RUN_STATE_WIFI_AP,
+                     100,
+                     loop_task_wifi_led);
+
+    // STA WiFI LED every 1s (slow)
+    TaskMan.add_task("STA Status LED",
+                     RUN_STATE_WIFI_STA_DOWN,
+                     1000,
+                     loop_task_wifi_led);
+
+    // WiFI Check (While Down) Every 10s
+    TaskMan.add_task("WiFI Status Up Check",
+                     RUN_STATE_WIFI_STA_DOWN,
+                     10000,
+                     loop_task_check_wifi_up);
+
+    // Manual Switches every 200ms
+    TaskMan.add_task("Manual Switch Checks",
+                     RUN_STATE_WIFI_STA_DOWN | RUN_STATE_WIFI_STA_UP,
+                     200,
+                     loop_task_check_manual_switches);
+
+    // WiFI Check (While Up) every 10s
+    TaskMan.add_task("WiFI Status Down Check",
+                     RUN_STATE_WIFI_STA_UP,
+                     10000,
+                     loop_task_check_wifi_down);
+
+    // Stats every 30s
+    TaskMan.add_task("Stats",
+                     RUN_STATE_ALL,
+                     30000,
+                     loop_task_log_stats);
+
+    // Watchdog timer reconfigure
+    // for longer period (8 seconds)
+    // Helps stop spontaneous watchdog
+    // timers resetting the device
+    ESP.wdtDisable();
+    ESP.wdtEnable(WDTO_8S);
+
+    // Disable WiFI storing of settings in 
+    // flash. We do this ourselves
+    WiFi.persistent(false);
+
+    log_message("Device boot: ChipId:%u FreeHeap:%u ResetReason:%s",
+                ESP.getChipId(),
+                ESP.getFreeHeap(),
+                ESP.getResetReason().c_str());
+
+    // Set MDNS hostname based on prefix and chip ID
+    ets_sprintf(gv_mdns_hostname,
+                "JBHASD-%08X",
+                ESP.getChipId());
+
+    // Init Push IP
+    gv_push_ip[0] = '\0';
+
+    // Set up status LED
+    pinMode(gv_device.wifi_led_pin, OUTPUT);
+
+    // forced AP mode from config
+    // Before we launch AP mode
+    // we first unset this option and save
+    // config.. that ensures that if power cycled, 
+    // the device will boot as normal and not 
+    // remain in AP mode
+    if (gv_device.force_apmode_onboot == 1) {
+        log_message("Detected forced AP Mode");
+        update_config("force_apmode_onboot", NULL, 0, 1);
+        start_ap_mode();
+        return;
     }
+
+    // If we have no zone set
+    // then we go straight for AP mode
+    if (strlen(gv_device.wifi_ssid) == 0) {
+        log_message("No WiFI SSID set.. going directly to AP mode");
+        start_ap_mode();
+        return;
+    }
+
+    // Init Boot program pin for detecting manual
+    // jump to AP mode at boot stage
+    pinMode(gv_device.boot_program_pin, INPUT_PULLUP);
+
+    // Activate switches, leds and sensors
+    setup_switches();
+    setup_rgbs();
+    setup_sensors();
+
+    log_message("Setup stage complete");
 }
 
 
 // Function: loop
-// Iterates loop task array state machine and executes
-// functions based on gv_mode and msec interval 
-
 void loop()
 {
-    int i = 0;
-    unsigned long now;
-    static int first_run = 1;
-
     // Keep the sw watchdog happy
     ESP.wdtFeed();
 
-    while (gv_loop_tasks[i].fp != NULL) {
-        now = millis();
-
-        // inits for each task 
-        // during very first loop() call
-        if (first_run) {
-            gv_loop_tasks[i].last_call = 0;
-            gv_loop_tasks[i].num_calls = 0;
-            gv_loop_tasks[i].cpu_time = 0;
-        }
-
-        // Check if mode mask matches current mode
-        // and that interval since last call >= delay between calls
-        // this is unsigned arithmetic and will nicely handle a 
-        // wrap around of millis()
-        if ((gv_loop_tasks[i].mode_mask & gv_mode) &&
-            now - gv_loop_tasks[i].last_call 
-            >= gv_loop_tasks[i].millis_delay) {
-
-            // Record call time
-            gv_loop_tasks[i].last_call = now;
-
-            // Call function
-            gv_loop_tasks[i].fp();
-
-            // Calculate call stats
-            now = millis();
-            gv_loop_tasks[i].cpu_time += (now - gv_loop_tasks[i].last_call);
-            gv_loop_tasks[i].num_calls++;
-        }
-        i++;
-    }
-
-    // Disable first run handling from now on
-    first_run = 0;
+    // Tasks
+    TaskMan.nudge();
 }
