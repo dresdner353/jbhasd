@@ -16,8 +16,15 @@
 #include <ArduinoOTA.h>
 #include <ESP8266httpUpdate.h>
 #include <ArduinoJson.h>
+#include <Adafruit_NeoPixel.h>
 #include "HandyTaskMan.h"
 #include "jbhasd_types.h"
+
+#ifdef __AVR__
+  #include <avr/power.h>
+#endif
+
+
 
 HandyTaskMan TaskMan;
 
@@ -213,37 +220,12 @@ void log_message(char *format, ... )
 
 }
 
-
-// Function start_telnet
-// enables telnet server
-void start_telnet()
-{
-    log_message("start_telnet()");
-
-    if (!gv_device.telnet_enabled) {
-        log_message("Telnet not enabled.. returning");
-        return;
-    }
-
-    // start telnet server
-    gv_telnet_server.begin();
-    gv_telnet_server.setNoDelay(true);
-
-    gv_logging = LOGGING_NW_CLIENT;
-
-    // Telnet Sessions every 1 second
-    TaskMan.add_task("Telnet Sessions",
-                     RUN_STATE_WIFI_STA_UP,
-                     1000,
-                     handle_telnet_sessions);
-}
-
-// Function handle_telnet_sessions
+// Function loop_task_telnet
 // loop function for driving telnet
 // session handling both accepting new
 // sessions and flushing data from existing
 // sessions
-void handle_telnet_sessions()
+void loop_task_telnet()
 {
     uint8_t i;
 
@@ -299,6 +281,31 @@ void handle_telnet_sessions()
         }
     }
 }
+
+// Function start_telnet
+// enables telnet server
+void start_telnet()
+{
+    log_message("start_telnet()");
+
+    if (!gv_device.telnet_enabled) {
+        log_message("Telnet not enabled.. returning");
+        return;
+    }
+
+    // start telnet server
+    gv_telnet_server.begin();
+    gv_telnet_server.setNoDelay(true);
+
+    gv_logging = LOGGING_NW_CLIENT;
+
+    // Telnet Sessions every 1 second
+    TaskMan.add_task("Telnet Sessions",
+                     RUN_STATE_WIFI_STA_UP,
+                     1000,
+                     loop_task_telnet);
+}
+
 
 
 // Function: set_switch_state
@@ -888,11 +895,11 @@ void fade_rgb(struct gpio_rgb *gpio_rgb)
     }
 }
 
-// Function transition_rgb()
+// Function loop_task_transition_rgb()
 // Checks active LED devices and
 // progresses to next step in program
 // or applies transitions to existing step
-void transition_rgb()
+void loop_task_transition_rgb()
 {
     struct gpio_rgb *gpio_rgb;
 
@@ -929,8 +936,6 @@ void transition_rgb()
 void set_rgb_program(struct gpio_rgb *gpio_rgb,
                      const char *program)
 {
-    const char *p, *q; 
-    char *r, *s;
     char step_buffer[50];
 
     if (!gpio_rgb) {
@@ -1232,8 +1237,8 @@ void setup_rgbs()
 
     if (rgb_count > 0) {
         // LED Transtions
-        // Requires no delay as the code uses
-        // its own internal msec scheduling
+        // Uses 1msec delay and actual longer transitions
+        // are handled internally. 
         // Also runs in both STA modes
         // and init mode ensuring LEDs start working right
         // away at boot time even during the 5-sec AP mode
@@ -1243,7 +1248,374 @@ void setup_rgbs()
                          RUN_STATE_WIFI_STA_DOWN |
                          RUN_STATE_INIT,
                          1,
-                         transition_rgb);
+                         loop_task_transition_rgb);
+    }
+}
+
+// Function set_argb_state
+// Drives aRGB program by applying the 
+// program list of colours to the addressable LED
+// strip
+void set_argb_state(struct gpio_argb *gpio_argb)
+{
+    unsigned long now;
+    unsigned int colour;
+    int red, green, blue;
+    char colour_buf[12];
+    char *p, *q;
+    int led_count;
+    unsigned int i;
+    unsigned int start_index;
+    int loop;
+
+    if (gpio_argb->program_start == NULL) {
+        log_message("program is empty.. nothing to do");
+        return;
+    }
+
+    // delay early return until delay
+    // msec period reached
+    now = millis();
+    if (now - gpio_argb->timestamp < 
+        gpio_argb->pause) {
+        return;
+    }
+
+    log_message("set_argb_state(name=%s)",
+                gpio_argb->name);
+
+    start_index = gpio_argb->index;
+
+    log_message("index:%d direction:%d fill_mode:%d pause:%d",
+                start_index,
+                gpio_argb->direction,
+                gpio_argb->fill_mode,
+                gpio_argb->pause);
+
+    // Wipe strip before draw
+    switch(gpio_argb->fill_mode) {
+      case 0:
+        for (i = 0; 
+             i < gpio_argb->num_leds; 
+             i++) {
+            gpio_argb->neopixel->setPixelColor(i,
+                                               gpio_argb->neopixel->Color(0,0,0));
+        }
+        break;
+
+      default:
+        // do nothing
+        break;
+    }
+
+    // enter permanent loop now to populate
+    // the neopixel array from the program data
+    // breaks will exit depending on fill mode
+    p = gpio_argb->program_start;
+    led_count = 0;
+    loop = 1;
+    while (loop) {
+        // find colour separator
+        q = strchr(p, ',');
+        if (q &&
+            q - p < sizeof(colour_buf)) {
+
+            // isolate colour 
+            strncpy(colour_buf, 
+                    p,
+                    q - p);
+            colour_buf[q - p] = '\0';
+
+            // move to next in sequence
+            p = q + 1;
+        }
+        else {
+            // last colour in program
+            strncpy(colour_buf, 
+                    p,
+                    sizeof(colour_buf) - 1);
+            colour_buf[sizeof(colour_buf) - 1] = '\0';
+
+            // Program reset scenarios
+            switch(gpio_argb->fill_mode) {
+              case 1:
+                // reset the program for repeat
+                // write 
+                p = gpio_argb->program_start;
+                break;
+
+              default:
+                // once
+                p = NULL;
+                break;
+            }
+        }
+
+        log_message("Read colour from program: %s", 
+                    colour_buf);
+
+        // convert given colour to int
+        if (strlen(colour_buf) > 2 &&
+            colour_buf[0] == '0' &&
+            (colour_buf[1] == 'x' || colour_buf[1] == 'X')) {
+            // hex decode
+            colour = strtoul(&colour_buf[2], NULL, 16);
+        }
+        else {
+            // decimal unsigned int
+            colour = strtoul(colour_buf, NULL, 10);
+        }
+
+        // split to RGB
+        red = colour >> 16 & 0xFF;
+        green = colour >> 8 & 0xFF;
+        blue = colour & 0xFF;
+
+        // Set current pixel index to colour
+        // We use Neopixel Color method as this will 
+        // apply the RGB, BGR, GBR variation accordingly
+        log_message("Setting LED %d to Red:0x%02X Green:0x%02X Blue:0x%02X", 
+                    gpio_argb->index,
+                    red,
+                    green,
+                    blue);
+        gpio_argb->neopixel->setPixelColor(gpio_argb->index, 
+                                           gpio_argb->neopixel->Color(red, 
+                                                                      green,
+                                                                      blue));
+        led_count++;
+
+        // advance index for next colour
+        gpio_argb->index = (gpio_argb->index + 1) % gpio_argb->num_leds;
+        log_message("Next LED is %d", 
+                    gpio_argb->index);
+
+        log_message("LED count is %d", led_count);
+
+        // Loop exit scenarios
+        switch(gpio_argb->fill_mode) {
+          case 0:
+          case 2:
+            if (p == NULL) {
+                loop = 0;
+            }
+            break;
+
+          case 1:
+            if (led_count >= gpio_argb->num_leds) {
+                loop = 0;
+            }
+            break;
+
+          default:
+            // break loop for safety
+            loop = 0;
+            break;
+        }
+    }
+
+    gpio_argb->neopixel->show();
+
+    // reset index for next call
+    switch(gpio_argb->fill_mode) {
+      default:
+      case 0:
+      case 1:
+        // Standard single pixel movement according 
+        // to set direction
+        // or standstill
+        if (gpio_argb->direction > 0) {
+            gpio_argb->index = (start_index + 1) % gpio_argb->num_leds;
+        }
+        if (gpio_argb->direction < 0) {
+            gpio_argb->index = (start_index - 1) % gpio_argb->num_leds;
+        }
+        if (gpio_argb->direction == 0) {
+            gpio_argb->index = start_index;
+        }
+        break;
+
+      case 2:
+        // append draw
+        // for forward motion, we leave it as is
+        // for backward, we need to offset from start_index
+        // so we determine the unsigned difference between where
+        // we started and are now and then further subtract
+        // this from the current position
+        if (gpio_argb->direction < 0) {
+            gpio_argb->index = (start_index - led_count) % gpio_argb->num_leds;
+        }
+        break;
+
+    }
+
+    log_message("Done.. LEDs written:%d index:%d",
+                led_count,
+                gpio_argb->index);
+
+    // Update activity timestamp
+    gpio_argb->timestamp = millis();
+}
+
+// Function set_argb_program
+// Sets the desired aRGB program for the 
+// addessable LED strip
+void set_argb_program(struct gpio_argb *gpio_argb,
+                     const char *program)
+{
+    char *p;
+    char *direction_p = NULL;
+    char *pause_p = NULL;
+    char *fill_p = NULL; 
+    char field_buffer[50];
+    int i;
+
+    if (!gpio_argb) {
+        log_message("No argb specified");
+        return;
+    }
+
+    log_message("set_argb_program(name=%s, program=%s)",
+                gpio_argb->name,
+                program);
+
+    // resets on neopixel
+    // turn all pixels off
+    for (i = 0; 
+         i < gpio_argb->num_leds; 
+         i++) {
+        gpio_argb->neopixel->setPixelColor(i,
+                                           gpio_argb->neopixel->Color(0,0,0));
+    }
+    gpio_argb->neopixel->show(); 
+
+    gpio_argb->timestamp = 0;
+
+    // copy in program string
+    strcpy(gpio_argb->program, program);
+    gpio_argb->index = 0;
+    gpio_argb->program_start = NULL;
+
+    // parse program
+    // <step offset>;<step delay>;<fill mode>;RRGGBB,RRGGBB,.....
+
+    // copy over first 50 octets of text
+    // should be enough to contain main front 
+    // fields
+    strncpy(field_buffer, 
+            gpio_argb->program, 
+            sizeof(field_buffer) - 1);
+    field_buffer[sizeof(field_buffer) - 1] = '\0';
+
+    // Set pointers and NULL separators
+    // for key lead fields for direction, pause and fill mode
+    direction_p = field_buffer;
+    p = strchr(direction_p, ';');
+    if (p) {
+        *p = '\0';
+        p++;
+        pause_p = p;
+        p = strchr(pause_p, ';');
+        if (p) {
+            *p = '\0';
+            p++;
+            fill_p = p;
+            p = strchr(fill_p, ';');
+            if (p) {
+                *p = '\0';
+                p++;
+
+                // program start in main string will be same offset as 
+                // p is now having traversed pass all ';' delimiters
+                gpio_argb->program_start = gpio_argb->program + 
+                    (p - field_buffer);
+            }
+            else {
+                log_message("Failed to find program separator");
+            }
+        }
+        else {
+            log_message("Failed to find fill mode separator");
+        }
+    }
+    else {
+        log_message("Failed to find pause separator");
+    }
+
+    if (direction_p && 
+        pause_p && 
+        fill_p && 
+        gpio_argb->program_start) {
+        gpio_argb->direction = atoi(direction_p);
+        gpio_argb->pause = atoi(pause_p);
+        gpio_argb->fill_mode = atoi(fill_p);
+
+    }
+    else {
+        log_message("Failed to parse program");
+    }
+}
+
+// Function loop_task_transition_argb
+// Drives aRGB strips from task 
+// manager
+void loop_task_transition_argb()
+{
+    struct gpio_argb *gpio_argb;
+
+    for (gpio_argb = HTM_LIST_NEXT(gv_device.argb_list);
+         gpio_argb != gv_device.argb_list;
+         gpio_argb = HTM_LIST_NEXT(gpio_argb)) {
+        if (gpio_argb->program_start != NULL) {
+            set_argb_state(gpio_argb);
+        }
+    }
+}
+
+// Function: setup_argbs
+void setup_argbs()
+{
+    struct gpio_argb *gpio_argb;
+    int argb_count = 0;
+
+    log_message("setup_argbs()");
+
+    for (gpio_argb = HTM_LIST_NEXT(gv_device.argb_list);
+         gpio_argb != gv_device.argb_list;
+         gpio_argb = HTM_LIST_NEXT(gpio_argb)) {
+
+        argb_count++;
+
+        log_message("Setting up A-RGB:%s LEDs:%d Pin:%d Neopixel Flags:0x%08X",
+                    gpio_argb->name,
+                    gpio_argb->num_leds, 
+                    gpio_argb->pin, 
+                    gpio_argb->neopixel_flags);
+
+        gpio_argb->neopixel = 
+            new Adafruit_NeoPixel(gpio_argb->num_leds, 
+                                  gpio_argb->pin, 
+                                  gpio_argb->neopixel_flags);
+
+        // Initialize all pixels to 'off'
+        gpio_argb->neopixel->begin();
+        gpio_argb->neopixel->show(); 
+
+        set_argb_program(gpio_argb,
+                         gpio_argb->program);
+
+        if (gpio_argb->manual_pin != NO_PIN) {
+            log_message("    Manual pin:%d",
+                        gpio_argb->manual_pin);
+            pinMode(gpio_argb->manual_pin, INPUT_PULLUP);
+        }
+    }
+
+    if (argb_count > 0) {
+        TaskMan.add_task("Neopixel LED Transitions",
+                         RUN_STATE_WIFI_STA_UP,
+                         1,
+                         loop_task_transition_argb);
     }
 }
 
@@ -1328,6 +1700,7 @@ const char *get_json_status(int pretty)
     struct gpio_switch *gpio_switch;
     struct gpio_sensor *gpio_sensor;
     struct gpio_rgb *gpio_rgb;
+    struct gpio_argb *gpio_argb;
 
     log_message("get_json_status(pretty=%d)", pretty);
 
@@ -1413,6 +1786,17 @@ const char *get_json_status(int pretty)
         obj["current_colour"] = gv_small_buffer;
         obj["step"] = gpio_rgb->step;
     }
+    
+    // argb
+    for (gpio_argb = HTM_LIST_NEXT(gv_device.argb_list);
+         gpio_argb != gv_device.argb_list;
+         gpio_argb = HTM_LIST_NEXT(gpio_argb)) {
+
+        JsonObject& obj = controls_arr.createNestedObject();
+        obj["name"] = gpio_argb->name;
+        obj["type"] = "argb";
+        obj["program"] = gpio_argb->program;
+    }
 
     // Format string in compact or prety format
     if (pretty){
@@ -1457,7 +1841,18 @@ struct gpio_rgb* gpio_rgb_alloc()
     return gpio_rgb;
 }
 
+struct gpio_argb* gpio_argb_alloc()
+{
+    struct gpio_argb *gpio_argb;
 
+    gpio_argb = (struct gpio_argb*) malloc(sizeof(struct gpio_argb));
+
+    return gpio_argb;
+}
+
+
+// Function find_switch
+// finds switch by name
 struct gpio_switch* find_switch(const char *name)
 {
     struct gpio_switch *gpio_switch;
@@ -1478,7 +1873,9 @@ struct gpio_switch* find_switch(const char *name)
     return NULL;
 }
 
-struct gpio_rgb* find_led(const char *name)
+// Function find_rgb
+// Finds RGB device by name
+struct gpio_rgb* find_rgb(const char *name)
 {
     struct gpio_rgb *gpio_rgb;
 
@@ -1489,6 +1886,26 @@ struct gpio_rgb* find_led(const char *name)
         if (!strcmp(gpio_rgb->name, name)) {
             log_message("found");
             return gpio_rgb;
+        }
+    }
+
+    log_message("not found");
+    return NULL;
+}
+
+// Function find_argb
+// Finds aRGB device by name
+struct gpio_argb* find_argb(const char *name)
+{
+    struct gpio_argb *gpio_argb;
+
+    for (gpio_argb = HTM_LIST_NEXT(gv_device.argb_list);
+         gpio_argb != gv_device.argb_list;
+         gpio_argb = HTM_LIST_NEXT(gpio_argb)) {
+
+        if (!strcmp(gpio_argb->name, name)) {
+            log_message("found");
+            return gpio_argb;
         }
     }
 
@@ -1512,6 +1929,10 @@ void save_config()
     EEPROM.commit();
 }
 
+// Function update_config
+// Updates config with specified field string
+// value or int value. Also optionall saves
+// config to EEPROM if save_now set 
 void update_config(char *field, 
                    const char *sval,
                    int ival,
@@ -1570,6 +1991,7 @@ void update_config(char *field,
 // Function: reset_config
 // wipes all config 
 // puts in sensible defaults
+// writes to EEPROM
 void reset_config()
 {
     struct gpio_switch *gpio_switch;
@@ -1610,6 +2032,7 @@ void load_config()
     struct gpio_switch *gpio_switch;
     struct gpio_sensor *gpio_sensor;
     struct gpio_rgb *gpio_rgb;
+    struct gpio_argb *gpio_argb;
 
     log_message("load_config()");
 
@@ -1625,6 +2048,9 @@ void load_config()
 
     gv_device.rgb_list = gpio_rgb_alloc();
     HTM_LIST_SELFLINK(gv_device.rgb_list);
+
+    gv_device.argb_list = gpio_argb_alloc();
+    HTM_LIST_SELFLINK(gv_device.argb_list);
 
     log_message("Read EEPROM data..(%d bytes)", sizeof(gv_config));
     EEPROM.begin(sizeof(gv_config));
@@ -1771,14 +2197,23 @@ void load_config()
                 gpio_rgb->manual_pin = control["manual_pin"];
                 strcpy(gpio_rgb->program, control["program"]);
             }
+
+            if (!strcmp(control_type, "argb")) {
+                gpio_argb = gpio_argb_alloc();
+                HTM_LIST_INSERT(gv_device.argb_list, gpio_argb);
+
+                strcpy(gpio_argb->name, control_name);
+                gpio_argb->pin = control["pin"];
+                gpio_argb->manual_pin = control["manual_pin"];
+                gpio_argb->num_leds = control["num_leds"];
+                gpio_argb->neopixel_flags = control["neopixel_flags"];
+                strcpy(gpio_argb->program, control["program"]);
+            }
         }
     }
 
 
 }
-
-
-
 
 // Function: ap_handle_root
 // On the initial call, this will display the pre-built
@@ -1792,10 +2227,12 @@ void load_config()
 // profile and re-displays the form with updated field layouts
 void ap_handle_root() 
 {
-    int i, num_networks;
-    unsigned int led_value;
+    int i;
     char *str_ptr;
     char *selected_str;
+    static unsigned long last_scanned = 0;
+    static int num_networks;
+    unsigned long now;
 
     int apply_config = 0; // default
 
@@ -1824,9 +2261,16 @@ void ap_handle_root()
     }
     else {
         // Scan wifi network
-        log_message("scanning wifi networks");
-        num_networks = WiFi.scanNetworks();
-        log_message("found %d SSIDs", num_networks);
+        // but only once every 30 seconds
+        // handles refreshes of this page so 
+        // that we will not rescan each time
+        now = millis();
+        if (now - last_scanned > 30000) {
+            log_message("scanning wifi networks");
+            num_networks = WiFi.scanNetworks();
+            log_message("found %d SSIDs", num_networks);
+            last_scanned = now;
+        }
 
         // Build combo list of discovered 
         // networks and try to set current SSID
@@ -2053,9 +2497,11 @@ void sta_handle_json() {
                          SW_ST_CTXT_NETWORK); // specifying name only
     }
 
-    // LED Program
+    // RGB/aRGB Program
     if (gv_web_server.hasArg("control") && gv_web_server.hasArg("program")) {
-        set_rgb_program(find_led(gv_web_server.arg("control").c_str()), 
+        set_rgb_program(find_rgb(gv_web_server.arg("control").c_str()), 
+                        gv_web_server.arg("program").c_str());
+        set_argb_program(find_argb(gv_web_server.arg("control").c_str()), 
                         gv_web_server.arg("program").c_str());
     }
 
@@ -2249,7 +2695,7 @@ void loop_task_check_boot_switch()
 
 // task loop state machine 
 // function wrappers
-// Its based on void functions (no aegs, no returns)
+// Its based on void functions (no args, no returns)
 // So object-based loop task for web server and 
 // several others are manipulated in simple wrappers
 // Some of the wrappers are more substantial
@@ -2390,6 +2836,10 @@ void setup()
     load_config();
     start_serial();
 
+    #if defined (__AVR_ATtiny85__)
+        if (F_CPU == 16000000) clock_prescale_set(clock_div_1);
+    #endif
+
     TaskMan.set_logger(vlog_message);
     TaskMan.set_run_state(RUN_STATE_INIT);
 
@@ -2515,6 +2965,7 @@ void setup()
     // Activate switches, leds and sensors
     setup_switches();
     setup_rgbs();
+    setup_argbs();
     setup_sensors();
 
     log_message("Setup stage complete");
