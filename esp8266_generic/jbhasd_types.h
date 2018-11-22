@@ -135,6 +135,26 @@ struct gpio_rgb {
     int pause;
 };
 
+// Addressable RGB (Neopixel)
+struct gpio_argb {
+    struct gpio_argb *prev, *next;
+    char name[MAX_FIELD_LEN];
+    unsigned char pin; // Data pin
+    unsigned char manual_pin; // Random Program
+    int num_leds;
+    int neopixel_flags;
+    char program[2048]; // default program
+    char *program_start;
+
+    int timestamp;
+    unsigned int index;
+
+    int direction;
+    int pause;
+    int fill_mode;
+
+    Adafruit_NeoPixel *neopixel;
+};
 
 
 // Software Version
@@ -157,6 +177,7 @@ struct device_profile {
     struct gpio_switch *switch_list;
     struct gpio_sensor *sensor_list;
     struct gpio_rgb *rgb_list;
+    struct gpio_argb *argb_list;
 };
 
 struct device_profile gv_device;
