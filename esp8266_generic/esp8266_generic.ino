@@ -20,12 +20,6 @@
 #include "HandyTaskMan.h"
 #include "jbhasd_types.h"
 
-#ifdef __AVR__
-  #include <avr/power.h>
-#endif
-
-
-
 HandyTaskMan TaskMan;
 
 // Function: get_sw_context
@@ -79,7 +73,7 @@ DNSServer gv_dns_server;
 char gv_mdns_hostname[MAX_FIELD_LEN + MAX_FIELD_LEN];
 
 char gv_push_ip[MAX_FIELD_LEN];
-int gv_push_port;
+uint16_t gv_push_port;
 
 // Global Data buffers
 // In an effort to keep the RAM usage low
@@ -90,17 +84,11 @@ char gv_small_buffer[1024];
 char gv_large_buffer[4096];
 char gv_config[MAX_CONFIG_LEN];
 
-// Not sure how standard LOW,HIGH norms are
-// but these registers allow us customise as required.
-// Each array will be indexed with a state value of 0 or 1
-// and used to return the appropriate LOW or HIGH value to use
-// to act on that boolean input
-// So index 1 of gv_switch_state_reg returns HIGH as the state
-// needed to turn on the switch
-// Similarly index 1 of gv_led_state_reg returns LOW as the state
-// needed to turn on the LED
-int gv_switch_state_reg[] = { LOW, HIGH };
-int gv_led_state_reg[] = { HIGH, LOW };
+// LOW/HIGH registers for GPIO states
+// Used when turning on/off LEDs and relays
+// depending on which variant applies
+uint8_t gv_high_state_reg[] = { LOW, HIGH };
+uint8_t gv_low_state_reg[] = { HIGH, LOW };
 
 // Function start_serial
 // Starts serial logging after
@@ -121,7 +109,7 @@ void start_serial()
 // to connected clients
 WiFiServer gv_telnet_server(23);
 WiFiClient gv_telnet_clients[MAX_TELNET_CLIENTS];
-int gv_num_telnet_clients = 0;
+uint8_t  gv_num_telnet_clients = 0;
 
 // Function: vlog_message
 // Wraps calls to Serial.print or connected
@@ -132,15 +120,15 @@ int gv_num_telnet_clients = 0;
 void vlog_message(char *format, va_list args )
 {
     static char log_buf[LOGBUF_MAX + 1];
-    int i;
-    int prefix_len;
-    unsigned long now;
-    unsigned long days;
-    unsigned long hours;
-    unsigned long mins;
-    unsigned long secs;
-    unsigned long msecs;
-    unsigned long remainder;
+    uint8_t  i;
+    uint8_t  prefix_len;
+    uint32_t now;
+    uint16_t days;
+    uint16_t hours;
+    uint16_t mins;
+    uint16_t secs;
+    uint16_t msecs;
+    uint16_t remainder;
     
     if (gv_logging == LOGGING_NONE) {
         // Logging not enabled
@@ -311,9 +299,11 @@ void start_telnet()
 // Function: set_switch_state
 // Sets the desired switch state to the value of the state arg
 void set_switch_state(struct gpio_switch *gpio_switch,
-                      unsigned int state,
+                      uint8_t state,
                       enum switch_state_context context)
 {
+    uint8_t relay_gpio_state, led_gpio_state;
+
     if (!gpio_switch) {
         // can get called with a find_switch() call
         // used for gpio_switch arg
@@ -344,13 +334,29 @@ void set_switch_state(struct gpio_switch *gpio_switch,
     gpio_switch->current_state = state;
     gpio_switch->state_context = context;
 
+    // Determine the desired GPIO state to use
+    // depending on whether on is HIGH or LOW
+    if (gpio_switch->relay_on_high) {
+        relay_gpio_state = gv_high_state_reg[state];
+    }
+    else {
+        relay_gpio_state = gv_low_state_reg[state];
+    }
+
+    if (gpio_switch->led_on_high) {
+        led_gpio_state = gv_high_state_reg[state];
+    }
+    else {
+        led_gpio_state = gv_low_state_reg[state];
+    }
+
     if (gpio_switch->relay_pin != NO_PIN) {
         digitalWrite(gpio_switch->relay_pin,
-                     gv_switch_state_reg[state]);
+                     relay_gpio_state);
     }
     if (gpio_switch->led_pin != NO_PIN) {
         digitalWrite(gpio_switch->led_pin,
-                     gv_led_state_reg[state]);
+                     led_gpio_state);
     }
 }
 
@@ -403,11 +409,10 @@ void setup_switches()
 // LOW state
 void loop_task_check_manual_switches()
 {
-    int button_state;
-    int took_action = 0;
-    static unsigned long last_action_timestamp = 0;
+    uint8_t button_state;
+    uint8_t took_action = 0;
+    static uint32_t last_action_timestamp = 0;
     WiFiClient wifi_client;
-    int rc;
     struct gpio_switch *gpio_switch;
     struct gpio_rgb *gpio_rgb;
     char post_buffer[50];
@@ -537,14 +542,20 @@ void loop_task_check_manual_switches()
 // it's assigned switch state if applicable
 void restore_wifi_led_state()
 {
-    int found = 0;
+    uint8_t found = 0;
     struct gpio_switch *gpio_switch;
 
     log_message("restore_wifi_led_state()");
 
     // Start by turning off
-    digitalWrite(gv_device.wifi_led_pin,
-                 gv_led_state_reg[0]);
+    if (gv_device.wifi_led_on_high) {
+        digitalWrite(gv_device.wifi_led_pin,
+                     gv_high_state_reg[0]);
+    }
+    else {
+        digitalWrite(gv_device.wifi_led_pin,
+                     gv_low_state_reg[0]);
+    }
 
     // locate the switch by wifi LED pin in register
     for (gpio_switch = HTM_LIST_NEXT(gv_device.switch_list);
@@ -562,8 +573,14 @@ void restore_wifi_led_state()
     if (found) {
         // Set LED to the current state of matched
         // switch
-        digitalWrite(gv_device.wifi_led_pin,
-                     gv_led_state_reg[gpio_switch->current_state]);
+        if (gv_device.wifi_led_on_high) {
+            digitalWrite(gv_device.wifi_led_pin,
+                         gv_high_state_reg[gpio_switch->current_state]);
+        }
+        else {
+            digitalWrite(gv_device.wifi_led_pin,
+                         gv_low_state_reg[gpio_switch->current_state]);
+        }
     }
     else {
         log_message("no switch found assigned to wifi LED");
@@ -576,7 +593,7 @@ void restore_wifi_led_state()
 // defined sensor pins
 void setup_sensors()
 {
-    static int first_run = 1;
+    static uint8_t first_run = 1;
     struct gpio_sensor *gpio_sensor;
     DHT *dhtp;
 
@@ -632,10 +649,10 @@ void setup_sensors()
 // Returns floating point part of float
 // as integer. Needed due to limitations of
 // formatting where it cant handle %f in ets_sprintf
-int float_get_fp(float f, int precision) {
+uint32_t float_get_fp(float f, uint8_t precision) {
 
-    int f_int;
-    unsigned int f_fp;
+    int32_t f_int;
+    uint32_t f_fp;
     double pwr_of_ten;
 
     // Calculate power of ten for precision
@@ -724,29 +741,29 @@ void read_sensors()
 // Finally optional hue value applied against
 // RGB values to act as a brightness affect on
 // the values
-void parse_rgb_colour(unsigned int colour,
-                      int &red,
-                      int &green,
-                      int &blue)
+void parse_rgb_colour(uint32_t colour,
+                      uint16_t &red,
+                      uint16_t &green,
+                      uint16_t &blue)
 {
-    float hue_factor;
-    int hue;
+    float brightness_factor;
+    uint8_t brightness;
 
     log_message("parse_rgb_colour(0x%08X)", colour);
 
-    // separate out hue from most significant octet and
-    // RGB from lower 3 octets
-    hue = (colour >> 24) & 0xFF;
+    // separate out brightness from most significant 
+    // octet and RGB from lower 3 octets
+    brightness = (colour >> 24) & 0xFF;
     red = (colour >> 16) & 0xFF;
     green = (colour >> 8) & 0xFF;
     blue = colour & 0xFF;
-    log_message("Decoded RGB.. Hue:0x%02X Red:0x%02X Green:0x%02X Blue:0x%02X",
-                hue,
+    log_message("Decoded RGB.. Brightness:0x%02X Red:0x%02X Green:0x%02X Blue:0x%02X",
+                brightness,
                 red,
                 green,
                 blue);
 
-    // apply PWM
+    // apply PWM.. scales from 0..255 to 0..1023
     red = red * MAX_PWM_VALUE / 255;
     green = green * MAX_PWM_VALUE / 255;
     blue = blue * MAX_PWM_VALUE / 255;
@@ -756,17 +773,19 @@ void parse_rgb_colour(unsigned int colour,
                 green,
                 blue);
 
-    // Apply optional hue modification
-    // Hue value 1-255 is rendered into
+    // Apply optional brightness modification
+    // value 1-255 is rendered into
     // a fraction of 255 and multiplied against the
     // RGB values to scale them accordingly
-    if (hue > 0) {
-        hue_factor = float(hue) / 255;
-        red = float(red) * hue_factor;
-        green = float(green) * hue_factor;
-        blue = float(blue) * hue_factor;
+    // A brightness of 0 is equivalent to a value of 255
+    // in the way we treat it as optional
+    if (brightness > 0) {
+        brightness_factor = float(brightness) / 255;
+        red = float(red) * brightness_factor;
+        green = float(green) * brightness_factor;
+        blue = float(blue) * brightness_factor;
 
-        log_message("Applied Hue.. Red:%d Green:%d Blue:%d",
+        log_message("Applied Brightness.. Red:%d Green:%d Blue:%d",
                     red,
                     green,
                     blue);
@@ -778,12 +797,12 @@ void parse_rgb_colour(unsigned int colour,
 // start_green & start_blue one notch
 // each toward the end values
 // Used to apply a fading effect on values
-void shift_rgb(unsigned short &start_red,
-               unsigned short &start_green,
-               unsigned short &start_blue,
-               unsigned short end_red,
-               unsigned short end_green,
-               unsigned short end_blue)
+void shift_rgb(uint16_t &start_red,
+               uint16_t &start_green,
+               uint16_t &start_blue,
+               uint16_t end_red,
+               uint16_t end_green,
+               uint16_t end_blue)
 {
     if (start_red < end_red) {
         start_red++;
@@ -813,7 +832,7 @@ void shift_rgb(unsigned short &start_red,
 // toward a new colour setting
 void fade_rgb(struct gpio_rgb *gpio_rgb)
 {
-    unsigned long now;
+    uint32_t now;
 
     if (gpio_rgb->fade_delay <= 0) {
         // instant switch to new setting
@@ -950,7 +969,10 @@ void set_rgb_program(struct gpio_rgb *gpio_rgb,
     gpio_rgb->timestamp = 0;
 
     // copy in program string
-    strcpy(gpio_rgb->program, program);
+    // if its not a pointer to itself
+    if (gpio_rgb->program != program) {
+        strcpy(gpio_rgb->program, program);
+    }
     gpio_rgb->program_ptr = NULL;
     gpio_rgb->step = -1;
     gpio_rgb->single_step = 0;
@@ -964,7 +986,7 @@ void set_rgb_program(struct gpio_rgb *gpio_rgb,
 // Generates a simple random program for the given RGB
 void set_rgb_random_program(struct gpio_rgb *gpio_rgb)
 {
-    static int variant = 0;
+    static uint8_t variant = 0;
 
     log_message("set_rgb_random_program(name=%s, variant=%d)",
                 gpio_rgb->name, 
@@ -1039,9 +1061,8 @@ void set_rgb_random_program(struct gpio_rgb *gpio_rgb)
 // between program steps
 void set_rgb_state(struct gpio_rgb *gpio_rgb)
 {
-    int start_red, start_green, start_blue;
-    int end_red, end_green, end_blue;
-    unsigned long now;
+    uint16_t end_red, end_green, end_blue;
+    uint32_t now;
     char *p, *q; 
     char step_buffer[50];
 
@@ -1191,7 +1212,7 @@ void set_rgb_state(struct gpio_rgb *gpio_rgb)
 void setup_rgbs()
 {
     struct gpio_rgb *gpio_rgb;
-    int rgb_count = 0;
+    uint16_t rgb_count = 0;
 
     log_message("setup_rgbs()");
 
@@ -1258,15 +1279,16 @@ void setup_rgbs()
 // strip
 void set_argb_state(struct gpio_argb *gpio_argb)
 {
-    unsigned long now;
-    unsigned int colour;
-    int red, green, blue;
+    uint32_t now;
+    uint32_t colour;
+    uint8_t red, green, blue;
     char colour_buf[12];
     char *p, *q;
-    int led_count;
-    unsigned int i;
-    unsigned int start_index;
-    int loop;
+    uint16_t led_count;
+    uint32_t i;
+    uint32_t start_index;
+    uint8_t loop;
+    uint8_t wipe = 0;
 
     if (gpio_argb->program_start == NULL) {
         log_message("program is empty.. nothing to do");
@@ -1295,17 +1317,30 @@ void set_argb_state(struct gpio_argb *gpio_argb)
     // Wipe strip before draw
     switch(gpio_argb->fill_mode) {
       case 0:
+        wipe = 1;
+        break;
+
+      case 2:
+        // For append mode, we wipe only at the start of 
+        // the program
+        if (start_index == 0) {
+            wipe = 1;
+        }
+        break;
+
+      default:
+        // no wipe
+        wipe = 0;
+        break;
+    }
+
+    if (wipe) {
         for (i = 0; 
              i < gpio_argb->num_leds; 
              i++) {
             gpio_argb->neopixel->setPixelColor(i,
                                                gpio_argb->neopixel->Color(0,0,0));
         }
-        break;
-
-      default:
-        // do nothing
-        break;
     }
 
     // enter permanent loop now to populate
@@ -1468,7 +1503,7 @@ void set_argb_program(struct gpio_argb *gpio_argb,
     char *pause_p = NULL;
     char *fill_p = NULL; 
     char field_buffer[50];
-    int i;
+    uint16_t i;
 
     if (!gpio_argb) {
         log_message("No argb specified");
@@ -1492,7 +1527,10 @@ void set_argb_program(struct gpio_argb *gpio_argb,
     gpio_argb->timestamp = 0;
 
     // copy in program string
-    strcpy(gpio_argb->program, program);
+    // if its not a pointer to itself
+    if (gpio_argb->program != program) {
+        strcpy(gpio_argb->program, program);
+    }
     gpio_argb->index = 0;
     gpio_argb->program_start = NULL;
 
@@ -1576,7 +1614,7 @@ void loop_task_transition_argb()
 void setup_argbs()
 {
     struct gpio_argb *gpio_argb;
-    int argb_count = 0;
+    uint8_t argb_count = 0;
 
     log_message("setup_argbs()");
 
@@ -1623,7 +1661,7 @@ void setup_argbs()
 // Returns 1 if specified pin is
 // found in use in any of the switches,
 // sensors or the wifi status pin
-int pin_in_use(int pin)
+uint8_t pin_in_use(uint8_t pin)
 {
     struct gpio_switch *gpio_switch;
     struct gpio_sensor *gpio_sensor;
@@ -1695,7 +1733,7 @@ int pin_in_use(int pin)
 // Function: get_json_status
 // formats and returns a JSON string representing
 // the device details, configuration status and system info
-const char *get_json_status(int pretty)
+const char *get_json_status(uint8_t pretty)
 {
     struct gpio_switch *gpio_switch;
     struct gpio_sensor *gpio_sensor;
@@ -1707,7 +1745,7 @@ const char *get_json_status(int pretty)
     // refresh sensors
     read_sensors();
 
-    const int capacity = 4096;
+    const uint16_t capacity = 4096;
     DynamicJsonBuffer gv_json_buffer(capacity);
     JsonObject& json_status = gv_json_buffer.createObject();
 
@@ -1935,15 +1973,15 @@ void save_config()
 // config to EEPROM if save_now set 
 void update_config(char *field, 
                    const char *sval,
-                   int ival,
-                   int save_now)
+                   int32_t ival,
+                   uint8_t save_now)
 {    
     log_message("update_config()");
 
     log_message("Current Config:\n%s", gv_config);
 
     // JSON parse from config
-    const int capacity = 4096;
+    const uint16_t capacity = 4096;
     DynamicJsonBuffer gv_json_buffer(capacity);
     JsonObject& json_cfg = 
         gv_json_buffer.parseObject((const char*)gv_config);
@@ -2078,7 +2116,7 @@ void load_config()
     // JSON parse from config
     // Assuming 4k is fine for the overheads
     // we might encounter
-    const int capacity = 4096;
+    const uint16_t capacity = 4096;
     DynamicJsonBuffer gv_json_buffer(capacity);
     JsonObject& json_cfg = 
         gv_json_buffer.parseObject((const char*)gv_config);
@@ -2108,6 +2146,7 @@ void load_config()
     gv_device.manual_switches_enabled = json_cfg["manual_switches_enabled"];
     gv_device.boot_program_pin = json_cfg["boot_pin"];
     gv_device.wifi_led_pin = json_cfg["wifi_led_pin"];
+    gv_device.wifi_led_on_high = json_cfg["wifi_led_on_high"];
     gv_device.force_apmode_onboot = json_cfg["force_apmode_onboot"];
     gv_device.configured = json_cfg["configured"];
 
@@ -2125,7 +2164,7 @@ void load_config()
     for (JsonObject& control : controls) {
         const char* control_name = control["name"];
         const char* control_type = control["type"];
-        const int enabled = control["enabled"];
+        const uint8_t enabled = control["enabled"];
 
         if (control_name && control_type) {
             log_message("Control:%s, Type:%s Enabled:%d",
@@ -2147,7 +2186,9 @@ void load_config()
 
                 strcpy(gpio_switch->name, control_name);
                 gpio_switch->relay_pin = control["sw_relay_pin"];
+                gpio_switch->relay_on_high = control["sw_relay_on_high"];
                 gpio_switch->led_pin = control["sw_led_pin"];
+                gpio_switch->led_on_high = control["sw_led_on_high"];
                 gpio_switch->manual_pin = control["sw_man_pin"];
                 gpio_switch->current_state = control["sw_state"];
 
@@ -2227,45 +2268,56 @@ void load_config()
 // profile and re-displays the form with updated field layouts
 void ap_handle_root() 
 {
-    int i;
+    uint8_t i;
     char *str_ptr;
     char *selected_str;
-    static unsigned long last_scanned = 0;
-    static int num_networks;
-    unsigned long now;
+    static uint32_t last_scanned = 0;
 
-    int apply_config = 0; // default
+    static uint8_t num_networks;
+    uint32_t now;
 
     log_message("ap_handle_root()");
 
     // check for post args
 
-    if (gv_web_server.hasArg("ssid")) {
-        // actual normal config updates
-        apply_config = 1;
-
-        update_config("wifi_ssid", 
-                      gv_web_server.arg("ssid").c_str(),
-                      0,
-                      0);
-
-        update_config("wifi_password", 
-                      gv_web_server.arg("password").c_str(),
-                      0,
-                      1);
-    }
-
-    if (apply_config) {
-        gv_web_server.send(200, "text/html", "Applying settings and rebooting");
+    if (gv_web_server.hasArg("reset") &&
+        // Reset will trump others if set to 1
+        strcmp(gv_web_server.arg("reset").c_str(), "1") == 0) {
+        log_message("Reset via AP Mode");
+        reset_config();
         gv_reboot_requested = 1;
     }
     else {
+        // normal wifi setup
+        if (gv_web_server.hasArg("ssid")) {
+            // actual normal config updates
+            gv_reboot_requested = 1;
+
+            update_config("wifi_ssid", 
+                          gv_web_server.arg("ssid").c_str(),
+                          0,
+                          0);
+
+            update_config("wifi_password", 
+                          gv_web_server.arg("password").c_str(),
+                          0,
+                          1);
+        }
+    }
+
+    if (gv_reboot_requested) {
+        gv_web_server.send(200, "text/html", "Applying settings and rebooting");
+    }
+    else {
         // Scan wifi network
-        // but only once every 30 seconds
+        // initially at startup
+        // and no more than every 30 seconds
         // handles refreshes of this page so 
         // that we will not rescan each time
+        // and stall the AP mode
         now = millis();
-        if (now - last_scanned > 30000) {
+        if (now - last_scanned > 30000 || 
+            last_scanned == 0) {
             log_message("scanning wifi networks");
             num_networks = WiFi.scanNetworks();
             log_message("found %d SSIDs", num_networks);
@@ -2315,6 +2367,13 @@ void ap_handle_root()
                     "    <input type=\"text\" value=\"%s\" maxlength=\"%d\" name=\"password\">"
                     "</div>"
                     "<div>"
+                    "    <label>Reset Config:</label>"
+                    "    <select name=\"reset\">"
+                    "       <option value=\"0\" selected>No</option>"
+                    "       <option value=\"1\" >Yes</option>"
+                    "    </select>"
+                    "</div>"
+                    "<div>"
                     "<button class=\"btn btn-primary\">Apply Settings</button>"
                     "</div>"
                     "<br><br>"
@@ -2346,15 +2405,20 @@ void ap_handle_root()
 // the specified delay
 // Drives the visual aspect of the boot sequence to
 // indicate the config mode in play
-void toggle_wifi_led(int delay_msecs)
+void toggle_wifi_led(uint16_t delay_msecs)
 {
-    static int state = 0;
+    static uint8_t state = 0;
 
     // toggle
     state = (state + 1) % 2;
 
+    // ambiguous use of state here for LOW/HIGH
+    // as we don't know the low/high nature of 
+    // the LED
+    // But given its a toggle, it doesn't matter
+    // It will work as a toggle when repeatedly called
     digitalWrite(gv_device.wifi_led_pin,
-                 gv_led_state_reg[state]);
+                 state);
 
     if (delay > 0) {
         delay(delay_msecs);
@@ -2366,7 +2430,7 @@ void toggle_wifi_led(int delay_msecs)
 // flashing OTA
 void start_ota()
 {
-    static int already_setup = 0;
+    static uint8_t already_setup = 0;
 
     // Only do this once
     // lost wifi conections will re-run start_wifi_sta_mode() so
@@ -2404,8 +2468,8 @@ void start_ota()
                      log_message("OTA End");
                      });
 
-    ArduinoOTA.onProgress([](unsigned int progress,
-                             unsigned int total) {
+    ArduinoOTA.onProgress([](uint32_t progress,
+                             uint32_t total) {
                           log_message("OTA Progress: %d/%d (%02u%%)", 
                                       progress, 
                                       total, 
@@ -2485,8 +2549,8 @@ void start_ap_mode()
 // for a POST-based push notification to a server wishing to track 
 // manual switch activity
 void sta_handle_json() {
-    unsigned int state;
-    int pretty = 0;
+    uint32_t state;
+    uint8_t pretty = 0;
 
     log_message("sta_handle_json()");
 
@@ -2664,8 +2728,8 @@ void start_sta_mode_services()
 // pin to drive a switch to AP mode
 void loop_task_check_boot_switch()
 {
-    static unsigned char pin_wait_timer = 25;
-    int button_state;
+    static uint8_t pin_wait_timer = 25;
+    uint8_t button_state;
 
     // Can toggle LED with no 
     // delay as the main loop tasks
@@ -2717,17 +2781,17 @@ void loop_task_check_wifi_down(void)
 
 void loop_task_check_wifi_up(void)
 {
-    int i;
-    int status;
-    static int check_count = 0;
+    uint8_t i;
+    uint8_t status;
+    static uint16_t check_count = 0;
 
     // This function gets called every 2 secs
     // So 1800 calls is about 1 hour
-    int max_checks_before_reboot = 1800; 
+    uint16_t max_checks_before_reboot = 1800; 
 
     // Restart WiFI every 60 seconds if we continue
     // to remain disconnected
-    int max_checks_before_wifi_restart = 30; 
+    uint16_t max_checks_before_wifi_restart = 30; 
 
     log_message("loop_task_check_wifi_up()");
 
@@ -2835,10 +2899,6 @@ void setup()
     // as start_serial needs config setup
     load_config();
     start_serial();
-
-    #if defined (__AVR_ATtiny85__)
-        if (F_CPU == 16000000) clock_prescale_set(clock_div_1);
-    #endif
 
     TaskMan.set_logger(vlog_message);
     TaskMan.set_run_state(RUN_STATE_INIT);
