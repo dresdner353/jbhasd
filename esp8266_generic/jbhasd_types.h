@@ -6,26 +6,16 @@
 // control a LED and a final pin can be used as a manual
 // trigger for the relay.
 // All pin selections are optional.
-// Values for pins are unsigned char 0-255 and NO_PIN(255) acts
+// Values for pins are uint8_t 0-255 and NO_PIN(255) acts
 // as the unset value
 
 
 // Value used to define an unset PIN
-// using 255 as we're operating in unsigned char
+// using 255 as we're operating in uint8_t
 #define NO_PIN 255
-
-// EEPROM Configuration
-// It uses a struct of fields which is cast directly against
-// the eeprom array. The marker field is used to store a dummy
-// value as a means of detecting legit config on the first boot.
-// That marker value can be changed as config is remodelled
-// to ensure a first read is interpreted as blank/invalid and
-// config is then reset
 
 #define MAX_FIELD_LEN 30
 #define MAX_CONFIG_LEN 2048
-
-
 
 // Context type for tracking how
 // a switch was activated
@@ -44,10 +34,12 @@ enum switch_behaviour {
 struct gpio_switch {
     struct gpio_switch *prev, *next;
     char name[MAX_FIELD_LEN];
-    unsigned char relay_pin; // output pin used for relay
-    unsigned char led_pin; // output pin used for LED
-    unsigned char manual_pin; // input pin used for manual toggle
-    unsigned char current_state;
+    uint8_t relay_pin; // output pin used for relay
+    uint8_t relay_on_high; // toggles on between HIGH/LOW
+    uint8_t led_pin; // output pin used for LED
+    uint8_t led_on_high; // toggles on between HIGH/LOW
+    uint8_t manual_pin; // input pin used for manual toggle
+    uint8_t current_state;
     enum switch_behaviour switch_behaviour; 
     enum switch_state_context state_context;
 };
@@ -67,8 +59,8 @@ struct gpio_sensor {
     struct gpio_sensor *prev, *next;
     char name[MAX_FIELD_LEN];
     enum gpio_sensor_type sensor_type;
-    unsigned char sensor_variant; // DHT11 DHT22, DHT21 etc
-    unsigned char sensor_pin; // pin for sensor
+    uint8_t sensor_variant; // DHT11 DHT22, DHT21 etc
+    uint8_t sensor_pin; // pin for sensor
     float temp_offset;
     void *ref; // point to allocated reference struct/class
 
@@ -90,68 +82,68 @@ struct gpio_sensor {
 #define MAX_PWM_VALUE 1023
 
 struct led_program_step {
-    unsigned int colour;
-    int fade_delay; // msec gap between RGB fade
-    int pause; // msec gap at end of RGB fade
+    uint32_t colour;
+    uint16_t fade_delay; // msec gap between RGB fade
+    uint16_t pause; // msec gap at end of RGB fade
 };
 
 struct gpio_rgb {
     struct gpio_rgb *prev, *next;
     char name[MAX_FIELD_LEN];
-    unsigned char red_pin;   // Red pin
-    unsigned char green_pin; // Green pin
-    unsigned char blue_pin;  // Blue pin
-    unsigned char manual_pin; // Random Program
+    uint8_t red_pin;   // Red pin
+    uint8_t green_pin; // Green pin
+    uint8_t blue_pin;  // Blue pin
+    uint8_t manual_pin; // Random Program
     char program[2048]; // default program
     char *program_ptr;
 
     // Hue + RGB values
     // for current colour
-    unsigned int current_colour;
+    uint32_t current_colour;
 
     // arrays of desired and current states
     // for pins
     // these are PWM values not RGB
-    unsigned short desired_states[3];
-    unsigned short current_states[3];
+    uint16_t desired_states[3];
+    uint16_t current_states[3];
 
     // current step
     // Tracks logical step in program
     // from 0 upward
-    int step;
+    uint8_t step;
 
     // Determined if we discover we encounter an end
     // of program while extracting first step
     // used to drive a bypass of the set_rgb_state()
     // call
-    int single_step;
+    uint8_t single_step;
 
     // msec timestamp for tracking fade 
     unsigned long timestamp;
 
     // delay and pauses
     // in msecs
-    int fade_delay;
-    int pause;
+    uint16_t fade_delay;
+    uint16_t pause;
 };
 
 // Addressable RGB (Neopixel)
 struct gpio_argb {
     struct gpio_argb *prev, *next;
     char name[MAX_FIELD_LEN];
-    unsigned char pin; // Data pin
-    unsigned char manual_pin; // Random Program
-    int num_leds;
-    int neopixel_flags;
+    uint8_t pin; // Data pin
+    uint8_t manual_pin; // Random Program
+    uint16_t num_leds;
+    uint32_t neopixel_flags;
     char program[2048]; // default program
     char *program_start;
 
-    int timestamp;
-    unsigned int index;
+    uint32_t timestamp;
+    uint16_t index;
 
-    int direction;
-    int pause;
-    int fill_mode;
+    int8_t direction;
+    uint16_t pause;
+    uint8_t fill_mode;
 
     Adafruit_NeoPixel *neopixel;
 };
@@ -166,14 +158,15 @@ struct device_profile {
     char zone[MAX_FIELD_LEN];
     char wifi_ssid[MAX_FIELD_LEN];
     char wifi_password[MAX_FIELD_LEN];
-    int ota_enabled;
-    int telnet_enabled;
-    int mdns_enabled;
-    int manual_switches_enabled;
-    int boot_program_pin;
-    int wifi_led_pin;
-    int force_apmode_onboot;
-    int configured;
+    uint8_t ota_enabled;
+    uint8_t telnet_enabled;
+    uint8_t mdns_enabled;
+    uint8_t manual_switches_enabled;
+    uint8_t boot_program_pin;
+    uint8_t wifi_led_pin;
+    uint8_t wifi_led_on_high;
+    uint8_t force_apmode_onboot;
+    uint8_t configured;
     struct gpio_switch *switch_list;
     struct gpio_sensor *sensor_list;
     struct gpio_rgb *rgb_list;
@@ -189,7 +182,7 @@ struct device_profile gv_device;
 #define RUN_STATE_WIFI_OTA       HTM_RUN_STATE_04
 #define RUN_STATE_ALL            HTM_RUN_STATE_ALL
 
-int gv_reboot_requested = 0;
+uint8_t gv_reboot_requested = 0;
 
 #define LOGBUF_MAX 2048
 
