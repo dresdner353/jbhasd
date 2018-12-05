@@ -7,6 +7,8 @@ SCRIPTPATH=$(dirname "$SCRIPT")
 JBHASD_WEB_SVR="jbhasd_web_server.py"
 JBHASD_WEB_SVR_PATH="${SCRIPTPATH}/${JBHASD_WEB_SVR}"
 
+export TZ=Europe/Dublin
+
 # Check for jbhasd_web_server.py running
 pgrep -f "${JBHASD_WEB_SVR}" >/dev/null
 if [ $? -ne 0 ]
