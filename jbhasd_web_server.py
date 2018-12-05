@@ -443,11 +443,7 @@ def check_switch(zone_name,
     global gv_manual_switch_expiry_ts_dict
     global gv_manual_switch_expiry_period
 
-    # represents state of switch
-    # -1 do nothing.. not matched
-    # 0 off
-    # 1 on
-    desired_state = -1
+    desired_state = -1 # implies no desired state
 
     # cater for manual over-rides
     dict_key = '%s:%s' % (zone_name, control_name)
@@ -474,19 +470,8 @@ def check_switch(zone_name,
 
     for timer in gv_json_config['switch_timers']:
         if timer['zone'] == zone_name and timer['control'] == control_name:
-            # have a match
-            # desired state will have a value now
-            # so we assume off initially
-            # but this only applies to the first 
-            # encounter
-            # that allows us to straddle several 
-            # events on the same switch and leave
-            # an overall on state fall-through
-            # in fact the logic of the decisions below are
-            # all about setting desired_state to 1 and 
-            # never to 0 for this very reason
-            if (desired_state == -1):
-                desired_state = 0
+            # Start assuming its off
+            desired_state = 0
 
             # sunset keyword replacemenet with
             # dynamic sunset offset time
@@ -497,17 +482,22 @@ def check_switch(zone_name,
 
             off_time = int(timer['off'].replace(':', ''))
 
+            # Test time ranges and break out on 
+            # first hit for the on state
             if (on_time <= off_time):
                 if (current_time >= on_time and 
                     current_time < off_time):
                     desired_state = 1
+                    break
             else:
                 if (current_time > on_time):
                     desired_state = 1
+                    break
                 else:
                     if (current_time < on_time and
                         current_time < off_time):
                         desired_state = 1
+                        break
 
     #print("return %d" % (desired_state))
     return desired_state
@@ -523,6 +513,7 @@ def check_rgb(zone_name,
     desired_program = ""
 
     for timer in gv_json_config['rgb_timers']:
+        #print(timer)
         if timer['zone'] == zone_name and timer['control'] == control_name:
 
             # we can now assert a default of off
@@ -541,15 +532,21 @@ def check_rgb(zone_name,
                 if (current_time >= on_time and 
                     current_time < off_time):
                     desired_program = timer['on_program']
+                    break
             else:
                 if (current_time > on_time):
                     desired_program = timer['on_program']
+                    break
                 else:
                     if (current_time < on_time and
                         current_time < off_time):
                         desired_program = timer['on_program']
+                        break
 
-    #print("return rgb program %s" % (desired_program))
+    #print("return rgb program for %s/%s is %s" % (
+    #    zone_name,
+    #    control_name,
+    #    desired_program))
     return desired_program
 
 
@@ -691,13 +688,14 @@ def check_automated_devices():
                         gv_jbhasd_device_status_dict[device_name] = json_data
                         gv_jbhasd_device_ts_dict[device_name] = int(time.time())
 
-            if control_type == 'rgb':
+            if control_type in ['rgb', 'argb']:
                 control_program = control['program']
 
-                desired_program = check_rgb(zone_name, 
-                                          control_name,
-                                          current_time,
-                                          control_program)
+                desired_program = check_rgb(
+                        zone_name, 
+                        control_name,
+                        current_time,
+                        control_program)
  
                 # If switch state not in desired state
                 # update and recache the status
