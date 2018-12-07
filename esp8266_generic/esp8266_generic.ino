@@ -2785,13 +2785,14 @@ void loop_task_check_wifi_up(void)
     uint8_t status;
     static uint16_t check_count = 0;
 
-    // This function gets called every 2 secs
-    // So 1800 calls is about 1 hour
-    uint16_t max_checks_before_reboot = 1800; 
+    // This function gets called every 10 secs
+    // So 360 calls is about 1 hour
+    uint16_t max_checks_before_reboot = 360; 
 
     // Restart WiFI every 60 seconds if we continue
     // to remain disconnected
-    uint16_t max_checks_before_wifi_restart = 30; 
+    // that equates to 6 calls
+    uint16_t max_checks_before_wifi_restart = 6; 
 
     log_message("loop_task_check_wifi_up()");
 
