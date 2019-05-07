@@ -40,6 +40,10 @@ const char *get_sw_context(enum switch_state_context context)
       case SW_ST_CTXT_NETWORK:
         return "network";
         break;
+
+      case SW_ST_CTXT_MOTION:
+        return "motion";
+        break;
     }
 }
 
@@ -360,6 +364,32 @@ void set_switch_state(struct gpio_switch *gpio_switch,
     }
 }
 
+// Function: set_switch_motion_interval
+// enables/disables motion control for a switch
+// by setting an interval (seconds).. 0 is off
+void set_switch_motion_interval(struct gpio_switch *gpio_switch,
+                                uint32_t interval)
+{
+    if (!gpio_switch) {
+        // can get called with a find_switch() call
+        // used for gpio_switch arg
+        // So this can be NULL
+        return;
+    }
+
+    log_message("set_switch_motion_interval(name=%s, interval=%u)",
+                gpio_switch->name,
+                interval);
+
+    // Sanity on value
+    // min of 5 seconds or 0
+    if (interval > 0 && interval < 5) {
+        interval = 5;
+    }
+
+    gpio_switch->motion_interval = interval;
+}
+
 // Function: setup_switches
 // Scans the list of configured switches
 // and performs the required pin setups
@@ -393,6 +423,12 @@ void setup_switches()
             log_message("    Manual pin:%d",
                         gpio_switch->manual_pin);
             pinMode(gpio_switch->manual_pin, INPUT_PULLUP);
+        }
+
+        if (gpio_switch->motion_pin != NO_PIN) {
+            log_message("    Motion pin:%d",
+                        gpio_switch->motion_pin);
+            pinMode(gpio_switch->motion_pin, INPUT_PULLUP);
         }
 
         // set initial state
@@ -471,6 +507,45 @@ void loop_task_check_manual_switches()
                         took_action = 1; // note any activity
                     }
                     break;
+                }
+            }
+        }
+
+        // Motion pin (PIR)
+        if (gpio_switch->motion_pin != NO_PIN) {
+            button_state = digitalRead(gpio_switch->motion_pin);
+            if (button_state == HIGH &&
+                gpio_switch->current_state == 0 &&
+                gpio_switch->motion_interval) {
+                log_message("Detected motion on switch:%s pin:%d",
+                            gpio_switch->name,
+                            gpio_switch->motion_pin);
+
+                // only allow switch to be turned on from off state
+                if (gpio_switch->current_state != 1) {
+                    set_switch_state(gpio_switch,
+                                     1, // On
+                                     SW_ST_CTXT_MOTION);
+                    // mark current msec time 
+                    gpio_switch->last_motion = millis();
+                    took_action = 1; // note any activity
+                }
+            }
+            else {
+                // no motion detected.. see if we can turn it 
+                // off
+                if (gpio_switch->current_state == 1 &&
+                    gpio_switch->state_context == SW_ST_CTXT_MOTION) {
+                    if (millis() - gpio_switch->last_motion >= 
+                        (gpio_switch->motion_interval * 1000)) {
+                        log_message("Motion interval timeout (%u secs) on switch:%s",
+                                    gpio_switch->motion_interval,
+                                    gpio_switch->name);
+                        set_switch_state(gpio_switch,
+                                         0, // Off
+                                         SW_ST_CTXT_MOTION);
+                        gpio_switch->last_motion = 0;
+                    }
                 }
             }
         }
@@ -1786,6 +1861,7 @@ const char *get_json_status(uint8_t pretty)
         obj["state"] = gpio_switch->current_state;
         obj["context"] = get_sw_context(gpio_switch->state_context);
         obj["behaviour"] = get_sw_behaviour(gpio_switch->switch_behaviour);
+        obj["motion_interval"] = gpio_switch->motion_interval;
     }
 
     // sensors
@@ -2200,6 +2276,17 @@ void load_config()
                     gpio_switch->switch_behaviour = SW_BHVR_OFF;
                 }
 
+                // Motion pin
+                // left optional. if pin comes in as 0, assumed
+                // not applicable
+                gpio_switch->motion_pin = control["sw_motion_pin"];
+                if (gpio_switch->motion_pin == 0) {
+                    gpio_switch->motion_pin = NO_PIN;
+                    gpio_switch->motion_interval = 0;
+                }
+                else {
+                    gpio_switch->motion_interval = control["sw_motion_interval"];
+                }
             }
 
             if (!strcmp(control_type, "temp/humidity")) {
@@ -2559,6 +2646,12 @@ void sta_handle_json() {
         set_switch_state(find_switch(gv_web_server.arg("control").c_str()),
                          atoi(gv_web_server.arg("state").c_str()),
                          SW_ST_CTXT_NETWORK); // specifying name only
+    }
+
+    // Check for switch control name and motion interval
+    if (gv_web_server.hasArg("control") && gv_web_server.hasArg("motion_interval")) {
+        set_switch_motion_interval(find_switch(gv_web_server.arg("control").c_str()),
+                         atoi(gv_web_server.arg("motion_interval").c_str()));
     }
 
     // RGB/aRGB Program
