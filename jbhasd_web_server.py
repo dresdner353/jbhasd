@@ -1922,11 +1922,13 @@ def web_server():
 
     print("%s Starting console web server on port %d" % (time.asctime(),
                                                          gv_json_config['web']['port']))
-    # main config
-    cherrypy.config.update({'environment': 'production',
-                            'log.screen': False,
-                            'log.access_file': '',
-                            'log.error_file': ''})
+    # Disable logging
+    do_logging = 1
+    if do_logging == 0:
+        cherrypy.config.update({'environment': 'production',
+                                'log.screen': False,
+                                'log.access_file': '',
+                                'log.error_file': ''})
 
     # Listen on our port on any IF
     cherrypy.server.socket_host = '0.0.0.0'
@@ -1994,6 +1996,9 @@ config_t = threading.Thread(target = manage_config)
 config_t.daemon = True
 config_t.start()
 thread_list.append(config_t)
+
+# Allow some grace for config to load
+time.sleep(2)
 
 # device discovery thread
 discover_t = threading.Thread(target = discover_devices)
