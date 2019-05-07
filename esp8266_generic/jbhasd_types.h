@@ -22,7 +22,8 @@
 enum switch_state_context {
     SW_ST_CTXT_INIT,    // Boot state 
     SW_ST_CTXT_MANUAL,  // Manually via button
-    SW_ST_CTXT_NETWORK  // automatically via NW client
+    SW_ST_CTXT_NETWORK, // automatically via NW client
+    SW_ST_CTXT_MOTION   // motion pin
 };
 
 enum switch_behaviour {
@@ -39,7 +40,10 @@ struct gpio_switch {
     uint8_t led_pin; // output pin used for LED
     uint8_t led_on_high; // toggles on between HIGH/LOW
     uint8_t manual_pin; // input pin used for manual toggle
+    uint8_t motion_pin; // input pin used for PIR
     uint8_t current_state;
+    uint32_t last_motion;
+    uint32_t motion_interval;
     enum switch_behaviour switch_behaviour; 
     enum switch_state_context state_context;
 };
