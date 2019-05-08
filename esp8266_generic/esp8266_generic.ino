@@ -1820,9 +1820,7 @@ const char *get_json_status(uint8_t pretty)
     // refresh sensors
     read_sensors();
 
-    const uint16_t capacity = 4096;
-    DynamicJsonBuffer gv_json_buffer(capacity);
-    JsonObject& json_status = gv_json_buffer.createObject();
+    DynamicJsonDocument json_status(4096);
 
     // top-level fields
     json_status["name"] = gv_mdns_hostname;
@@ -1835,7 +1833,7 @@ const char *get_json_status(uint8_t pretty)
     json_status["configured"] = gv_device.configured;
 
     // system section
-    JsonObject& system = json_status.createNestedObject("system");
+    JsonObject system  = json_status.createNestedObject("system");
     system["compile_date"] = gv_sw_compile_date;
     system["reset_reason"] = (char*)ESP.getResetReason().c_str();
     system["free_heap"] = ESP.getFreeHeap();
@@ -1848,14 +1846,14 @@ const char *get_json_status(uint8_t pretty)
     system["millis"] = millis();
 
     // controls section for switches & leds 
-    JsonArray& controls_arr = json_status.createNestedArray("controls");
+    JsonArray controls_arr = json_status.createNestedArray("controls");
 
     // switches
     for (gpio_switch = HTM_LIST_NEXT(gv_device.switch_list);
          gpio_switch != gv_device.switch_list;
          gpio_switch = HTM_LIST_NEXT(gpio_switch)) {
 
-        JsonObject& obj = controls_arr.createNestedObject();
+        JsonObject obj = controls_arr.createNestedObject();
         obj["name"] = gpio_switch->name;
         obj["type"] = "switch";
         obj["state"] = gpio_switch->current_state;
@@ -1869,7 +1867,7 @@ const char *get_json_status(uint8_t pretty)
          gpio_sensor != gv_device.sensor_list;
          gpio_sensor = HTM_LIST_NEXT(gpio_sensor)) {
 
-        JsonObject& obj = controls_arr.createNestedObject();
+        JsonObject obj = controls_arr.createNestedObject();
         obj["name"] = gpio_sensor->name;
 
         switch (gpio_sensor->sensor_type) {
@@ -1890,7 +1888,7 @@ const char *get_json_status(uint8_t pretty)
          gpio_rgb != gv_device.rgb_list;
          gpio_rgb = HTM_LIST_NEXT(gpio_rgb)) {
 
-        JsonObject& obj = controls_arr.createNestedObject();
+        JsonObject obj = controls_arr.createNestedObject();
         obj["name"] = gpio_rgb->name;
         obj["type"] = "rgb";
         obj["program"] = gpio_rgb->program;
@@ -1906,7 +1904,7 @@ const char *get_json_status(uint8_t pretty)
          gpio_argb != gv_device.argb_list;
          gpio_argb = HTM_LIST_NEXT(gpio_argb)) {
 
-        JsonObject& obj = controls_arr.createNestedObject();
+        JsonObject obj = controls_arr.createNestedObject();
         obj["name"] = gpio_argb->name;
         obj["type"] = "argb";
         obj["program"] = gpio_argb->program;
@@ -1914,10 +1912,10 @@ const char *get_json_status(uint8_t pretty)
 
     // Format string in compact or prety format
     if (pretty){
-        json_status.prettyPrintTo(gv_large_buffer);
+        serializeJsonPretty(json_status, gv_large_buffer);
     }
     else {
-        json_status.printTo(gv_large_buffer);
+        serializeJson(json_status, gv_large_buffer);
     }
 
     log_message("JSON status data: (%d bytes) \n%s", 
@@ -2057,19 +2055,18 @@ void update_config(char *field,
     log_message("Current Config:\n%s", gv_config);
 
     // JSON parse from config
-    const uint16_t capacity = 4096;
-    DynamicJsonBuffer gv_json_buffer(capacity);
-    JsonObject& json_cfg = 
-        gv_json_buffer.parseObject((const char*)gv_config);
-
-    if (!json_cfg.success()) {
+    DynamicJsonDocument json_cfg(4096);
+    DeserializationError error = deserializeJson(json_cfg, 
+                                                 (const char*)gv_config);
+    if (error) {
         log_message("JSON decode failed for config");
 
         // build fresh JSON document
         strcpy(gv_config, "{}");
-        JsonObject& json_cfg = gv_json_buffer.createObject();
+        DeserializationError error = deserializeJson(json_cfg, 
+                                                     (const char*)gv_config);
 
-        if (!json_cfg.success()) {
+        if (error) {
             log_message("Failed to create json cfg document");
             return;
         }
@@ -2091,8 +2088,7 @@ void update_config(char *field,
     }
 
     // Dump back out JSON config
-    json_cfg.prettyPrintTo(gv_large_buffer);
-    strcpy(gv_config, gv_large_buffer);
+    serializeJsonPretty(json_cfg, gv_config);
 
     log_message("Config updated to:\n%s", gv_config);
 
@@ -2192,12 +2188,10 @@ void load_config()
     // JSON parse from config
     // Assuming 4k is fine for the overheads
     // we might encounter
-    const uint16_t capacity = 4096;
-    DynamicJsonBuffer gv_json_buffer(capacity);
-    JsonObject& json_cfg = 
-        gv_json_buffer.parseObject((const char*)gv_config);
-
-    if (!json_cfg.success()) {
+    DynamicJsonDocument json_cfg(4096);
+    DeserializationError error = deserializeJson(json_cfg, 
+                                                 (const char*)gv_config);
+    if (error) {
         log_message("JSON decode failed for config.. resetting");
         reset_config();
         return;
@@ -2226,18 +2220,15 @@ void load_config()
     gv_device.force_apmode_onboot = json_cfg["force_apmode_onboot"];
     gv_device.configured = json_cfg["configured"];
 
-    JsonArray& controls = json_cfg["controls"];
-    if (controls.success()) {
-        log_message("Successfully parsed controls array from json cfg");
-    }
-    else {
+    JsonArray controls = json_cfg["controls"];
+    if (controls.isNull()) {
         log_message("Failed to parse controls array from json cfg");
         return;
     }
 
     // Loop through each control
     // each should have a name and type as standard
-    for (JsonObject& control : controls) {
+    for (JsonObject control : controls) {
         const char* control_name = control["name"];
         const char* control_type = control["type"];
         const uint8_t enabled = control["enabled"];
