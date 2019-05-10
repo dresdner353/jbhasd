@@ -344,8 +344,10 @@ def manage_config():
 
 # Sunset globals
 gv_last_sunset_check = -1
-gv_sunset_on_time = "2000" # noddy default
+gv_sunset_time = "2000" # noddy default
+gv_sunrise_time = "0500" # noddy default
 gv_actual_sunset_time = "xxxx"
+gv_actual_sunrise_time = "xxxx"
 
 # device global dictionaries
 
@@ -432,28 +434,52 @@ def sunset_api_time_to_epoch(time_str, local_timezone):
     return epoch_time
 
 
+def get_timer_time(timer_time):
+
+    global gv_sunset_time
+    global gv_sunrise_time
+
+    if (timer_time == "sunset"):
+        time_ival = gv_sunset_time
+    elif (timer_time == "sunrise"):
+        time_ival = gv_sunrise_time
+    else:
+        time_ival = int(timer_time.replace(':', ''))
+
+    #print('%s -> %d' % (timer_time, time_ival))
+    return time_ival
+
+
 def check_switch(zone_name, 
                  control_name, 
                  current_time, 
                  control_state,
                  control_context):
 
-    global gv_sunset_on_time
+    global gv_sunset_time
+    global gv_sunrise_time
     global gv_manual_switch_dict
     global gv_manual_switch_expiry_ts_dict
     global gv_manual_switch_expiry_period
 
     desired_state = -1 # implies no desired state
+    motion_interval = 0 # no implied motion
 
     # cater for manual over-rides
     dict_key = '%s:%s' % (zone_name, control_name)
     #print("Key %s" % (dict_key))
     now = time.time()
+
+    # For motion contrxt where the switch is on
+    # stay out of asserting any control
+    if control_context == 'motion' and control_state == 1:
+        return desired_state, motion_interval
+
     if control_context == 'manual':
         if not dict_key in gv_manual_switch_dict:
             gv_manual_switch_dict[dict_key] = control_state
             gv_manual_switch_expiry_ts_dict[dict_key] = now + gv_manual_switch_expiry_period
-            return -1
+            return desired_state, motion_interval
         else:
             # already exists.. manage expiry
             override_expiry = gv_manual_switch_expiry_ts_dict[dict_key]
@@ -466,21 +492,35 @@ def check_switch(zone_name,
                 #print("Expired over-ride")
             else:
                 # override still in effect
-                return -1
+                return desired_state, motion_interval
 
     for timer in gv_json_config['switch_timers']:
         if timer['zone'] == zone_name and timer['control'] == control_name:
-            # Start assuming its off
+            # Motion interval (optional)
+            motion_interval = 0 # disabled
+            if 'motion_interval' in timer:
+                motion_on_time = get_timer_time(timer['motion_on'])
+                motion_off_time = get_timer_time(timer['motion_off'])
+
+                if (motion_on_time <= motion_off_time):
+                    if (current_time >= motion_on_time and 
+                        current_time < motion_off_time):
+                        motion_interval = timer['motion_interval']
+                else:
+                    if (current_time > motion_on_time):
+                        motion_interval = timer['motion_interval']
+                    else:
+                        if (current_time < motion_on_time and
+                            current_time < motion_off_time):
+                            motion_interval = timer['motion_interval']
+
+            # On/Off Start assuming its off
             desired_state = 0
 
-            # sunset keyword replacemenet with
-            # dynamic sunset offset time
-            if (timer['on'] == "sunset"):
-                on_time = gv_sunset_on_time
-            else:
-                on_time = int(timer['on'].replace(':', ''))
-
-            off_time = int(timer['off'].replace(':', ''))
+            # sunset/sunrise keyword replacemenet with
+            # dynamic values
+            on_time = get_timer_time(timer['on'])
+            off_time = get_timer_time(timer['off'])
 
             # Test time ranges and break out on 
             # first hit for the on state
@@ -499,8 +539,8 @@ def check_switch(zone_name,
                         desired_state = 1
                         break
 
-    #print("return %d" % (desired_state))
-    return desired_state
+    #print("return key:%s state:%d motion:%d" % (dict_key, desired_state, motion_interval))
+    return desired_state, motion_interval
 
 
 def check_rgb(zone_name, 
@@ -508,7 +548,8 @@ def check_rgb(zone_name,
               current_time, 
               control_program):
 
-    global gv_sunset_on_time
+    global gv_sunset_time
+    global gv_sunrise_time
 
     desired_program = ""
 
@@ -522,7 +563,7 @@ def check_rgb(zone_name,
             # sunset keyword replacemenet with
             # dynamic sunset offset time
             if (timer['on'] == "sunset"):
-                on_time = gv_sunset_on_time
+                on_time = gv_sunset_time
             else:
                 on_time = int(timer['on'].replace(':', ''))
 
@@ -654,6 +695,12 @@ def check_automated_devices():
             if control_type == 'switch':
                 control_state = int(control['state'])
 
+                # optional motion interval
+                if 'motion_interval' in control:
+                    motion_interval = int(control['motion_interval'])
+                else:
+                    motion_interval = 0
+
                 # determine context
                 # assume network if not present
                 # (older firmware)
@@ -662,24 +709,30 @@ def check_automated_devices():
                 else:
                     control_context = 'network'
 
-                desired_state = check_switch(zone_name, 
-                                             control_name,
-                                             current_time,
-                                             control_state,
-                                             control_context)
+                desired_state, desired_motion_interval = check_switch(zone_name, 
+                                                                      control_name,
+                                                                      current_time,
+                                                                      control_state,
+                                                                      control_context)
  
                 # If switch state not in desired state
+                # or the motion interval is not where it should be
                 # update and recache the status
                 if (desired_state != -1 and (control_state != desired_state or 
+                                             motion_interval != desired_motion_interval or
                                              control_context == 'manual')):
-                    print("%s Automatically setting %s/%s to state:%s" % (time.asctime(),
-                                                                          zone_name,
-                                                                          control_name,
-                                                                          desired_state))
+                    print("%s Automatically setting %s/%s to state:%s motion_interval:%d" % (
+                        time.asctime(),
+                        zone_name,
+                        control_name,
+                        desired_state,
+                        desired_motion_interval))
                     control_safe = urllib.parse.quote_plus(control_name)
-                    command_url = '%s?control=%s&state=%s' % (url,
-                                                              control_safe,
-                                                              desired_state)
+                    command_url = '%s?control=%s&state=%d&motion_interval=%d' % (
+                                                   url,
+                                                   control_safe,
+                                                   desired_state,
+                                                   desired_motion_interval)
                     print("%s Issuing command url:%s" % (time.asctime(),
                                                          command_url))
 
@@ -834,8 +887,10 @@ def probe_devices():
     # management of devices
     global gv_last_sunset_check
     global gv_json_config
-    global gv_sunset_on_time
+    global gv_sunset_time
+    global gv_sunrise_time
     global gv_actual_sunset_time 
+    global gv_actual_sunrise_time 
 
     # loop forever
     while (1):
@@ -846,6 +901,7 @@ def probe_devices():
             print("%s Getting Sunset times.." % (time.asctime()))
             json_data = fetch_url(gv_json_config['sunset']['url'], 20, 1)
             if json_data is not None:
+                # Sunset
                 sunset_str = json_data['results']['sunset']
                 sunset_ts = sunset_api_time_to_epoch(
                         sunset_str,
@@ -853,11 +909,29 @@ def probe_devices():
                 sunset_local_time = time.localtime(sunset_ts)
                 sunset_offset_local_time = time.localtime(
                         sunset_ts + gv_json_config['sunset']['lights_on_offset'])
-                gv_sunset_on_time = int(time.strftime("%H%M", sunset_offset_local_time))
+                gv_sunset_time = int(time.strftime("%H%M", sunset_offset_local_time))
                 gv_actual_sunset_time = time.strftime("%H:%M", sunset_local_time)
-                print("%s Sunset on-time is %s (with offset of %d seconds)" % (time.asctime(),
-                                                                               gv_sunset_on_time,
-                                                                               gv_json_config['sunset']['lights_on_offset']))
+
+                # Sunrise
+                sunrise_str = json_data['results']['sunrise']
+                sunrise_ts = sunset_api_time_to_epoch(
+                        sunrise_str,
+                        gv_json_config['timezone'])
+                sunrise_local_time = time.localtime(sunrise_ts)
+                sunrise_offset_local_time = time.localtime(
+                        sunrise_ts + gv_json_config['sunset']['lights_on_offset'])
+                gv_sunrise_time = int(time.strftime("%H%M", sunrise_offset_local_time))
+                gv_actual_sunrise_time = time.strftime("%H:%M", sunrise_local_time)
+
+                print("%s Sunset time is %s (with offset of %d seconds)" % (
+                    time.asctime(),
+                    gv_sunset_time,
+                    gv_json_config['sunset']['lights_on_offset']))
+
+                print("%s Sunrise time is %s (with offset of %d seconds)" % (
+                    time.asctime(),
+                    gv_sunrise_time,
+                    gv_json_config['sunset']['lights_on_offset']))
 
             gv_last_sunset_check = now
 
@@ -1271,7 +1345,7 @@ def build_zone_web_page(num_cols):
 
 
 def build_device_web_page(num_cols):
-    global gv_sunset_on_time
+    global gv_sunset_time
     global gv_actual_sunset_time
     global gv_json_config
 
@@ -1339,7 +1413,7 @@ def build_device_web_page(num_cols):
             '<td align="center" class="dash-label">'
             '%d'
             '</td>'
-            '</tr>') % (gv_sunset_on_time)
+            '</tr>') % (gv_sunset_time)
 
     dashboard_col_list[0] += (
             '<tr>'
