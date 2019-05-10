@@ -514,20 +514,31 @@ void loop_task_check_manual_switches()
         // Motion pin (PIR)
         if (gpio_switch->motion_pin != NO_PIN) {
             button_state = digitalRead(gpio_switch->motion_pin);
+
+            // Check for a trigger but conditional to having
+            // a motion interval.. if 0, this dynamically disables
+            // motion triggering
             if (button_state == HIGH &&
-                gpio_switch->current_state == 0 &&
                 gpio_switch->motion_interval) {
                 log_message("Detected motion on switch:%s pin:%d",
                             gpio_switch->name,
                             gpio_switch->motion_pin);
 
+                // mark current msec time 
+                // if triggered, we mark the time regardless
+                // This means we track activity down to the last measured
+                // motion and not just the first
+                // it makes for a better experience where continuous
+                // motion will keep the switch on 
+                gpio_switch->last_motion = millis();
+
                 // only allow switch to be turned on from off state
+                // We also track the took action at this stage only
+                // Otherwise we will bombard the web server with updates
                 if (gpio_switch->current_state != 1) {
                     set_switch_state(gpio_switch,
                                      1, // On
                                      SW_ST_CTXT_MOTION);
-                    // mark current msec time 
-                    gpio_switch->last_motion = millis();
                     took_action = 1; // note any activity
                 }
             }
