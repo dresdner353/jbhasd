@@ -14,7 +14,6 @@
 #include <DHT.h>
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
-#include <ESP8266httpUpdate.h>
 #include <ArduinoJson.h>
 #include <Adafruit_NeoPixel.h>
 #include "HandyTaskMan.h"
@@ -75,9 +74,6 @@ IPAddress gv_ap_ip(192, 168, 1, 1);
 IPAddress gv_sta_ip;
 DNSServer gv_dns_server;
 char gv_mdns_hostname[MAX_FIELD_LEN + MAX_FIELD_LEN];
-
-char gv_push_ip[MAX_FIELD_LEN];
-uint16_t gv_push_port;
 
 // Global Data buffers
 // In an effort to keep the RAM usage low
@@ -333,10 +329,33 @@ void set_switch_state(struct gpio_switch *gpio_switch,
         state = 0;
     }
 
+    // Manual bypass scenario
+    // trumps.. network and motion
+    // If the switch is currently in a manual state on or off
+    // we want to bypass a network context if the manual_interval
+    // is still in play
+    if (gpio_switch->state_context == SW_ST_CTXT_MANUAL &&
+        (context == SW_ST_CTXT_NETWORK ||
+         context == SW_ST_CTXT_MOTION)) {
+        log_message("Ignoring network/motion switch event.. currently in manual over-ride (%d secs)", 
+                    gpio_switch->manual_interval);
+        return;
+    }
+
+    // Motion bypass scenario
+    // trumps only network
+    if (gpio_switch->state_context == SW_ST_CTXT_MOTION &&
+        context == SW_ST_CTXT_NETWORK) {
+        log_message("Ignoring network switch event.. currently in motion over-ride (%d secs)", 
+                    gpio_switch->motion_interval);
+        return;
+    }
+
     // change state as requested
     // Set the current state
     gpio_switch->current_state = state;
     gpio_switch->state_context = context;
+    gpio_switch->last_activity = millis();
 
     // Determine the desired GPIO state to use
     // depending on whether on is HIGH or LOW
@@ -439,11 +458,11 @@ void setup_switches()
     }
 }
 
-// Function: loop_task_check_manual_switches
+// Function: loop_task_check_switches
 // Scans the input pins of all switches and
 // invokes a toggle of the current state if it detects
 // LOW state
-void loop_task_check_manual_switches()
+void loop_task_check_switches()
 {
     uint8_t button_state;
     uint8_t took_action = 0;
@@ -509,53 +528,68 @@ void loop_task_check_manual_switches()
                     break;
                 }
             }
+            else {
+                // no button press in play but check for expiry
+                // of manual context or even auto-off
+                if (gpio_switch->state_context == SW_ST_CTXT_MANUAL &&
+                    gpio_switch->manual_interval > 0) {
+                    if (millis() - gpio_switch->last_activity >= 
+                        (gpio_switch->manual_interval * 1000)) {
+                        log_message("Manual interval timeout (%u secs) on switch:%s",
+                                    gpio_switch->manual_interval,
+                                    gpio_switch->name);
+
+                        // Can just turn off if this is set for 
+                        // auto-off
+                        if (gpio_switch->manual_auto_off) {
+                            set_switch_state(gpio_switch,
+                                             0, // Off
+                                             SW_ST_CTXT_INIT);
+                        }
+                        else {
+                            // Otherwise, we re-asset current state
+                            // but let the context go to init
+                            set_switch_state(gpio_switch,
+                                             gpio_switch->current_state,
+                                             SW_ST_CTXT_INIT);
+                        }
+                    }
+                }
+            }
         }
 
         // Motion pin (PIR)
-        if (gpio_switch->motion_pin != NO_PIN) {
+        if (gpio_switch->motion_pin != NO_PIN &&
+            gpio_switch->motion_interval) {
             button_state = digitalRead(gpio_switch->motion_pin);
 
-            // Check for a trigger but conditional to having
-            // a motion interval.. if 0, this dynamically disables
-            // motion triggering
-            if (button_state == HIGH &&
-                gpio_switch->motion_interval) {
+            // Check for a trigger 
+            if (button_state == HIGH) {
                 log_message("Detected motion on switch:%s pin:%d",
                             gpio_switch->name,
                             gpio_switch->motion_pin);
 
-                // mark current msec time 
-                // if triggered, we mark the time regardless
-                // This means we track activity down to the last measured
-                // motion and not just the first
-                // it makes for a better experience where continuous
-                // motion will keep the switch on 
-                gpio_switch->last_motion = millis();
-
-                // only allow switch to be turned on from off state
-                // We also track the took action at this stage only
-                // Otherwise we will bombard the web server with updates
-                if (gpio_switch->current_state != 1) {
-                    set_switch_state(gpio_switch,
-                                     1, // On
-                                     SW_ST_CTXT_MOTION);
-                    took_action = 1; // note any activity
-                }
+                set_switch_state(gpio_switch,
+                                 1, // On
+                                 SW_ST_CTXT_MOTION);
+                took_action = 1; // note any activity
             }
             else {
                 // no motion detected.. see if we can turn it 
                 // off
                 if (gpio_switch->current_state == 1 &&
                     gpio_switch->state_context == SW_ST_CTXT_MOTION) {
-                    if (millis() - gpio_switch->last_motion >= 
+                    if (millis() - gpio_switch->last_activity >= 
                         (gpio_switch->motion_interval * 1000)) {
                         log_message("Motion interval timeout (%u secs) on switch:%s",
                                     gpio_switch->motion_interval,
                                     gpio_switch->name);
+
+                        // using INIT context to give over network 
+                        // control 
                         set_switch_state(gpio_switch,
                                          0, // Off
-                                         SW_ST_CTXT_MOTION);
-                        gpio_switch->last_motion = 0;
+                                         SW_ST_CTXT_INIT);
                     }
                 }
             }
@@ -583,43 +617,6 @@ void loop_task_check_manual_switches()
         // record timestamp for fast
         // re-entry protection
         last_action_timestamp = millis();
-
-        // Send update push if WiFI up
-        if (TaskMan.get_run_state() == RUN_STATE_WIFI_STA_UP && 
-            strlen(gv_push_ip) > 0) {
-
-            // straight connection
-            // Tried the http object
-            // for GET and PUSH and just got
-            // grief from the python web server
-
-            log_message("pushing update request to host:%s port:%d", 
-                        gv_push_ip,
-                        gv_push_port);
-
-            ets_sprintf(post_buffer,
-                        "update=%s",
-                        gv_mdns_hostname);
-
-            if (!wifi_client.connect(gv_push_ip,
-                                     gv_push_port)) {
-                log_message("connection failed");
-            }
-            else {
-                wifi_client.println("POST / HTTP/1.1");
-                wifi_client.println("Host: server_name");
-                wifi_client.println("Accept: */*");
-                wifi_client.println("Content-Type: application/x-www-form-urlencoded");
-                wifi_client.print("Content-Length: ");
-                wifi_client.println(strlen(post_buffer));
-                wifi_client.println();
-                wifi_client.print(post_buffer);
-                //delay(500);
-                if (wifi_client.connected()) {
-                    wifi_client.stop();
-                }
-            }
-        }
     }
 }
 
@@ -2268,6 +2265,8 @@ void load_config()
                 gpio_switch->led_pin = control["sw_led_pin"];
                 gpio_switch->led_on_high = control["sw_led_on_high"];
                 gpio_switch->manual_pin = control["sw_man_pin"];
+                gpio_switch->manual_interval = control["sw_man_interval"];
+                gpio_switch->manual_auto_off = control["sw_man_auto_off"];
                 gpio_switch->current_state = control["sw_state"];
 
                 gpio_switch->switch_behaviour = SW_BHVR_TOGGLE;
@@ -2634,9 +2633,6 @@ void start_ap_mode()
 // "reboot" arg will reboot the device
 // "reset" arg wipes config and restarts
 // "apmode" will perform a once-off boot into AP mode
-// Args "update_ip" amd "update_port" can be used to set an IP:PORT
-// for a POST-based push notification to a server wishing to track 
-// manual switch activity
 void sta_handle_json() {
     uint32_t state;
     uint8_t pretty = 0;
@@ -2662,16 +2658,6 @@ void sta_handle_json() {
                         gv_web_server.arg("program").c_str());
         set_argb_program(find_argb(gv_web_server.arg("control").c_str()), 
                         gv_web_server.arg("program").c_str());
-    }
-
-    // Set PUSH url for status updates
-    if (gv_web_server.hasArg("update_ip") &&
-        gv_web_server.hasArg("update_port")) {
-        strcpy(gv_push_ip, gv_web_server.arg("update_ip").c_str());
-        gv_push_port = atoi(gv_web_server.arg("update_port").c_str());
-        log_message("Set push IP:port to %s:%d", 
-                    gv_push_ip,
-                    gv_push_port);
     }
 
     if (gv_web_server.hasArg("pretty")) {
@@ -2725,28 +2711,6 @@ void sta_handle_json() {
         update_config("name", gv_mdns_hostname, 0, 0);
         update_config("configured", NULL, 1, 1);
         gv_reboot_requested = 1;
-    }
-    if (gv_web_server.hasArg("ota")) {
-        log_message("Received OTA command");
-        log_message("Trying for OTA from IP:%s port:%d path:%s",
-                    gv_push_ip,
-                    gv_push_port,
-                    gv_web_server.arg("ota").c_str());
-        t_httpUpdate_return ret = 
-            ESPhttpUpdate.update(gv_push_ip, 
-                                 gv_push_port, 
-                                 gv_web_server.arg("ota").c_str());
-        switch(ret) {
-          case HTTP_UPDATE_FAILED:
-            log_message("OTA Update failed.");
-            break;
-          case HTTP_UPDATE_NO_UPDATES:
-            log_message("No OTA Update");
-            break;
-          case HTTP_UPDATE_OK:
-            log_message("OTA Update OK"); 
-            break;
-        }
     }
 
     // Return current status as standard
@@ -3049,10 +3013,10 @@ void setup()
                      loop_task_check_wifi_up);
 
     // Manual Switches every 200ms
-    TaskMan.add_task("Manual Switch Checks",
+    TaskMan.add_task("Switch Checks",
                      RUN_STATE_WIFI_STA_DOWN | RUN_STATE_WIFI_STA_UP,
                      200,
-                     loop_task_check_manual_switches);
+                     loop_task_check_switches);
 
     // WiFI Check (While Up) every 10s
     TaskMan.add_task("WiFI Status Down Check",
@@ -3086,9 +3050,6 @@ void setup()
     ets_sprintf(gv_mdns_hostname,
                 "JBHASD-%08X",
                 ESP.getChipId());
-
-    // Init Push IP
-    gv_push_ip[0] = '\0';
 
     // Set up status LED
     pinMode(gv_device.wifi_led_pin, OUTPUT);
