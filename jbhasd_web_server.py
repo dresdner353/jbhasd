@@ -373,13 +373,6 @@ gv_http_timeout_secs = 5
 # Dict to track manual switch scenarios
 gv_manual_switch_dict = {}
 
-# Tracks expiry times of manual switch scenarios
-gv_manual_switch_expiry_ts_dict = {}
-
-# Manual over-ride expiry time for switches
-# this is in seconds
-gv_manual_switch_expiry_period = 3600 * 5
-
 
 def reset_all_dicts():
     # wipe all dicts for tracked devices, states etc
@@ -387,7 +380,6 @@ def reset_all_dicts():
     global gv_jbhasd_device_url_dict
     global gv_jbhasd_device_status_dict
     global gv_manual_switch_dict
-    global gv_manual_switch_expiry_ts_dict
     global gv_jbhasd_zconf_url_set
 
     print("%s Resetting all dictionaries" % (time.asctime()))
@@ -395,7 +387,6 @@ def reset_all_dicts():
     gv_jbhasd_device_url_dict = {}
     gv_jbhasd_device_status_dict = {}
     gv_manual_switch_dict = {}
-    gv_manual_switch_expiry_ts_dict = {}
     gv_jbhasd_zconf_url_set = set()
 
 
@@ -452,52 +443,20 @@ def get_timer_time(timer_time):
 
 def check_switch(zone_name, 
                  control_name, 
-                 current_time, 
-                 control_state,
-                 control_context):
+                 current_time):
 
     global gv_sunset_time
     global gv_sunrise_time
     global gv_manual_switch_dict
-    global gv_manual_switch_expiry_ts_dict
-    global gv_manual_switch_expiry_period
 
     desired_state = -1 # implies no desired state
     motion_interval = 0 # no implied motion
 
-    # cater for manual over-rides
-    dict_key = '%s:%s' % (zone_name, control_name)
-    #print("Key %s" % (dict_key))
     now = time.time()
-
-    # For motion contrxt where the switch is on
-    # stay out of asserting any control
-    if control_context == 'motion' and control_state == 1:
-        return desired_state, motion_interval
-
-    if control_context == 'manual':
-        if not dict_key in gv_manual_switch_dict:
-            gv_manual_switch_dict[dict_key] = control_state
-            gv_manual_switch_expiry_ts_dict[dict_key] = now + gv_manual_switch_expiry_period
-            return desired_state, motion_interval
-        else:
-            # already exists.. manage expiry
-            override_expiry = gv_manual_switch_expiry_ts_dict[dict_key]
-            #print("Expiry at %d, now is %d.. %d seconds from now" % (override_expiry, now, override_expiry - now))
-
-            if override_expiry <= now:
-                # expire
-                del gv_manual_switch_dict[dict_key]
-                del gv_manual_switch_expiry_ts_dict[dict_key]
-                #print("Expired over-ride")
-            else:
-                # override still in effect
-                return desired_state, motion_interval
 
     for timer in gv_json_config['switch_timers']:
         if timer['zone'] == zone_name and timer['control'] == control_name:
             # Motion interval (optional)
-            motion_interval = 0 # disabled
             if 'motion_interval' in timer:
                 motion_on_time = get_timer_time(timer['motion_on'])
                 motion_off_time = get_timer_time(timer['motion_off'])
@@ -539,7 +498,10 @@ def check_switch(zone_name,
                         desired_state = 1
                         break
 
-    #print("return key:%s state:%d motion:%d" % (dict_key, desired_state, motion_interval))
+    #print("return zone:%s control:%s state:%d motion:%d" % (zone_name, 
+    #                                                        control_name,
+    #                                                        desired_state,
+    #                                                        motion_interval))
     return desired_state, motion_interval
 
 
@@ -701,37 +663,42 @@ def check_automated_devices():
                 else:
                     motion_interval = 0
 
-                # determine context
-                # assume network if not present
-                # (older firmware)
-                if 'context' in control:
-                    control_context = control['context']
-                else:
-                    control_context = 'network'
-
                 desired_state, desired_motion_interval = check_switch(zone_name, 
                                                                       control_name,
-                                                                      current_time,
-                                                                      control_state,
-                                                                      control_context)
+                                                                      current_time)
  
                 # If switch state not in desired state
-                # or the motion interval is not where it should be
                 # update and recache the status
-                if (desired_state != -1 and (control_state != desired_state or 
-                                             motion_interval != desired_motion_interval or
-                                             control_context == 'manual')):
-                    print("%s Automatically setting %s/%s to state:%s motion_interval:%d" % (
+                if (desired_state != -1 and control_state != desired_state):
+                    print("%s Automatically setting %s/%s to state:%s" % (
                         time.asctime(),
                         zone_name,
                         control_name,
-                        desired_state,
-                        desired_motion_interval))
+                        desired_state))
                     control_safe = urllib.parse.quote_plus(control_name)
-                    command_url = '%s?control=%s&state=%d&motion_interval=%d' % (
+                    command_url = '%s?control=%s&state=%d' % (
                                                    url,
                                                    control_safe,
-                                                   desired_state,
+                                                   desired_state)
+                    print("%s Issuing command url:%s" % (time.asctime(),
+                                                         command_url))
+
+                    json_data = fetch_url(command_url, gv_http_timeout_secs, 1)
+                    if (json_data is not None):
+                        gv_jbhasd_device_status_dict[device_name] = json_data
+                        gv_jbhasd_device_ts_dict[device_name] = int(time.time())
+
+
+                if (motion_interval != desired_motion_interval):
+                    print("%s Automatically setting %s/%s motion_interval:%d" % (
+                        time.asctime(),
+                        zone_name,
+                        control_name,
+                        desired_motion_interval))
+                    control_safe = urllib.parse.quote_plus(control_name)
+                    command_url = '%s?control=%s&motion_interval=%d' % (
+                                                   url,
+                                                   control_safe,
                                                    desired_motion_interval)
                     print("%s Issuing command url:%s" % (time.asctime(),
                                                          command_url))
@@ -740,6 +707,7 @@ def check_automated_devices():
                     if (json_data is not None):
                         gv_jbhasd_device_status_dict[device_name] = json_data
                         gv_jbhasd_device_ts_dict[device_name] = int(time.time())
+
 
             if control_type in ['rgb', 'argb']:
                 control_program = control['program']
@@ -938,17 +906,12 @@ def probe_devices():
         # iterate set of discovered device URLs as snapshot list
         # avoids issues if the set is updated mid-way
         device_url_list = list(gv_jbhasd_zconf_url_set)
-        web_ip = get_ip()
         successful_probes = 0
         failed_probes = 0
         purged_urls = 0
         control_changes = 0
-        web_ip_safe = urllib.parse.quote_plus(web_ip)
         for url in device_url_list:
-            url_w_update = '%s?update_ip=%s&update_port=%d' % (url,
-                                                               web_ip_safe, 
-                                                               gv_json_config['web']['port'])
-            json_data = fetch_url(url_w_update, gv_http_timeout_secs, 1)
+            json_data = fetch_url(url, gv_http_timeout_secs, 1)
             if (json_data is not None):
                 device_name = json_data['name']
                 if ('configured' in json_data and
@@ -1860,27 +1823,6 @@ def process_console_action(
     return 
 
 
-def process_device_update(update):
-    if (update is not None):
-        device_name = update
-        if device_name in gv_jbhasd_device_url_dict:
-            url = gv_jbhasd_device_url_dict[device_name]
-            json_data = fetch_url(url, gv_http_timeout_secs, 1)
-            if (json_data is not None):
-                #print("Updated status for %s URL:%s" % (device_name, url))
-                device_name = json_data['name']
-                gv_jbhasd_device_url_dict[device_name] = url
-                gv_jbhasd_device_status_dict[device_name] = json_data
-                gv_jbhasd_device_ts_dict[device_name] = int(time.time())
-
-                # check automated devices now
-                check_automated_devices()
-        else:
-            print("%s Cant match push for %s to URL" % (time.asctime(),
-                                                        device_name))
- 
-    return
-
 #This class will handle any incoming request from
 #the browser or devices
 class web_console_zone_handler(object):
@@ -1967,11 +1909,6 @@ class web_console_api_handler(object):
                                                   cherrypy.request.remote.ip,
                                                   cherrypy.request.remote.port,
                                                   cherrypy.request.params))
-        # Device push update
-        if update is not None:
-            process_device_update(update)
-            return ""
-
         # process actions if present
         process_console_action(device, 
                                zone, 
