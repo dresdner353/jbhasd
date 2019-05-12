@@ -42,8 +42,10 @@ struct gpio_switch {
     uint8_t manual_pin; // input pin used for manual toggle
     uint8_t motion_pin; // input pin used for PIR
     uint8_t current_state;
-    uint32_t last_motion;
+    uint32_t last_activity;
     uint32_t motion_interval;
+    uint32_t manual_interval;
+    uint8_t manual_auto_off;
     enum switch_behaviour switch_behaviour; 
     enum switch_state_context state_context;
 };
