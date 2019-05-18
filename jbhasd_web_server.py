@@ -289,7 +289,7 @@ def set_default_config():
     # sunset
     gv_json_config['sunset'] = {}
     gv_json_config['sunset']['url'] = 'http://api.sunrise-sunset.org/json?lat=53.349809&lng=-6.2624431&formatted=0'
-    gv_json_config['sunset']['lights_on_offset'] = -1800
+    gv_json_config['sunset']['offset'] = 1800
 
     # Timed switches
     gv_json_config['switch_timers'] = []
@@ -342,12 +342,27 @@ def manage_config():
         time.sleep(5)
 
 
+def get_timer_time(timer_time):
+
+    global gv_sunset_time
+    global gv_sunrise_time
+
+    if (timer_time == "sunset"):
+        time_ival = gv_sunset_time
+    elif (timer_time == "sunrise"):
+        time_ival = gv_sunrise_time
+    else:
+        time_ival = int(timer_time.replace(':', ''))
+
+    #print('%s -> %d' % (timer_time, time_ival))
+    return time_ival
+
 # Sunset globals
 gv_last_sunset_check = -1
-gv_sunset_time = "2000" # noddy default
-gv_sunrise_time = "0500" # noddy default
-gv_actual_sunset_time = "xxxx"
-gv_actual_sunrise_time = "xxxx"
+gv_actual_sunset_time = "20:00"
+gv_actual_sunrise_time = "05:00"
+gv_sunset_time = get_timer_time(gv_actual_sunset_time)
+gv_sunrise_time = get_timer_time(gv_actual_sunrise_time)
 
 # device global dictionaries
 
@@ -423,22 +438,6 @@ def sunset_api_time_to_epoch(time_str, local_timezone):
     epoch_time = int(time.mktime(ts_datetime.timetuple()))
 
     return epoch_time
-
-
-def get_timer_time(timer_time):
-
-    global gv_sunset_time
-    global gv_sunrise_time
-
-    if (timer_time == "sunset"):
-        time_ival = gv_sunset_time
-    elif (timer_time == "sunrise"):
-        time_ival = gv_sunrise_time
-    else:
-        time_ival = int(timer_time.replace(':', ''))
-
-    #print('%s -> %d' % (timer_time, time_ival))
-    return time_ival
 
 
 def check_switch(zone_name, 
@@ -875,8 +874,10 @@ def probe_devices():
                         sunset_str,
                         gv_json_config['timezone'])
                 sunset_local_time = time.localtime(sunset_ts)
+                # Offset for sunset subtracts offset to make the time 
+                # earlier
                 sunset_offset_local_time = time.localtime(
-                        sunset_ts + gv_json_config['sunset']['lights_on_offset'])
+                        sunset_ts - gv_json_config['sunset']['offset'])
                 gv_sunset_time = int(time.strftime("%H%M", sunset_offset_local_time))
                 gv_actual_sunset_time = time.strftime("%H:%M", sunset_local_time)
 
@@ -886,20 +887,21 @@ def probe_devices():
                         sunrise_str,
                         gv_json_config['timezone'])
                 sunrise_local_time = time.localtime(sunrise_ts)
+                # Offset is added to delay the sunrise time
                 sunrise_offset_local_time = time.localtime(
-                        sunrise_ts + gv_json_config['sunset']['lights_on_offset'])
+                        sunrise_ts + gv_json_config['sunset']['offset'])
                 gv_sunrise_time = int(time.strftime("%H%M", sunrise_offset_local_time))
                 gv_actual_sunrise_time = time.strftime("%H:%M", sunrise_local_time)
 
-                print("%s Sunset time is %s (with offset of %d seconds)" % (
+                print("%s Sunset time is %04d (with offset of %d seconds)" % (
                     time.asctime(),
                     gv_sunset_time,
-                    gv_json_config['sunset']['lights_on_offset']))
+                    gv_json_config['sunset']['offset']))
 
-                print("%s Sunrise time is %s (with offset of %d seconds)" % (
+                print("%s Sunrise time is %04d (with offset of %d seconds)" % (
                     time.asctime(),
                     gv_sunrise_time,
-                    gv_json_config['sunset']['lights_on_offset']))
+                    gv_json_config['sunset']['offset']))
 
             gv_last_sunset_check = now
 
@@ -1310,6 +1312,8 @@ def build_zone_web_page(num_cols):
 def build_device_web_page(num_cols):
     global gv_sunset_time
     global gv_actual_sunset_time
+    global gv_sunrise_time
+    global gv_actual_sunrise_time
     global gv_json_config
 
     # safe snapshot of dict keys into list
@@ -1364,7 +1368,7 @@ def build_device_web_page(num_cols):
 
     dashboard_col_list[0] += (
             '<tr>'
-            '<td class="dash-label">Sunset Time</td>'
+            '<td class="dash-label">Sunset</td>'
             '<td align="center" class="dash-label">'
             '%s'
             '</td>'
@@ -1372,11 +1376,11 @@ def build_device_web_page(num_cols):
 
     dashboard_col_list[0] += (
             '<tr>'
-            '<td class="dash-label">Lights On</td>'
+            '<td class="dash-label">Sunrise</td>'
             '<td align="center" class="dash-label">'
-            '%d'
+            '%s'
             '</td>'
-            '</tr>') % (gv_sunset_time)
+            '</tr>') % (gv_actual_sunrise_time)
 
     dashboard_col_list[0] += (
             '<tr>'
@@ -1384,7 +1388,7 @@ def build_device_web_page(num_cols):
             '<td align="center" class="dash-label">'
             '%s'
             '</td>'
-            '</tr>') % (gv_json_config['sunset']['lights_on_offset'])
+            '</tr>') % (gv_json_config['sunset']['offset'])
 
     # reboot URL for all devices
     href_url = ('/api?device=all&reboot=1')
