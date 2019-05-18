@@ -330,11 +330,9 @@ void set_switch_state(struct gpio_switch *gpio_switch,
     }
 
     // Manual bypass scenario
-    // trumps.. network and motion
-    // If the switch is currently in a manual state on or off
-    // we want to bypass a network context if the manual_interval
-    // is still in play
+    // trumps network or motion contexts
     if (gpio_switch->state_context == SW_ST_CTXT_MANUAL &&
+        gpio_switch->manual_interval &&
         (context == SW_ST_CTXT_NETWORK ||
          context == SW_ST_CTXT_MOTION)) {
         log_message("Ignoring network/motion switch event.. currently in manual over-ride (%d secs)", 
@@ -345,6 +343,7 @@ void set_switch_state(struct gpio_switch *gpio_switch,
     // Motion bypass scenario
     // trumps only network
     if (gpio_switch->state_context == SW_ST_CTXT_MOTION &&
+        gpio_switch->motion_interval &&
         context == SW_ST_CTXT_NETWORK) {
         log_message("Ignoring network switch event.. currently in motion over-ride (%d secs)", 
                     gpio_switch->motion_interval);
