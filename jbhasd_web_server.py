@@ -265,38 +265,42 @@ gv_json_config = {}
 
 def set_default_config():
     global gv_config_file
-    global gv_json_config
 
     print("%s Setting config defaults" % (time.asctime()))
-    gv_json_config = {}
+    json_config = {}
     # discovery
-    gv_json_config['discovery'] = {}
-    gv_json_config['discovery']['zeroconf_refersh_interval'] = 60
-    gv_json_config['discovery']['device_probe_interval'] = 10
-    gv_json_config['discovery']['device_purge_timeout'] = 30
+    json_config['discovery'] = {}
+    json_config['discovery']['zeroconf_refersh_interval'] = 60
+    json_config['discovery']['device_probe_interval'] = 10
+    json_config['discovery']['device_purge_timeout'] = 30
 
     # web
-    gv_json_config['web'] = {}
-    gv_json_config['web']['port'] = 8080
-    gv_json_config['web']['users'] = {}
+    json_config['web'] = {}
+    json_config['web']['port'] = 8080
+    json_config['web']['users'] = {}
 
     # dashboard
-    gv_json_config['dashboard'] = {}
-    gv_json_config['dashboard']['initial_num_columns'] = 1
-    gv_json_config['dashboard']['box_width'] = 210
-    gv_json_config['dashboard']['col_division_offset'] = 20
+    json_config['dashboard'] = {}
+    json_config['dashboard']['initial_num_columns'] = 1
+    json_config['dashboard']['box_width'] = 210
+    json_config['dashboard']['col_division_offset'] = 20
 
     # sunset
-    gv_json_config['sunset'] = {}
-    gv_json_config['sunset']['url'] = 'http://api.sunrise-sunset.org/json?lat=53.349809&lng=-6.2624431&formatted=0'
-    gv_json_config['sunset']['offset'] = 1800
+    json_config['sunset'] = {}
+    json_config['sunset']['url'] = 'http://api.sunrise-sunset.org/json?lat=53.349809&lng=-6.2624431&formatted=0'
+    json_config['sunset']['offset'] = 1800
 
     # Timed switches
-    gv_json_config['switch_timers'] = []
+    json_config['switch_timers'] = []
 
     # Device config
-    gv_json_config['device_profiles'] = []
-    gv_json_config['devices'] = []
+    json_config['device_profiles'] = []
+    json_config['devices'] = []
+
+    # Timezone
+    json_config['timezone'] = 'Europe/Dublin'
+
+    return json_config
 
 
 def load_config(config_file):
@@ -330,9 +334,15 @@ def manage_config():
     global gv_json_config
     last_check = 0
 
+    # Default config in case it does not exist
+    if (not os.path.isfile(gv_config_file)):
+        gv_json_config  = set_default_config()
+        save_config(gv_json_config, gv_config_file)
+
     # 5-second check for config changes
     while (1):
         config_last_modified = os.path.getmtime(gv_config_file)
+
         if config_last_modified > last_check:
             json_config = load_config(gv_config_file)
             if json_config is not None:
@@ -1930,9 +1940,6 @@ class web_console_api_handler(object):
     index._cp_config = {'tools.trailing_slash.on': False}
 
 
-class web_console_ota_handler(object):
-    pass
-
 def web_server():
 
     print("%s Starting console web server on port %d" % (time.asctime(),
@@ -1983,17 +1990,6 @@ def web_server():
     # webhook for API
     cherrypy.tree.mount(web_console_api_handler(), '/')
     cherrypy.tree.mount(web_console_api_handler(), '/api')
-
-    # webhook for OTA
-    ota_conf = {
-       '/': {
-           'tools.staticdir.on': True,
-           'tools.staticdir.dir': gv_home_dir + '/ota',
-           'tools.staticdir.index': 'index.html',
-       }
-    }
-
-    cherrypy.tree.mount(web_console_ota_handler(), '/ota', ota_conf)
 
     # Cherrypy main loop
     cherrypy.engine.start()
