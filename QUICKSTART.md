@@ -9,7 +9,7 @@ Prerequisite installed components:
 OS package for Python3
 gcc (may be used by pip3 when installing packages)
 
-Python packages:
+Python3 packages:
 python-dateutil
 zeroconf
 cherrypy
@@ -39,6 +39,10 @@ what is then happening.
 How it Works:
 
 The web server script is split into several separate threads that each perform a given function. 
+
+Config:
+Watches file ~/..jbhasd_web_server for changes and loads them into memory.
+On the first run, if this file does not exist, a default is created. 
 
 Discovery:
 The script uses zeroconf to discover the devices by their common "JBHASD" type attribute. 
