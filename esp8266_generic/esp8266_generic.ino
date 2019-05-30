@@ -1782,6 +1782,12 @@ uint8_t pin_in_use(uint8_t pin)
                         gpio_switch->name);
             return 1;
         }
+
+        if (gpio_switch->motion_pin == pin) {
+            log_message("pin in use on switch %s motion pin ",
+                        gpio_switch->name);
+            return 1;
+        }
     }
 
     for (gpio_sensor = HTM_LIST_NEXT(gv_device.sensor_list);
@@ -1821,6 +1827,7 @@ const char *get_json_status(uint8_t pretty)
     struct gpio_sensor *gpio_sensor;
     struct gpio_rgb *gpio_rgb;
     struct gpio_argb *gpio_argb;
+    uint32_t now;
 
     log_message("get_json_status(pretty=%d)", pretty);
 
@@ -1840,6 +1847,7 @@ const char *get_json_status(uint8_t pretty)
     json_status["configured"] = gv_device.configured;
 
     // system section
+    now = millis();
     JsonObject system  = json_status.createNestedObject("system");
     system["compile_date"] = gv_sw_compile_date;
     system["reset_reason"] = (char*)ESP.getResetReason().c_str();
@@ -1850,7 +1858,7 @@ const char *get_json_status(uint8_t pretty)
     system["flash_real_size"] = ESP.getFlashChipRealSize();
     system["flash_speed"] = ESP.getFlashChipSpeed();
     system["cycle_count"] = ESP.getCycleCount();
-    system["millis"] = millis();
+    system["millis"] = now;
 
     // controls section for switches & leds 
     JsonArray controls_arr = json_status.createNestedArray("controls");
@@ -1867,6 +1875,9 @@ const char *get_json_status(uint8_t pretty)
         obj["context"] = get_sw_context(gpio_switch->state_context);
         obj["behaviour"] = get_sw_behaviour(gpio_switch->switch_behaviour);
         obj["motion_interval"] = gpio_switch->motion_interval;
+        obj["manual_interval"] = gpio_switch->manual_interval;
+        obj["last_activity_millis"] = gpio_switch->last_activity;
+        obj["last_activity_delta_secs"] = (now - gpio_switch->last_activity) / 1000;
     }
 
     // sensors
