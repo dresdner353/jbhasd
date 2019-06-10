@@ -66,7 +66,7 @@
 #define HTM_RUN_STATE_29      0x20000000
 #define HTM_RUN_STATE_30      0x40000000
 #define HTM_RUN_STATE_31      0x80000000
-#define HTM_RUN_STATE_ALL     0x000000FF  
+#define HTM_RUN_STATE_ALL     0xFFFFFFFF  
 
 
 struct loop_task {
@@ -99,8 +99,7 @@ class HandyTaskMan
                       uint32_t call_interval,
                       void (*fp)(void));
 
-        void remove_task(const char *name,
-                         uint32_t runstate_mask);
+        void remove_task(const char *name);
 
         void set_logger(void (*fp)(char *format, va_list args));
         void log_stats(void);
