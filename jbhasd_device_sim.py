@@ -38,31 +38,61 @@ def get_ip():
     return ip
 
 
-class device_web_server(object):
+class device_status_server(object):
     @cherrypy.expose()
+    @cherrypy.tools.json_out()
 
-    def index(self, update_ip=None, update_port=None, control=None, state=None, reboot=None):
+    def index(self):
         # determine port of called URL 
         parsed_url = urllib.parse.urlparse(cherrypy.url())
         url_port = parsed_url.port
         json_data = json_status_dict[url_port]
         device_name = json_data['name']
 
-        print("%s port:%d device:%s params:%s" % (time.asctime(),
-                                                  url_port,
-                                                  device_name,
-                                                  cherrypy.request.params))
+        print("%s port:%d device:%s" % (time.asctime(),
+                                        url_port,
+                                        device_name))
 
-        if (control is not None and 
-            state is not None):
-            for json_control in json_data['controls']:
-                if json_control['name'] == control:
-                    json_control['state'] = state
+        return json.dumps(json_data, indent = 2)
 
-        return json.dumps(json_data)
 
     # Force trailling slash off on called URL
     index._cp_config = {'tools.trailing_slash.on': False}
+
+
+class device_control_server(object):
+    @cherrypy.expose()
+    @cherrypy.tools.json_out()
+
+    def index(self):
+        # determine port of called URL 
+        parsed_url = urllib.parse.urlparse(cherrypy.url())
+        url_port = parsed_url.port
+        json_data = json_status_dict[url_port]
+        device_name = json_data['name']
+
+        # POST JSON Body
+        cl = cherrypy.request.headers['Content-Length']
+        rawbody = cherrypy.request.body.read(int(cl)).decode("utf-8")
+        json_request = json.loads(str(rawbody))
+
+        print("%s port:%d device:%s \nJSON:\n%s" % (time.asctime(),
+                                        url_port,
+                                        device_name,
+                                        json.dumps(json_request, 
+                                                   indent = 2)))
+
+        for control in json_request['controls']:
+            for json_control in json_data['controls']:
+                if json_control['name'] == control['name']:
+                    json_control['state'] = control['state']
+
+        return json.dumps(json_data, indent = 2)
+
+
+    # Force trailling slash off on called URL
+    index._cp_config = {'tools.trailing_slash.on': False}
+
 
 def change_device_status():
     # Randomise changes in the devices
@@ -110,7 +140,9 @@ my_ip = get_ip()
 
 # more involved start of cherrypy as we 
 # want to have multiple separate ports, one per device
-cherrypy.tree.mount(device_web_server(), '/')
+cherrypy.tree.mount(device_status_server(), '/')
+cherrypy.tree.mount(device_status_server(), '/status')
+cherrypy.tree.mount(device_control_server(), '/control')
 cherrypy.server.unsubscribe()
 # Logging off
 cherrypy.config.update({'log.screen': False,
