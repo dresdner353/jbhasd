@@ -32,7 +32,7 @@ But you can now communicate to the device and see its status information
 So for this example, we'll assume a device was configured and successfully connected to the WiFI network. Also the IP was determined to be 192.168.12.145. So a simple GET on the URL will return a JSON status string detailling the particulars of this device.
 
 ```
-$ curl 'http://192.168.12.145?pretty=1'
+$ curl 'http://192.168.12.145'
 {
   "name": "JBHASD-00072D6D",
   "zone": "ESP-01",
@@ -59,8 +59,6 @@ $ curl 'http://192.168.12.145?pretty=1'
 ```
 
 The section above for controls is where we would normally see details on any switches, sensors etc that are being managed by this device. Given this is a clean setup, no such detail is defined yet. Also the "configured" attribute of this device is set to 0 which confirms that no full device configuration has been pushed to this device.
-
-The pretty=1 args to this call could be omitted or passed with a 0 value and it will then return the JSON status as a single string without the pretty formatting. Use whatever you prefer. 
 
 ## Pushing Configuration to the Device
 
@@ -94,7 +92,7 @@ With the config applied, the device saves the config to EEPROM and reboots again
 Once it reboots again, the following JSON is returned when the device is probed.. 
 
 ```
-$ curl "http://192.168.12.165/?pretty=1"
+$ curl "http://192.168.12.165"
 {
   "name": "JBHASD-0095EB30",
   "zone": "Prototype 1",
@@ -142,7 +140,7 @@ In the above example, we set up a Sonoff Basic device with its relay put to use 
 Now we can instruct the relay to turn on.. 
 
 ```
-$ curl "http://192.168.12.165?pretty=1&control=Relay&state=1"
+$ curl "http://192.168.12.165?control=Relay&state=1"
 {
   "name": "JBHASD-0095EB30",
   "zone": "Prototype 1",
