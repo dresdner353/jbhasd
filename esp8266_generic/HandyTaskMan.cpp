@@ -4,6 +4,10 @@
 #include <Arduino.h>
 #include "HandyTaskMan.h"
 
+// Function set_run_state
+// Changes run state to the desired 32-bit 
+// pattern. This will directly influence the tasks 
+// that are then called
 void HandyTaskMan::set_run_state(uint32_t new_state)
 {
     log("HandyTaskMan::set_run_state(0x%08X)", 
@@ -11,6 +15,9 @@ void HandyTaskMan::set_run_state(uint32_t new_state)
     run_state = new_state;
 }
 
+
+// Function get_run_state
+// returns current run state
 uint32_t HandyTaskMan::get_run_state(void)
 {
     log("HandyTaskMan::get_run_state()");
@@ -18,6 +25,9 @@ uint32_t HandyTaskMan::get_run_state(void)
     return run_state;
 }
 
+
+// Function loop_task_alloc
+// allocates interal loop task struct
 struct loop_task* HandyTaskMan::loop_task_alloc(const char *name)
 {
     struct loop_task *loop_task;
@@ -32,6 +42,8 @@ struct loop_task* HandyTaskMan::loop_task_alloc(const char *name)
     return loop_task;
 }
 
+// Function loop_task_free
+// frees up loop task
 void HandyTaskMan::loop_task_free(struct loop_task* loop_task)
 {
     if (loop_task->name) {
@@ -40,6 +52,11 @@ void HandyTaskMan::loop_task_free(struct loop_task* loop_task)
     free(loop_task);
 }
 
+// Function init
+// initialises task manager 
+// called via constructor but can be manually invoked
+// to wipe the slate clean in terms of callbacks and current
+// run state
 void HandyTaskMan::init(void)
 {
     struct loop_task *loop_task;
@@ -61,6 +78,12 @@ void HandyTaskMan::init(void)
     }
 }
 
+
+// Function add_task
+// Adds a desired callback function based on the 
+// runstate mask of compatible states and a desired interval
+// The mame acts as a unique key.. no two tasks can share the same name
+// regardless of the other values (callback function, mask and interval)
 void HandyTaskMan::add_task(const char *name,
                             uint32_t runstate_mask,
                             uint32_t call_interval,
@@ -73,6 +96,10 @@ void HandyTaskMan::add_task(const char *name,
     log("  Run State mask:0x%08X", runstate_mask);
     log("  Call Interval %ums", call_interval);
 
+    // Remove any existing task with the same name 
+    // Allows for a re-entrant usage
+    remove_task(name);
+
     loop_task = loop_task_alloc(name);
     loop_task->runstate_mask = runstate_mask;
     loop_task->call_interval = call_interval;
@@ -84,21 +111,25 @@ void HandyTaskMan::add_task(const char *name,
     HTM_LIST_INSERT(task_list, loop_task);
 }
 
-void HandyTaskMan::remove_task(const char *name,
-                               uint32_t runstate_mask)
+
+// Function remove_task
+// Removes desired task by name
+void HandyTaskMan::remove_task(const char *name)
 {
     struct loop_task *loop_task, *deleted_task;
 
     log("HandyTaskMan::remove_task()");
     log("  Name:%s", name);
-    log("  Run State mask:0x%08X", runstate_mask);
 
     loop_task = HTM_LIST_NEXT(task_list);
     while (loop_task != task_list) {
-        if (!strcmp(loop_task->name, name) &&
-            (loop_task->runstate_mask == runstate_mask)) {
-            deleted_task = loop_task;
-            loop_task = HTM_LIST_NEXT(loop_task);
+
+        // point at current entry and 
+        // skip to next
+        deleted_task = loop_task;
+        loop_task = HTM_LIST_NEXT(loop_task);
+
+        if (!strcmp(deleted_task->name, name)) {
             HTM_LIST_REMOVE(deleted_task);
             loop_task_free(deleted_task);
             log("found & deleted task");
@@ -106,6 +137,11 @@ void HandyTaskMan::remove_task(const char *name,
     }
 }
 
+
+// Function nudge
+// iterates through register of tasks
+// and calls those that have reached the qualifying
+// run state and callback interval
 void HandyTaskMan::nudge(void)
 {
     struct loop_task *loop_task;
@@ -143,11 +179,18 @@ void HandyTaskMan::nudge(void)
     }
 }
 
+
+// Function set_logger
+// sets optional external logging function
 void HandyTaskMan::set_logger(void (*fp)(char *format, va_list args ))
 {
     log_fp = fp;
 }
 
+
+// Function log
+// internal log function that invokes external 
+// logger if set
 void HandyTaskMan::log(char *format, ... )
 {
     va_list args;
@@ -161,6 +204,11 @@ void HandyTaskMan::log(char *format, ... )
     va_end(args);
 }
 
+
+// Function log_stats
+// Logs stats for all tasks including
+// number of calls and acumulated CPU time.
+// Then it clears down counters
 void HandyTaskMan::log_stats(void)
 {
     struct loop_task *loop_task;
@@ -182,15 +230,17 @@ void HandyTaskMan::log_stats(void)
     }
 }
 
+
+// Constructor
 HandyTaskMan::HandyTaskMan(void)
 {
     init();
 }
 
+
+// Desctructor
 HandyTaskMan::~HandyTaskMan(void)
 {
     init();
     loop_task_free(task_list);
 }
-
-
