@@ -6,10 +6,8 @@
 from zeroconf import ServiceBrowser, Zeroconf
 import socket
 import time
-import urllib
-import urllib.parse
-import urllib.request
-import urllib.error
+import requests
+import sys
 
 url_set = set()
 http_timeout_secs = 2
@@ -29,15 +27,18 @@ class MyListener(object):
         print("\nDiscovered: %s URL: %s" % (server, url))
 
         response = None
+        api_session = requests.session()
+
         try:
-            response = urllib.request.urlopen(url, 
-                                              timeout = http_timeout_secs)
+            response = api_session.get(url)
         except:
             print("Error in urlopen (%s)" % (url))
 
         if response is not None:
-            response_str = response.read()
-            print("%s" % (response_str))
+            response_str = str(response.text)
+            print("json len:%d \n%s" % (len(response_str), response_str))
+
+        sys.stdout.flush()
 
 zeroconf = Zeroconf()  
 listener = MyListener()  
