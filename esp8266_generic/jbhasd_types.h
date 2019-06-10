@@ -1,5 +1,19 @@
 // JBHASD Types
-// Cormac Long October 2017
+// Cormac Long June 2019
+
+// Common Arduino Libraries
+#include <EEPROM.h>
+#include <ESP8266WiFi.h>
+#include <WiFiClient.h>
+#include <ESP8266WebServer.h>
+#include <ESP8266mDNS.h>
+#include <DNSServer.h>
+#include <DHT.h>
+#include <WiFiUdp.h>
+#include <ArduinoOTA.h>
+#include <ArduinoJson.h>
+#include <Adafruit_NeoPixel.h>
+
 
 // Definition for the use of GPIO pins as
 // switches where one pin can control a relay, another can
@@ -155,12 +169,8 @@ struct gpio_argb {
 };
 
 
-// Software Version
-// Crude compile-time grab of date and time
-// into string
-const char *gv_sw_compile_date = "JBHASD-VERSION " __DATE__ " " __TIME__;
-
 struct device_profile {
+    char hostname[MAX_FIELD_LEN + MAX_FIELD_LEN];
     char zone[MAX_FIELD_LEN];
     char wifi_ssid[MAX_FIELD_LEN];
     char wifi_password[MAX_FIELD_LEN];
@@ -168,9 +178,9 @@ struct device_profile {
     uint8_t telnet_enabled;
     uint8_t mdns_enabled;
     uint8_t manual_switches_enabled;
-    uint8_t boot_program_pin;
-    uint8_t wifi_led_pin;
-    uint8_t wifi_led_on_high;
+    uint8_t boot_pin;
+    uint8_t status_led_pin;
+    uint8_t status_led_on_high;
     uint8_t force_apmode_onboot;
     uint8_t configured;
     struct gpio_switch *switch_list;
@@ -179,7 +189,6 @@ struct device_profile {
     struct gpio_argb *argb_list;
 };
 
-struct device_profile gv_device;
 
 #define RUN_STATE_INIT           HTM_RUN_STATE_00
 #define RUN_STATE_WIFI_AP        HTM_RUN_STATE_01
@@ -187,8 +196,6 @@ struct device_profile gv_device;
 #define RUN_STATE_WIFI_STA_UP    HTM_RUN_STATE_03
 #define RUN_STATE_WIFI_OTA       HTM_RUN_STATE_04
 #define RUN_STATE_ALL            HTM_RUN_STATE_ALL
-
-uint8_t gv_reboot_requested = 0;
 
 #define LOGBUF_MAX 2048
 
@@ -198,10 +205,100 @@ enum gv_logging_enum {
     LOGGING_NW_CLIENT,  // Log to connected network client
 };
 
-enum gv_logging_enum gv_logging = LOGGING_NONE;
 
 // Telnet server
 #define MAX_TELNET_CLIENTS 3
 
 // Web
 #define WEB_PORT 80
+
+// Buffer declarations
+
+// Global variables
+extern char gv_config[MAX_CONFIG_LEN];
+extern HandyTaskMan TaskMan;
+extern char gv_mdns_hostname[MAX_FIELD_LEN + MAX_FIELD_LEN];
+extern const char *gv_sw_compile_date;
+extern struct device_profile gv_device;
+extern enum gv_logging_enum gv_logging;
+extern uint8_t gv_reboot_requested;
+
+// Logging
+void start_serial();
+void vlog_message(char *format, va_list args);
+void log_message(char *format, ... );
+void loop_task_telnet();
+void start_telnet();
+
+
+// Sensor
+struct gpio_sensor* gpio_sensor_alloc();
+void setup_sensors();
+void read_sensors();
+
+
+// Switch
+struct gpio_switch* gpio_switch_alloc();
+const char *get_sw_context(enum switch_state_context context);
+const char *get_sw_behaviour(enum switch_behaviour behaviour);
+void restore_status_led_state();
+void toggle_status_led(uint16_t delay_msecs);
+void set_switch_state(struct gpio_switch *gpio_switch,
+                      uint8_t state,
+                      enum switch_state_context context);
+void set_switch_motion_interval(struct gpio_switch *gpio_switch,
+                                uint32_t interval);
+void setup_switches();
+void loop_task_check_switches();
+void loop_task_check_boot_switch();
+struct gpio_switch* find_switch(const char *name);
+
+
+// RGB
+struct gpio_rgb* gpio_rgb_alloc();
+void loop_task_transition_rgb();
+void set_rgb_program(struct gpio_rgb *gpio_rgb,
+                     const char *program);
+void set_rgb_random_program(struct gpio_rgb *gpio_rgb);
+void set_rgb_state(struct gpio_rgb *gpio_rgb);
+void setup_rgbs();
+struct gpio_rgb* find_rgb(const char *name);
+
+
+// ARGB
+struct gpio_argb* gpio_argb_alloc();
+void set_argb_state(struct gpio_argb *gpio_argb);
+void set_argb_program(struct gpio_argb *gpio_argb,
+                     const char *program);
+void loop_task_transition_argb();
+void setup_argbs();
+struct gpio_argb* find_argb(const char *name);
+
+// Config
+void save_config();
+void update_config(char *field, 
+                   const char *sval,
+                   int32_t ival,
+                   uint8_t save_now);
+void reset_config();
+void load_config();
+
+// OTA
+void start_ota();
+void loop_task_ota(void);
+
+// Network
+void start_wifi_ap_mode();
+void start_wifi_sta_mode();
+void start_sta_mode_services();
+void loop_task_webserver(void);
+void loop_task_dns(void);
+void loop_task_check_wifi_down(void);
+void loop_task_check_wifi_up(void);
+void loop_task_status_led(void);
+void loop_task_ap_reboot(void);
+
+
+
+// main ino file
+uint8_t pin_in_use(uint8_t pin);
