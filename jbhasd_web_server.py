@@ -27,6 +27,7 @@ import sys
 import copy
 from dateutil import tz
 from zeroconf import ServiceBrowser, Zeroconf
+import requests
 import cherrypy
 
 ### Begin Web page template
@@ -608,31 +609,27 @@ def discover_devices():
         zeroconf.close()
 
 
-def fetch_url(url, url_timeout, parse_json):
-    # General purpoe URL fetcher
+def get_url(url, url_timeout, parse_json):
+    # General purpose URL GETer
     # return contents of page and parsed as json
     # if the parse_json arg is 1
-    response_str = None
+    #print("GET %s\n" % (url))
 
-    #print("%s Fetching URL:%s, timeout:%d" % (time.asctime(), url, url_timeout)) 
+    response_str = None
 
     response = None
     try:
-        response = urllib.request.urlopen(url,
-                                          timeout = url_timeout)
+        response = requests.get(url,
+                                timeout = url_timeout)
     except:
-        print("%s Error in urlopen URL:%s" % (time.asctime(), url))
- 
+        print("%s Error in GET URL:%s" % (time.asctime(), url))
+
     if response is not None:
-        try:
-            response_str = response.read()
-        except:
-            print("%s Error in response.read() URL:%s" % (time.asctime(), url))
-            return None
+        response_str = response.text
 
         if parse_json:
             try:
-                json_data = json.loads(response_str.decode('utf-8'))
+                json_data = response.json()
             except:
                 print("%s Error in JSON parse.. URL:%s Data:%s" % (time.asctime(),
                                                                    url, 
@@ -642,6 +639,56 @@ def fetch_url(url, url_timeout, parse_json):
 
     return response_str
      
+
+def post_url(url, json_data, url_timeout):
+    # General purpose URL POSTer
+    # for JSON payloads
+    # return contents parsed as json
+
+    #print("POST %s \n%s\n" % (url, json_data))
+
+    response = None
+    try:
+        response = requests.post(url,
+                                 json = json_data,
+                                 timeout = url_timeout)
+    except:
+        print("%s Error in POST URL:%s" % (time.asctime(), url))
+
+    if response is not None:
+        try:
+            json_data = response.json()
+        except:
+            print("%s Error in JSON parse.. URL:%s Data:%s" % (time.asctime(),
+                                                               url, 
+                                                               response.text))
+            return None
+
+        return json_data
+
+    return response
+
+
+def format_control_request(
+        control_name,
+        property,
+        value):
+
+    json_req = {}
+    json_req['controls'] = []
+
+    control = {}
+    control['name'] = control_name
+
+    # Set value and this will auti-type to 
+    # string or int
+    control[property] = value
+
+    json_req['controls'].append(control)
+
+    return json_req
+
+
 
 def check_automated_devices():
     # Check for automated devices
@@ -684,15 +731,13 @@ def check_automated_devices():
                         zone_name,
                         control_name,
                         desired_state))
-                    control_safe = urllib.parse.quote_plus(control_name)
-                    command_url = '%s?control=%s&state=%d' % (
-                                                   url,
-                                                   control_safe,
-                                                   desired_state)
-                    print("%s Issuing command url:%s" % (time.asctime(),
-                                                         command_url))
 
-                    json_data = fetch_url(command_url, gv_http_timeout_secs, 1)
+                    json_req = format_control_request(control_name, 
+                                                      'state',                          
+                                                      desired_state)
+                    json_data = post_url(url + '/control', 
+                                         json_req,
+                                         gv_http_timeout_secs)
                     if (json_data is not None):
                         gv_jbhasd_device_status_dict[device_name] = json_data
                         gv_jbhasd_device_ts_dict[device_name] = int(time.time())
@@ -704,15 +749,12 @@ def check_automated_devices():
                         zone_name,
                         control_name,
                         desired_motion_interval))
-                    control_safe = urllib.parse.quote_plus(control_name)
-                    command_url = '%s?control=%s&motion_interval=%d' % (
-                                                   url,
-                                                   control_safe,
-                                                   desired_motion_interval)
-                    print("%s Issuing command url:%s" % (time.asctime(),
-                                                         command_url))
-
-                    json_data = fetch_url(command_url, gv_http_timeout_secs, 1)
+                    json_req = format_control_request(control_name, 
+                                                      'motion_interval',                          
+                                                      desired_motion_interval)
+                    json_data = post_url(url + '/control', 
+                                         json_req,
+                                         gv_http_timeout_secs)
                     if (json_data is not None):
                         gv_jbhasd_device_status_dict[device_name] = json_data
                         gv_jbhasd_device_ts_dict[device_name] = int(time.time())
@@ -735,14 +777,12 @@ def check_automated_devices():
                                                                             zone_name,
                                                                             control_name,
                                                                             desired_program))
-                    control_safe = urllib.parse.quote_plus(control_name)
-                    command_url = '%s?control=%s&program=%s' % (url,
-                                                                control_safe,
-                                                                desired_program)
-                    print("%s Issuing command url:%s" % (time.asctime(),
-                                                         command_url))
-
-                    json_data = fetch_url(command_url, gv_http_timeout_secs, 1)
+                    json_req = format_control_request(control_name, 
+                                                      'program',                          
+                                                      desired_program)
+                    json_data = post_url(url + '/control', 
+                                         json_req,
+                                         gv_http_timeout_secs)
                     if (json_data is not None):
                         gv_jbhasd_device_status_dict[device_name] = json_data
                         gv_jbhasd_device_ts_dict[device_name] = int(time.time())
@@ -819,26 +859,20 @@ def configure_device(url, device_name):
                     config_control['name'] = custom_name
 
 
-        # Format indented and unindented
-        # Send unindented
+        # Format Config
         device_config = json.dumps(
-                config_dict,
-                sort_keys=True)
-        indented_device_config = json.dumps(
                 config_dict, 
                 indent=4, 
                 sort_keys=True)
         print("%s Sending config (%d bytes):\n%s\n" % (
             time.asctime(), 
             len(device_config),
-            indented_device_config))
+            device_config))
 
-        config_safe = urllib.parse.quote_plus(device_config)
-        prov_url = '%s?config=%s' % (url,
-                                     config_safe)
-        # fire config at device
-        # no need to capture response
-        json_data = fetch_url(prov_url, gv_http_timeout_secs, 1)
+        # POST to /configure function of URL
+        requests.post(url + '/configure', 
+                      json = config_dict, 
+                      timeout = gv_http_timeout_secs)
 
         # Purge URL from discovered URL set in case its 
         # already present
@@ -876,7 +910,7 @@ def probe_devices():
         if ((now - gv_last_sunset_check) >= 6*60*60): # every 6 hours
             # Re-calculate
             print("%s Getting Sunset times.." % (time.asctime()))
-            json_data = fetch_url(gv_json_config['sunset']['url'], 20, 1)
+            json_data = get_url(gv_json_config['sunset']['url'], 20, 1)
             if json_data is not None:
                 # Sunset
                 sunset_str = json_data['results']['sunset']
@@ -923,7 +957,7 @@ def probe_devices():
         purged_urls = 0
         control_changes = 0
         for url in device_url_list:
-            json_data = fetch_url(url, gv_http_timeout_secs, 1)
+            json_data = get_url(url, gv_http_timeout_secs, 1)
             if (json_data is not None):
                 device_name = json_data['name']
                 if ('configured' in json_data and
@@ -997,7 +1031,9 @@ def probe_devices():
                 del gv_jbhasd_device_url_dict[device_name]
                 del gv_jbhasd_device_ts_dict[device_name]
                 del gv_jbhasd_device_status_dict[device_name]
-                gv_jbhasd_zconf_url_set.remove(url)
+
+                if url in gv_jbhasd_zconf_url_set:
+                    gv_jbhasd_zconf_url_set.remove(url)
 
         # Automated devices
         check_automated_devices()
@@ -1719,6 +1755,10 @@ def process_console_action(
         state, 
         program):
 
+
+    # list used to buok handle
+    # simple URL API calls for GET
+    # use cases.. reboot. reconfigure, apmode
     command_url_list = []
     reboot_all = 0
     reconfig_all = 0
@@ -1735,7 +1775,7 @@ def process_console_action(
                 print("%s Rebooting %s" % (time.asctime(),
                                            device))
 
-                command_url_list.append('%s?reboot=1' % (url))
+                command_url_list.append('%s/reboot' % (url))
 
         elif device in gv_jbhasd_device_url_dict:
             url = gv_jbhasd_device_url_dict[device]
@@ -1743,7 +1783,7 @@ def process_console_action(
             print("%s Rebooting %s" % (time.asctime(),
                                        device))
 
-            command_url_list.append('%s?reboot=1' % (url))
+            command_url_list.append('%s/reboot' % (url))
             
     if (device is not None and
         reconfig is not None):
@@ -1757,7 +1797,7 @@ def process_console_action(
                 print("%s Reconfiguring %s" % (time.asctime(),
                                                device))
 
-                command_url_list.append('%s?reconfig=1' % (url))
+                command_url_list.append('%s/reconfigure' % (url))
 
         elif device in gv_jbhasd_device_url_dict:
             url = gv_jbhasd_device_url_dict[device]
@@ -1765,7 +1805,7 @@ def process_console_action(
             print("%s Reconfiguring %s" % (time.asctime(),
                                            device))
 
-            command_url_list.append('%s?reconfig=1' % (url))
+            command_url_list.append('%s/reconfigure' % (url))
 
     if (device is not None and
         apmode is not None):
@@ -1776,7 +1816,7 @@ def process_console_action(
             print("%s Rebooting %s into AP Mode" % (time.asctime(),
                                                     device))
 
-            command_url_list.append('%s?apmode=1' % (url))
+            command_url_list.append('%s/apmode' % (url))
 
     if (device is not None and
         zone is not None and
@@ -1791,13 +1831,18 @@ def process_console_action(
                                                              control,
                                                              state))
 
-            # Format URL and pass control name through quoting function
-            # Will handle any special character formatting for spaces
-            # etc
-            control_safe = urllib.parse.quote_plus(control)
-            command_url_list.append('%s?control=%s&state=%s' % (url,
-                                                                control_safe,
-                                                                state))
+            # Construct JSON POST body to set control state
+            json_req = format_control_request(control, 
+                                              'state',                          
+                                              state)
+            json_data = post_url(url + '/control', 
+                                 json_req,
+                                 gv_http_timeout_secs)
+            if (json_data is not None):
+                # update the status and ts as returned
+                gv_jbhasd_device_status_dict[device] = json_data
+                gv_jbhasd_device_ts_dict[device] = int(time.time())
+
     if (device is not None and
         zone is not None and
         control is not None and
@@ -1811,18 +1856,25 @@ def process_console_action(
                                                                control,
                                                                program))
 
-            # Format URL and pass control name through quoting function
-            # Will handle any special character formatting for spaces
-            # etc
-            control_safe = urllib.parse.quote_plus(control)
-            command_url_list.append('%s?control=%s&program=%s' % (url,
-                                                                  control_safe,
-                                                                  program))
+            # Construct JSON POST body to set program 
+            json_req = format_control_request(control, 
+                                              'program',                          
+                                              program)
+            json_data = post_url(url + '/control', 
+                                 json_req,
+                                 gv_http_timeout_secs)
+            if (json_data is not None):
+                # update the status and ts as returned
+                gv_jbhasd_device_status_dict[device] = json_data
+                gv_jbhasd_device_ts_dict[device] = int(time.time())
+
+
+    # Bulk stuff
     for url in command_url_list:
         print("%s Issuing command url:%s" % (time.asctime(),
                                              url))
 
-        json_data = fetch_url(url, gv_http_timeout_secs, 1)
+        json_data = get_url(url, gv_http_timeout_secs, 1)
         if (json_data is not None):
             # update the status and ts as returned
             gv_jbhasd_device_status_dict[device] = json_data
