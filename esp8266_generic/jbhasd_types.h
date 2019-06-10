@@ -293,6 +293,7 @@ void start_wifi_sta_mode();
 void start_sta_mode_services();
 void loop_task_webserver(void);
 void loop_task_dns(void);
+void loop_task_mdns(void);
 void loop_task_check_wifi_down(void);
 void loop_task_check_wifi_up(void);
 void loop_task_status_led(void);

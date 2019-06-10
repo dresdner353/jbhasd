@@ -309,6 +309,12 @@ void wifi_init()
                      50,
                      loop_task_dns);
 
+    // MDNS Server every 50ms
+    TaskMan.add_task("MDNS",
+                     RUN_STATE_WIFI_STA_UP,
+                     50,
+                     loop_task_mdns);
+
     // AP WiFI LED every 100 ms (fast)
     TaskMan.add_task("AP Status LED",
                      RUN_STATE_WIFI_AP,
@@ -671,6 +677,13 @@ void loop_task_dns(void)
     dns_server.processNextRequest();
 }
 
+
+// Function loop_task_mdns
+// MDNS nudge callback to keep MDNS operational
+void loop_task_mdns(void)
+{
+    MDNS.update();
+}
 
 // Function loop_task_wifi_down
 // Checks is WiFI is down and acts accordingly
