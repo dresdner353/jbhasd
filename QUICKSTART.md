@@ -22,18 +22,15 @@ python3 jbhasd/jbhasd_web_server.py
 ```
 
 .. if it works, point your browser as localhost:8080 or your machines IP:8080. If its working, 
-you should see a page with a gray gradient background with a timestamp top-right.
+you should see a page with a gray gradient background with a timestamp top-right. The first run of this script will also write a defautl config file to ~/.jbhasd_web_server
 
-Then start the simulator:
+Then start the simulator on a separate terminal:
 python3 jbhasd/jbhasd_device_sim.py
 
-You can run the simulator on the same machine as the webserver or on a separate machine. This will 
-start registering a fake device per US state with randomly added switches and sensors to each device.
-It will then advertise the fake devices on MDNS and DNS-SD. The webserver script will detect these simulated devices via zeroconf and start probing them. The web console page should refresh with 
-widget panels being added for each discovered device. Each device uses a webserver on 
-port >= 9000 .. the ports are incremeneted as each new device is created. 
+You can run the simulator on the same machine as the webserver or on a separate machine on the same network. This will start registering a fake device per US state with randomly added switches and sensors to each device. 
+It will then advertise the fake devices on MDNS and DNS-SD. The webserver script will detect these simulated devices via zeroconf and start probing them. The web console page should refresh with widget panels being added for each discovered device. Each device uses a webserver on port >= 9000 .. the ports are incremeneted as each new device is created. 
 
-The console of each run script provides logging detail that should help understand 
+The console of each running script provides logging detail that should help understand 
 what is then happening. 
 
 How it Works:
@@ -89,11 +86,4 @@ updated JSON status that is captured after the given switch change is applied.
 The rendered web page also uses a timed background refresh that refreshes the page seamlessly
 every 10 seconds. It uses the same jquery javascript approach to this so content just 
 updates itself with no old-style page reload.
-
-If devices change their own state by means of physical button pushes, they will issue push messages 
-to the webserver. That's achieved by the probe stage where the webserver gave the device an IP and 
-port to use for push notifications. When the device issues the push, it merely gives its device 
-name and the webserver then looks that up in the register and performs an immediate fetch of 
-the JSON URL, updating the internal register. This will be reworked a bit more eventually to use 
-long polling on the client web side and have instant dashboard updates based on these push requests.
 
