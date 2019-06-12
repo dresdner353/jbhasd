@@ -1874,12 +1874,9 @@ def process_console_action(
         print("%s Issuing command url:%s" % (time.asctime(),
                                              url))
 
-        json_data = get_url(url, gv_http_timeout_secs, 1)
-        if (json_data is not None):
-            # update the status and ts as returned
-            gv_jbhasd_device_status_dict[device] = json_data
-            gv_jbhasd_device_ts_dict[device] = int(time.time())
-
+        # Not going to track response data
+        # for bulk operations
+        get_url(url, gv_http_timeout_secs, 1)
 
     # If a reboot all was performed
     # we need to wipe the dicts now
@@ -2036,11 +2033,11 @@ def web_server():
         conf = {}
 
     # Set webhooks for zone and device
+    cherrypy.tree.mount(web_console_zone_handler(), '/', conf)
     cherrypy.tree.mount(web_console_zone_handler(), '/zone', conf)
     cherrypy.tree.mount(web_console_device_handler(), '/device', conf)
 
     # webhook for API
-    cherrypy.tree.mount(web_console_api_handler(), '/')
     cherrypy.tree.mount(web_console_api_handler(), '/api')
 
     # Cherrypy main loop
