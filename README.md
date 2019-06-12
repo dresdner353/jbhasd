@@ -1,4 +1,6 @@
 # jbhasd 
+
+To be continued..
 #    "JSON-Based Home Automation with Service Discovery"
 
 
@@ -83,7 +85,7 @@ We first put a JSON config definition into a file device_config.json. It's conte
     "ota_enabled": 1,
     "status_led_pin": 13,
     "telnet_enabled": 1,
-    "wifi_password": "h0tcak3y",
+    "wifi_password": "XXXXX",
     "wifi_ssid": "cormac-L",
     "zone": "Sonoff Desktop Test",
     "controls": [
@@ -188,5 +190,74 @@ $ curl 'http://192.168.12.165/status'
 So now, we have a populated 'controls' array being returned that describes the available controls. This is crucial as it plays a role later on in how this device is then integrated with hub-type applications that need to discover capabilities and manipulate specific devices and controls. 
 
 ## Manipulating controls on the Device
-In the above example, we set up a Sonoff Basic device with its relay put to use.
+To control the device from the network, we can POST JSON directives to the /control API function as follows:
 
+```
+curl -XPOST 'http://192.168.12.165/control' -d '
+{
+    "controls" : [
+        {
+            "name": "My Relay", 
+            "state": 1
+        }
+    ]
+}'
+```
+
+The JSON payload contains a "controls" array and has an control object per control we wish to manipulate. In this case we specified a single control called "My Relay" and set it's state to 1. This will cause the Sonoff device I'm using to turn on the rely being controlled by the "My Relay" control. 
+
+The response I receive is simply the same JSON status you get from the /status API call and this status will now show the updated status of the targetted control. 
+
+```
+{
+  "name": "JBHASD-0095EB30",
+  "zone": "Sonoff Desktop Test",
+  "wifi_ssid": "cormac-L",
+  "ota_enabled": 1,
+  "telnet_enabled": 1,
+  "mdns_enabled": 1,
+  "manual_switches_enabled": 1,
+  "configured": 1,
+  "system": {
+    "compile_date": "JBHASD-VERSION Jun 10 2019 23:58:14",
+    "reset_reason": "Software/System restart",
+    "free_heap": 19200,
+    "chip_id": 9825072,
+    "flash_id": 1327328,
+    "flash_size": 1048576,
+    "flash_real_size": 1048576,
+    "flash_speed": 40000000,
+    "cycle_count": 3285025550,
+    "millis": 2686841
+  },
+  "controls": [
+    {
+      "name": "My Relay",
+      "type": "switch",
+      "state": 1,
+      "context": "network",
+      "behaviour": "toggle",
+      "motion_interval": 0,
+      "manual_interval": 0,
+      "last_activity_millis": 2686840,
+      "last_activity_delta_secs": 0
+    }
+  ]
+}
+```
+
+To turn off that control, we just call the same function and set the state to 0:
+
+```
+curl -XPOST 'http://192.168.12.165/control' -d '
+{
+    "controls" : [
+        {
+            "name": "My Relay", 
+            "state": 1
+        }
+    ]
+}'
+```
+
+To be continued..
