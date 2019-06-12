@@ -141,8 +141,14 @@ my_ip = get_ip()
 # more involved start of cherrypy as we 
 # want to have multiple separate ports, one per device
 cherrypy.tree.mount(device_status_server(), '/')
-cherrypy.tree.mount(device_status_server(), '/status')
 cherrypy.tree.mount(device_control_server(), '/control')
+
+# Dummy status handlers for the other API functions
+cherrypy.tree.mount(device_status_server(), '/reboot')
+cherrypy.tree.mount(device_status_server(), '/apmode')
+cherrypy.tree.mount(device_status_server(), '/reset')
+cherrypy.tree.mount(device_status_server(), '/reconfigure')
+cherrypy.tree.mount(device_status_server(), '/configure')
 cherrypy.server.unsubscribe()
 # Logging off
 cherrypy.config.update({'log.screen': False,
