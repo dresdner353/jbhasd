@@ -41,7 +41,7 @@ json len:575
 {
   "name": "JBHASD-0095EB30",
   "zone": "Needs Setup",
-  "wifi_ssid": "cormac-L",
+  "wifi_ssid": "My WiFI SSID",
   "ota_enabled": 1,
   "telnet_enabled": 1,
   "mdns_enabled": 1,
@@ -85,8 +85,8 @@ We first put a JSON config definition into a file device_config.json. It's conte
     "ota_enabled": 1,
     "status_led_pin": 13,
     "telnet_enabled": 1,
-    "wifi_password": "XXXXX",
-    "wifi_ssid": "cormac-L",
+    "wifi_password": "My WiFi Password",
+    "wifi_ssid": "My WiFi SSID",
     "zone": "Sonoff Desktop Test",
     "controls": [
         {
@@ -153,7 +153,7 @@ $ curl 'http://192.168.12.165/status'
 {
   "name": "JBHASD-0095EB30",
   "zone": "Sonoff Desktop Test",
-  "wifi_ssid": "cormac-L",
+  "wifi_ssid": "My WiFI SSID",
   "ota_enabled": 1,
   "telnet_enabled": 1,
   "mdns_enabled": 1,
@@ -212,7 +212,7 @@ The response I receive is simply the same JSON status you get from the /status A
 {
   "name": "JBHASD-0095EB30",
   "zone": "Sonoff Desktop Test",
-  "wifi_ssid": "cormac-L",
+  "wifi_ssid": "My WiFI SSID",
   "ota_enabled": 1,
   "telnet_enabled": 1,
   "mdns_enabled": 1,
