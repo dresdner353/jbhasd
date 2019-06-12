@@ -260,4 +260,26 @@ curl -XPOST 'http://192.168.12.165/control' -d '
 }'
 ```
 
+## Other API calls
+
+Reboot the device:
+```
+curl 'http://192.168.12.165/reboot'
+```
+
+Reboot the device to AP Mode:
+```
+curl 'http://192.168.12.165/apmode'
+```
+
+Reset the device (wipe config):
+```
+curl 'http://192.168.12.165/reset'
+```
+
+Set the device for reconfiguring:
+```
+curl 'http://192.168.12.165/reconfigure'
+```
+
 To be continued..
