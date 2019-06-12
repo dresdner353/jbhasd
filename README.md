@@ -118,22 +118,22 @@ The response received is a JSON payload which includes an error value of 0 for s
 
 
 To summarise  top-level fields:
-* boot_pin
-  This configures the GPIO pin for the boot switch. This switch plays an important role when you with to reset the device config or change it's WiFI settings. When the device boots, you have 5 seconds to ground the assigned boot pin to put it into AP Mode. Otherwise it will connect in STA mode (client) after those 5 seconds elapse
-* status_led_pin
-  This pin defines an optional GPIO for use as a status LED. 
-* manual_switches_enabled
-  This field can be used to blanket-disable all manual switches configured on the device. Handy if it needs to be deployed where manual pushes on the buttons need to be avoided. This only applys to button pushes on configured switches and not the boot_pin.
-* mdns_enabled
-  This can be used to enable/disable MDNS and DNS-SD for the device. The default should be to leave this enabled as it will ensure the device can be discovered
-* ota_enabled
-  This enables Arduino OTA functionality and is a very handy way to flash updated firmware to devices. 
-* telnet_enabled
-  Telnet support is used for logging. If enabled, you can telned to the device IP and receive a live debug log of actitiy on the device. Telnet support will disable Serial logging once it activates. So in some cases when debugging, you may need to configure this option as disabled to ensure the device only logs to serial.
-* wifi_ssid & wifi_password
-  Pretty obvious what these are. They let you specify the credentials of the WiFi router you want to connect to. They can be omitted from the configuration call meaning the initial Wifi details will be preserved. 
-* zone
-  Zone defines a simple string to name the device location. It plays a role later on in organising devices on the web server dashboard
+* boot_pin  
+This configures the GPIO pin for the boot switch. This switch plays an important role when you with to reset the device config or change it's WiFI settings. When the device boots, you have 5 seconds to ground the assigned boot pin to put it into AP Mode. Otherwise it will connect in STA mode (client) after those 5 seconds elapse
+* status_led_pin  
+This pin defines an optional GPIO for use as a status LED. 
+* manual_switches_enabled  
+This field can be used to blanket-disable all manual switches configured on the device. Handy if it needs to be deployed where manual pushes on the buttons need to be avoided. This only applys to button pushes on configured switches and not the boot_pin.
+* mdns_enabled  
+This can be used to enable/disable MDNS and DNS-SD for the device. The default should be to leave this enabled as it will ensure the device can be discovered
+* ota_enabled  
+This enables Arduino OTA functionality and is a very handy way to flash updated firmware to devices. 
+* telnet_enabled  
+Telnet support is used for logging. If enabled, you can telned to the device IP and receive a live debug log of actitiy on the device. Telnet support will disable Serial logging once it activates. So in some cases when debugging, you may need to configure this option as disabled to ensure the device only logs to serial.
+* wifi_ssid & wifi_password  
+Pretty obvious what these are. They let you specify the credentials of the WiFi router you want to connect to. They can be omitted from the configuration call meaning the initial Wifi details will be preserved. 
+* zone  
+Zone defines a simple string to name the device location. It plays a role later on in organising devices on the web server dashboard
 
 We're now at the controls array and what you can see is a JSON sub-object for a control named 'My Relay' of type 'switch'. The switch is in 'toggle' mode, meaning it's assigned manual pin toggles between on/off. The relay pin is set to 12, LED pin to 13 and manual pin to 0. 
 
