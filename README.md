@@ -254,7 +254,7 @@ curl -XPOST 'http://192.168.12.165/control' -d '
     "controls" : [
         {
             "name": "My Relay", 
-            "state": 1
+            "state": 0
         }
     ]
 }'
