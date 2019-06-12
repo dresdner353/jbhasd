@@ -29,7 +29,7 @@ But you can now communicate to the device and see its status information. The de
 
 ## Getting the Device JSON Status
 
-You can use your WiFI router to tell you what IP was assigned but this project also includes a script to run a doscovery of devices on your LAN.
+You can use your WiFI router to tell you what IP was assigned but this project also includes a script to run a discovery of devices on your LAN.
 
 ```
 python3 jbhasd/jbhad_discover.py
@@ -61,13 +61,17 @@ json len:575
 }
 ```
 
-The script uses zeroconf to locate services matching "_JBHASD._tcp.local." It outputs the URL of each discovered device and calls a GET on that URL showing the returned JSON state details. 
+The script uses zeroconf to locate services matching "_JBHASD._tcp.local." It outputs the URL of each discovered device and calls a GET on that URL showing the returned JSON state details. You will get the same JSON response with:
+
+```
+curl http://192.168.12.165:80/status
+```
 
 The section above for controls is where we would normally see details on any switches, sensors etc that are being managed by this device. Given this is a clean setup, no such detail is defined yet. Also the "configured" attribute of this device is set to 0 which confirms that no full device configuration has been pushed to this device.
 
 ## Pushing Configuration to the Device
 
-The example below is how you would push cofiguration to a given device and set up it's GPIO pins to control any attached hardware or onboard features.
+The example below is how you would push configuration to a given device and set up it's GPIO pins to control any attached hardware or onboard features.
 
 We first put a JSON config definition into a file device_config.json. It's contents are as follows:
 
