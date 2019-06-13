@@ -288,10 +288,6 @@ void wifi_init()
                 "JBHASD-%08X",
                 ESP.getChipId());
 
-    // Disable WiFI storing of settings in 
-    // flash. We do this ourselves
-    //WiFi.persistent(false);
-
     // Loop tasks
     // AP auto-reboot after 5 mins
     TaskMan.add_task("AP Reboot Timer",
