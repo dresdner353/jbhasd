@@ -144,7 +144,7 @@ void ap_handle_root()
     uint8_t i;
     char *str_ptr;
     char *selected_str;
-    static uint32_t last_scanned = 0;
+    static uint8_t initial_scan = 1;
 
     static uint8_t num_networks;
     uint32_t now;
@@ -153,50 +153,38 @@ void ap_handle_root()
 
     // check for post args
 
-    if (gv_web_server.hasArg("reset") &&
+    if (gv_web_server.hasArg("rescan") || initial_scan) {
+        log_message("scanning wifi networks");
+        num_networks = WiFi.scanNetworks();
+        log_message("found %d SSIDs", num_networks);
+        initial_scan = 0;
+    }
+    else if (gv_web_server.hasArg("reset") &&
         // Reset will trump others if set to 1
         strcmp(gv_web_server.arg("reset").c_str(), "1") == 0) {
         log_message("Reset via AP Mode");
         reset_config();
         gv_reboot_requested = 1;
     }
-    else {
-        // normal wifi setup
-        if (gv_web_server.hasArg("ssid")) {
-            // actual normal config updates
-            gv_reboot_requested = 1;
+    else if (gv_web_server.hasArg("ssid")) {
+        // actual normal config updates
+        gv_reboot_requested = 1;
 
-            update_config("wifi_ssid", 
-                          gv_web_server.arg("ssid").c_str(),
-                          0,
-                          0);
+        update_config("wifi_ssid", 
+                      gv_web_server.arg("ssid").c_str(),
+                      0,
+                      0);
 
-            update_config("wifi_password", 
-                          gv_web_server.arg("password").c_str(),
-                          0,
-                          1);
-        }
+        update_config("wifi_password", 
+                      gv_web_server.arg("password").c_str(),
+                      0,
+                      1);
     }
 
     if (gv_reboot_requested) {
         gv_web_server.send(200, "text/html", "Applying settings and rebooting");
     }
     else {
-        // Scan wifi network
-        // initially at startup
-        // and no more than every 30 seconds
-        // handles refreshes of this page so 
-        // that we will not rescan each time
-        // and stall the AP mode
-        now = millis();
-        if (now - last_scanned > 30000 || 
-            last_scanned == 0) {
-            log_message("scanning wifi networks");
-            num_networks = WiFi.scanNetworks();
-            log_message("found %d SSIDs", num_networks);
-            last_scanned = now;
-        }
-
         // Build combo list of discovered 
         // networks and try to set current SSID
         // as selected entry
@@ -230,6 +218,12 @@ void ap_handle_root()
                     "<h2>%s Setup</h2>"
                     "<form action=\"/\" method=\"post\">"
                     "<div>"
+                    "<input type=\"hidden\" id=\"rescan\" name=\"rescan\" value=\"1\">"
+                    "<button>Rescan WiFi Networks</button>"
+                    "</div>"
+                    "</form>"
+                    "<form action=\"/\" method=\"post\">"
+                    "<div>"
                     "    <label>WIFI SSID:</label>"
                     "    <select name=\"ssid\">"
                     "    %s"
@@ -247,7 +241,7 @@ void ap_handle_root()
                     "    </select>"
                     "</div>"
                     "<div>"
-                    "<button class=\"btn btn-primary\">Apply Settings</button>"
+                    "<button>Apply Settings</button>"
                     "</div>"
                     "<br><br>"
                     "<br><br>"
@@ -280,6 +274,15 @@ void ap_handle_root()
 // modes
 void wifi_init()
 {
+    static uint8_t first_run = 1;
+
+    // No need to let these calls
+    // get repeated
+    if (!first_run) {
+        return;
+    }
+    first_run = 0;
+
     // Set MDNS hostname based on prefix and chip ID
     ets_sprintf(gv_device.hostname,
                 "JBHASD-%08X",
@@ -287,7 +290,7 @@ void wifi_init()
 
     // Disable WiFI storing of settings in 
     // flash. We do this ourselves
-    WiFi.persistent(false);
+    //WiFi.persistent(false);
 
     // Loop tasks
     // AP auto-reboot after 5 mins
@@ -605,7 +608,7 @@ void start_wifi_sta_mode()
     // Turn off first as it better 
     // handles recovery after WIFI router
     // outages
-    WiFi.mode(WIFI_OFF);
+    WiFi.disconnect();
     WiFi.mode(WIFI_STA);
     WiFi.hostname(gv_device.hostname);
     WiFi.begin(gv_device.wifi_ssid,
