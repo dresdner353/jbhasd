@@ -4,7 +4,42 @@
 // Global config
 char gv_config[MAX_CONFIG_LEN];
 
+// Int value wrapper on Arduino JSON
+int json_get_ival(JsonVariant variant,
+                  int def_ival)
+{
+    int ival;
 
+    log_message("json_get_ival(def=%d)", def_ival);
+
+    if (variant.isNull()) {
+        log_message("returning default %d", def_ival);
+        return def_ival;
+    }
+    else {
+        ival = variant;
+        log_message("returning config %d", ival);
+        return ival;
+    }
+}
+
+// String value wrapper on Arduino JSON
+const char *json_get_sval(JsonVariant variant,
+                          const char *def_sval)
+{
+    const char *sval;
+    log_message("json_get_sval(def=%s)", def_sval);
+
+    if (variant.isNull()) {
+        log_message("returning default %s", def_sval);
+        return def_sval;
+    }
+    else {
+        sval = variant;
+        log_message("returning config %s", sval);
+        return sval;
+    }
+}
 // Function: save_config
 // Writes config to EEPROM
 void save_config()
@@ -156,17 +191,6 @@ void load_config()
                 strlen(gv_config), 
                 gv_config);
 
-    // Extra Sanity on config data
-    // we should have what seem to tokens for zone, wifi 
-    // and password
-    if (!strstr(gv_config, "\"zone\"") ||
-        !strstr(gv_config, "\"wifi_ssid\"") ||
-        !strstr(gv_config, "\"wifi_password\"")) {
-        log_message("Config likely corrupt.. resetting");
-        reset_config();
-        return;
-    }
-
     // JSON parse from config
     // Assuming 4k is fine for the overheads
     // we might encounter
@@ -179,28 +203,46 @@ void load_config()
         return;
     }
 
-    // Standard top-level string and int fields
-
+    // Main three config fields, SSID, password and Zone
     // Wifi SSID is the main man here.. if empty, we
     // reset
     strcpy(gv_device.wifi_ssid, json_cfg["wifi_ssid"]);
+    strcpy(gv_device.wifi_password, json_cfg["wifi_password"]);
+    strcpy(gv_device.zone, json_get_sval(json_cfg["zone"], "Unknown"));
+
+    // SSID is mandatory
     if (strlen(gv_device.wifi_ssid) == 0) {
         log_message("Empty WiFI SSID.. resetting");
         reset_config();
         return;
     }
 
-    strcpy(gv_device.zone, json_cfg["zone"]);
-    strcpy(gv_device.wifi_password, json_cfg["wifi_password"]);
-    gv_device.ota_enabled = json_cfg["ota_enabled"];
-    gv_device.telnet_enabled = json_cfg["telnet_enabled"];
-    gv_device.mdns_enabled = json_cfg["mdns_enabled"];
-    gv_device.manual_switches_enabled = json_cfg["manual_switches_enabled"];
-    gv_device.boot_pin = json_cfg["boot_pin"];
-    gv_device.status_led_pin = json_cfg["status_led_pin"];
-    gv_device.status_led_on_high = json_cfg["status_led_on_high"];
-    gv_device.force_apmode_onboot = json_cfg["force_apmode_onboot"];
-    gv_device.configured = json_cfg["configured"];
+    // OTA enabled, default 1
+    gv_device.ota_enabled = json_get_ival(json_cfg["ota_enabled"], 1);
+
+    // Telnet logging enabled, default 1
+    gv_device.telnet_enabled = json_get_ival(json_cfg["telnet_enabled"], 1);
+
+    // MDNS Discovery, default 1
+    gv_device.mdns_enabled = json_get_ival(json_cfg["mdns_enabled"], 1);
+
+    // Manual switches enabled, default 1
+    gv_device.manual_switches_enabled = json_get_ival(json_cfg["manual_switches_enabled"], 1);
+
+    // Boot pin, default GPIO0
+    gv_device.boot_pin = json_get_ival(json_cfg["boot_pin"], 0);
+
+    // Status LED pin, default 255 (none)
+    gv_device.status_led_pin = json_get_ival(json_cfg["status_led_pin"], NO_PIN);
+
+    // Status LED high, default 0
+    gv_device.status_led_on_high = json_get_ival(json_cfg["status_led_on_high"], 0);
+
+    // Forced AP Mode, default 0
+    gv_device.force_apmode_onboot = json_get_ival(json_cfg["force_apmode_onboot"], 0);
+
+    // Configured state, default 0
+    gv_device.configured = json_get_ival(json_cfg["configured"], 0);
 
     JsonArray controls = json_cfg["controls"];
     if (controls.isNull()) {
@@ -211,66 +253,73 @@ void load_config()
     // Loop through each control
     // each should have a name and type as standard
     for (JsonObject control : controls) {
-        const char* control_name = control["name"];
-        const char* control_type = control["type"];
-        const uint8_t enabled = control["enabled"];
 
-        if (control_name && control_type) {
+        // contriol name, type and enabled fields
+        const char *control_name = json_get_sval(control["name"], "");
+        const char *control_type = json_get_sval(control["type"], "");
+        uint8_t control_enabled = json_get_ival(control["enabled"], 0);
+
+        // control name and type must be set to something
+        if (strlen(control_name) > 0 &&
+            strlen(control_type) > 0 &&
+            control_enabled) {
             log_message("Control:%s, Type:%s Enabled:%d",
                         control_name, 
                         control_type,
-                        enabled);
-
-            if (!enabled) {
-                log_message("disabled.. ignoring");
-                continue;
-            }
+                        control_enabled);
 
             if (!strcmp(control_type, "switch")) {
                 // switch
-                const char* sw_mode = control["sw_mode"];
-
                 gpio_switch = gpio_switch_alloc();
                 HTM_LIST_INSERT(gv_device.switch_list, gpio_switch);
 
                 strcpy(gpio_switch->name, control_name);
-                gpio_switch->relay_pin = control["sw_relay_pin"];
-                gpio_switch->relay_on_high = control["sw_relay_on_high"];
-                gpio_switch->led_pin = control["sw_led_pin"];
-                gpio_switch->led_on_high = control["sw_led_on_high"];
-                gpio_switch->manual_pin = control["sw_man_pin"];
-                gpio_switch->manual_interval = control["sw_man_interval"];
-                gpio_switch->manual_auto_off = control["sw_man_auto_off"];
-                gpio_switch->current_state = control["sw_state"];
 
-                gpio_switch->switch_behaviour = SW_BHVR_TOGGLE;
-                if (!strcmp(sw_mode, "on")) {
+                // Relay, default no PIN and on is HIGH
+                gpio_switch->relay_pin = json_get_ival(control["relay_pin"], NO_PIN);
+                gpio_switch->relay_on_high = json_get_ival(control["relay_on_high"], 1);
+
+                // switch LED, default none and on is low
+                gpio_switch->led_pin = json_get_ival(control["led_pin"], NO_PIN);
+                gpio_switch->led_on_high = json_get_ival(control["led_on_high"], 0);
+
+                // Manual Pin, interval and auto-off
+                // default none with 0 second interval and no auto-off
+                gpio_switch->manual_pin = json_get_ival(control["manual_pin"], NO_PIN);
+                gpio_switch->manual_interval = json_get_ival(control["manual_interval"], 0);
+                gpio_switch->manual_auto_off = json_get_ival(control["manual_auto_off"], 0);
+
+                // Initial state, default 0 (off)
+                gpio_switch->current_state = json_get_ival(control["init_state"], 0);
+
+                // switch mode.. default toggle
+                const char *switch_mode = json_get_sval(control["manual_mode"], "toggle");
+
+                if (!strcmp(switch_mode, "on")) {
                     gpio_switch->switch_behaviour = SW_BHVR_ON;
                 }
-                else if (!strcmp(sw_mode, "off")) {
+                else if (!strcmp(switch_mode, "off")) {
                     gpio_switch->switch_behaviour = SW_BHVR_OFF;
                 }
-
-                // Motion pin
-                // left optional. if pin comes in as 0, assumed
-                // not applicable
-                gpio_switch->motion_pin = control["sw_motion_pin"];
-                if (gpio_switch->motion_pin == 0) {
-                    gpio_switch->motion_pin = NO_PIN;
-                    gpio_switch->motion_interval = 0;
-                }
                 else {
-                    gpio_switch->motion_interval = control["sw_motion_interval"];
+                    // default
+                    gpio_switch->switch_behaviour = SW_BHVR_TOGGLE;
                 }
+
+                // Motion pin & interval
+                // default no pin and zero interval
+                gpio_switch->motion_pin = json_get_ival(control["motion_pin"], NO_PIN);
+                gpio_switch->motion_interval = json_get_ival(control["motion_interval"], 0);
             }
 
             if (!strcmp(control_type, "temp/humidity")) {
                 gpio_sensor = gpio_sensor_alloc();
                 HTM_LIST_INSERT(gv_device.sensor_list, gpio_sensor);
 
-                const char *th_variant = control["th_variant"];
+                const char *th_variant = json_get_sval(control["variant"], "DHT11");
 
-                // Default
+                // Default variant DHT11
+                // Check for DHT11, DHT21 and DHT22
                 gpio_sensor->sensor_variant = DHT11;
 
                 if (!strcmp(th_variant, "DHT11")) {
@@ -285,8 +334,12 @@ void load_config()
 
                 strcpy(gpio_sensor->name, control_name);
                 gpio_sensor->sensor_type = GP_SENS_TYPE_DHT;
-                gpio_sensor->sensor_pin = control["th_pin"];
-                gpio_sensor->temp_offset = control["th_temp_offset"];
+
+                // sensor PIN, default NO_PIN (Fake)
+                gpio_sensor->sensor_pin = json_get_ival(control["pin"], NO_PIN);
+
+                // temp offset, default 0
+                gpio_sensor->temp_offset = json_get_ival(control["temp_offset"], 0);
             }
 
             if (!strcmp(control_type, "rgb")) {
@@ -294,11 +347,15 @@ void load_config()
                 HTM_LIST_INSERT(gv_device.rgb_list, gpio_rgb);
 
                 strcpy(gpio_rgb->name, control_name);
-                gpio_rgb->red_pin = control["red_pin"];
-                gpio_rgb->green_pin = control["green_pin"];
-                gpio_rgb->blue_pin = control["blue_pin"];
-                gpio_rgb->manual_pin = control["manual_pin"];
-                strcpy(gpio_rgb->program, control["program"]);
+
+
+                // RGB pins and manual switch
+                // all default to NO_PIN
+                gpio_rgb->red_pin = json_get_ival(control["red_pin"], NO_PIN);
+                gpio_rgb->green_pin = json_get_ival(control["green_pin"], NO_PIN);
+                gpio_rgb->blue_pin = json_get_ival(control["blue_pin"], NO_PIN);
+                gpio_rgb->manual_pin = json_get_ival(control["manual_pin"], NO_PIN);
+                strcpy(gpio_rgb->program, json_get_sval(control["program"], ""));
             }
 
             if (!strcmp(control_type, "argb")) {
@@ -306,11 +363,14 @@ void load_config()
                 HTM_LIST_INSERT(gv_device.argb_list, gpio_argb);
 
                 strcpy(gpio_argb->name, control_name);
-                gpio_argb->pin = control["pin"];
-                gpio_argb->manual_pin = control["manual_pin"];
-                gpio_argb->num_leds = control["num_leds"];
-                gpio_argb->neopixel_flags = control["neopixel_flags"];
-                strcpy(gpio_argb->program, control["program"]);
+
+                // aRGB pin and neopixel args
+                // default to NO_PIN 
+                gpio_argb->pin = json_get_ival(control["pin"], 255);
+                gpio_argb->manual_pin = json_get_ival(control["manual_pin"], 255);
+                gpio_argb->num_leds = json_get_ival(control["num_leds"], 0);
+                gpio_argb->neopixel_flags = json_get_ival(control["neopixel_flags"], 0);
+                strcpy(gpio_argb->program, json_get_sval(control["program"], ""));
             }
         }
     }
