@@ -26,9 +26,12 @@ python3 jbhasd/jbhasd_web_server.py
 you should see a page with a gray gradient background with a timestamp top-right. The first run of this script will also write a defautl config file to ~/.jbhasd_web_server
 
 Then start the simulator on a separate terminal:
+```
 python3 jbhasd/jbhasd_device_sim.py
+```
 
-You can run the simulator on the same machine as the webserver or on a separate machine on the same network. This will start registering a fake device per US state with randomly added switches and sensors to each device. 
+You can run the simulator on the same machine as the webserver or on a separate machine on the same network. This will start registering a fake device per US state with randomly added switches and sensors to each device. The controls are named after Irish counties and rivers.
+
 It will then advertise the fake devices on MDNS and DNS-SD. The webserver script will detect these simulated devices via zeroconf and start probing them. The web console page should refresh with widget panels being added for each discovered device. Each device uses a webserver on port >= 9000 .. the ports are incremeneted as each new device is created. 
 
 The console of each running script provides logging detail that should help understand 
