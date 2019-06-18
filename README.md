@@ -78,11 +78,7 @@ The example below is how you would POST to the /configure API function to upload
 curl -XPOST 'http://192.168.12.165/configure' -d '
 {
    "boot_pin": 0,
-    "manual_switches_enabled": 1,
-    "mdns_enabled": 1,
-    "ota_enabled": 1,
     "status_led_pin": 13,
-    "telnet_enabled": 1,
     "wifi_password": "h0tcak3y",
     "wifi_ssid": "cormac-L",
     "zone": "Sonoff Desktop Test",
@@ -90,12 +86,10 @@ curl -XPOST 'http://192.168.12.165/configure' -d '
         {
             "enabled": 1,
             "name": "My Relay",
-            "sw_led_pin": 13,
-            "sw_man_pin": 0,
-            "sw_mode": "toggle",
-            "sw_relay_on_high": 1,
-            "sw_relay_pin": 12,
-            "sw_state": 0,
+            "led_pin": 13,
+            "manual_pin": 0,
+            "mode": "toggle",
+            "relay_pin": 12,
             "type": "switch"
         }
     ]
