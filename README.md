@@ -112,57 +112,9 @@ The response to this call is:
 }
 ```
 
-The is a JSON payload which includes an error value of 0 for success and 1 for failure. The description will give context to the sepcific failure at hand. The above is indicating that the device was successfully configured.
+The is a JSON payload which includes an error value of 0 for success and 1 for failure. The description will give context to the specific failure at hand. The above is indicating that the device was successfully configured.
 
-
-To summarise top-level fields:
-* boot_pin  
-This configures the GPIO pin for the boot switch. This switch plays an important role when you with to reset the device config or change it's WiFI settings. When the device boots, you have 5 seconds to ground the assigned boot pin to put it into AP Mode. Otherwise it will connect in STA mode (client) after those 5 seconds elapse
-
-* status_led_pin  
-This pin defines an optional GPIO for use as a status LED. 
-
-* manual_switches_enabled  
-This field can be used to blanket-disable all manual switches configured on the device. Handy if it needs to be deployed where manual pushes on the buttons need to be avoided. This only applys to button pushes on configured switches and not the boot_pin.
-
-* mdns_enabled  
-This can be used to enable/disable MDNS and DNS-SD for the device. The default should be to leave this enabled as it will ensure the device can be discovered
-
-* ota_enabled  
-This enables Arduino OTA functionality and is a very handy way to flash updated firmware to devices. 
-
-* telnet_enabled  
-Telnet support is used for logging. If enabled, you can telned to the device IP and receive a live debug log of actitiy on the device. Telnet support will disable Serial logging once it activates. So in some cases when debugging, you may need to configure this option as disabled to ensure the device only logs to serial.
-
-* wifi_ssid & wifi_password  
-Pretty obvious what these are. They let you specify the credentials of the WiFi router you want to connect to. They can be omitted from the configuration call meaning the initial Wifi details will be preserved. 
-
-* zone  
-Zone defines a simple string to name the device location. It plays a role later on in organising devices on the web server dashboard
-
-
-
-
-We're now at the controls array and what you can see is a JSON sub-object for a control named 'My Relay' of type 'switch'. The switch is in 'toggle' mode, meaning it's assigned manual pin toggles between on/off. The relay pin is set to 12, LED pin to 13 and manual pin to 0. 
-```
-    "controls": [
-        {
-            "enabled": 1,
-            "name": "My Relay",
-            "sw_led_pin": 13,
-            "sw_man_pin": 0,
-            "sw_mode": "toggle",
-            "sw_relay_on_high": 1,
-            "sw_relay_pin": 12,
-            "sw_state": 0,
-            "type": "switch"
-        }
-    ]
-```
-
-So with that control configured, the device will boot and configure a switch called 'My Relay' that drives the onboard relay via GPIO-12 and match the on/off state of that relay with the onboard LED (GPIO-13). Pressing the Sonoff onboard flash button (GPIO-0) will act as a toggle-on and off button for the relay.
-
-With the config sent up, the device validates the JSON, saves the config to EEPROM and reboots again, it will flash the status LED at a medium rate for 5 seconds giving you time to ground GPIO-0 (boot_pin) and put the device into AP Mode. If you activate that boot PIN during that initial 5 seconds, the LED flashing will go to a fast rate to indicate AP mode. 
+With the config sent up, the device validates the JSON, saves the config to EEPROM and reboots again. It will flash the status LED at a medium rate for 5 seconds giving you time to ground GPIO-0 (boot_pin) and put the device into AP Mode. If you activate that boot PIN during that initial 5 seconds, the LED flashing will go to a fast rate to indicate AP mode. 
 If you leave that boot sequence alone, after 5 seconds, the initial medium flashing rate will drop to a slower rate to indicate that the WiFI connect stage has started and it will remain at that rate until it gets connected to the network. 
 
 When it gets connected, it will issue a quick burst of flashes to indicate that the device has successfully conected to wifi and then turn off. 
