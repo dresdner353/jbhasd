@@ -165,8 +165,10 @@ Defines flags to be passed to the Neopixel library and used in relation to activ
 * program (string, optional)  
 This field specifies a display pattern for the aRGB strip along with offset, delay and fill mode settings. 
 
-The program takes the form: <direction>;<pause>;<fill mode>;RRGGBB,RRGGBB,.....
-
+The program takes the form: 
+```
+<direction>;<pause>;<fill mode>;RRGGBB,RRGGBB,.....
+```
 The first three fields are semi-colon separated followed by a final semi-colon and the a comma-separated list of colour values in decimal or hex (0x-prefixed). 
 
 Direction defines the way the starting offset is managed bwtween executions of the program. If set to 0, it implies the first pixel drawn is always at the the start of the aRGB strip. If set to 1 or higher, the starting offset is incremented by 1 on each re-run. If direction is set to -1 or lower, the starting index is decremented by 1 on each run. These values modulo rotate on the strip offset positon and wrap around as they reach either end of the strip.
