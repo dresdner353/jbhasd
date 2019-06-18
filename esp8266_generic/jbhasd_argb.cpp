@@ -274,7 +274,7 @@ void set_argb_program(struct gpio_argb *gpio_argb,
     gpio_argb->program_start = NULL;
 
     // parse program
-    // <step offset>;<step delay>;<fill mode>;RRGGBB,RRGGBB,.....
+    // <direction>;<pause>;<fill mode>;RRGGBB,RRGGBB,.....
 
     // copy over first 50 octets of text
     // should be enough to contain main front 
@@ -362,32 +362,36 @@ void setup_argbs()
     for (gpio_argb = HTM_LIST_NEXT(gv_device.argb_list);
          gpio_argb != gv_device.argb_list;
          gpio_argb = HTM_LIST_NEXT(gpio_argb)) {
+            log_message("Setting up A-RGB:%s LEDs:%d Pin:%d Neopixel Flags:0x%08X",
+                        gpio_argb->name,
+                        gpio_argb->num_leds, 
+                        gpio_argb->pin, 
+                        gpio_argb->neopixel_flags);
 
-        argb_count++;
+            if (gpio_argb->pin == NO_PIN) {
+                log_message("A-RGB pin disabled.. skipping");
+            }
+            else {
+                argb_count++;
 
-        log_message("Setting up A-RGB:%s LEDs:%d Pin:%d Neopixel Flags:0x%08X",
-                    gpio_argb->name,
-                    gpio_argb->num_leds, 
-                    gpio_argb->pin, 
-                    gpio_argb->neopixel_flags);
+                gpio_argb->neopixel = 
+                    new Adafruit_NeoPixel(gpio_argb->num_leds, 
+                                          gpio_argb->pin, 
+                                          gpio_argb->neopixel_flags);
 
-        gpio_argb->neopixel = 
-            new Adafruit_NeoPixel(gpio_argb->num_leds, 
-                                  gpio_argb->pin, 
-                                  gpio_argb->neopixel_flags);
+                // Initialize all pixels to 'off'
+                gpio_argb->neopixel->begin();
+                gpio_argb->neopixel->show(); 
 
-        // Initialize all pixels to 'off'
-        gpio_argb->neopixel->begin();
-        gpio_argb->neopixel->show(); 
+                set_argb_program(gpio_argb,
+                                 gpio_argb->program);
 
-        set_argb_program(gpio_argb,
-                         gpio_argb->program);
-
-        if (gpio_argb->manual_pin != NO_PIN) {
-            log_message("    Manual pin:%d",
-                        gpio_argb->manual_pin);
-            pinMode(gpio_argb->manual_pin, INPUT_PULLUP);
-        }
+                if (gpio_argb->manual_pin != NO_PIN) {
+                    log_message("    Manual pin:%d",
+                                gpio_argb->manual_pin);
+                    pinMode(gpio_argb->manual_pin, INPUT_PULLUP);
+                }
+            }
     }
 
     if (argb_count > 0) {
