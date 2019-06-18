@@ -68,7 +68,6 @@ const char *get_json_status()
         obj["type"] = "switch";
         obj["state"] = gpio_switch->current_state;
         obj["context"] = get_sw_context(gpio_switch->state_context);
-        obj["behaviour"] = get_sw_behaviour(gpio_switch->switch_behaviour);
         obj["motion_interval"] = gpio_switch->motion_interval;
         obj["manual_interval"] = gpio_switch->manual_interval;
         obj["last_activity_millis"] = gpio_switch->last_activity;
