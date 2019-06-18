@@ -130,9 +130,9 @@ Defines an optional input pin to use as a manual on-device control for the RGB s
 This field specifies a colour transition program for the RGB strip. If omitted or set to "", the LED strip will be turned off. The program uses a comma-separated sequence of colour codes including transition and pause intervals.
 
 The program takes the form : 
-
+```
   <32-bit colour code>;<transition delay msecs>;<pause msecs>,<colour code>;<transition delay msecs>;<pause msecs>,..
-
+```
 The colour code can be a decimal or hex value (prefixed with 0x) and represents the RGB values of the colour to render. That RGB value occupies the lower three octets of the integer. The upper octet acts as a brightness control between 0-255 (0x00-0xFF) and can scale the brightness value of the rendered colour. If that upper octet is set to 0x00, it will render at full brightness.
 
 The colour field can also be set to text "random" which will generate random values each time that color is selected in the program.
@@ -142,9 +142,10 @@ The transition delay is a period in milliseconds between each PWM change on the 
 The pause field is used to place a stall in the program execution before the next colour is selected.
 
 Examples:
-
-   "0xFF0000;10;0,0x00FF00;5;1000,0x0000FF;50;5000"
-   starts with red using a 10ms transition delay and no pause. Then it fades to green with 5 msec delay, 1 second pause and finally to blue with the 50ms delay between transitons and a 5 second pause. The program then repeats on loop.
+```
+"0xFF0000;10;0,0x00FF00;5;1000,0x0000FF;50;5000"
+```
+   ..starts with red using a 10ms transition delay and no pause. Then it fades to green with 5 msec delay, 1 second pause and finally to blue with the 50ms delay between transitons and a 5 second pause. The program then repeats on loop.
 
 
 ### Addressible RGB strip fields
