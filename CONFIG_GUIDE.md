@@ -10,7 +10,7 @@ The JSON configuration is made up of a series of top-level fields and then a con
 Pretty obvious what these are. They let you specify the credentials of the WiFi router you want to connect to. They can also be omitted from the configuration call meaning the existing WiFi details will be preserved. 
 
 * zone  (string, optional)  
-Zone defines a simple string to name the device location. It plays a role later on in organising devices on the web server dashboard. Controls from devices sharing the ame zone are shown in a common panel widget. If omitted in configuration, the devuce assumes a default "Unknown" value.
+Zone defines a simple string to name the device location. It plays a role later on in organising devices on the web server dashboard. Controls from devices sharing the same zone are shown in a common panel widget. If omitted in configuration, the devuce assumes a default "Unknown" value.
 
 * boot_pin (integer, mandatory)  
 This configures the GPIO input pin for the boot switch. This switch plays an important role when you wish to reset the device config or change it's WiFI settings. When the device boots, you have 5 seconds to ground the assigned boot pin to put it into AP Mode. Otherwise it will connect in STA mode (client) after those 5 seconds elapse. The boot pin function ceases after the STA mode begins and thus the pin itself can be shared as an input pin with other controls if desired.
