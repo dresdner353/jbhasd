@@ -460,7 +460,7 @@ def check_switch(zone_name,
     global gv_manual_switch_dict
 
     desired_state = -1 # implies no desired state
-    motion_interval = 0 # no implied motion
+    motion_interval = -1 # no implied motion
 
     now = time.time()
 
@@ -743,7 +743,8 @@ def check_automated_devices():
                         gv_jbhasd_device_ts_dict[device_name] = int(time.time())
 
 
-                if (motion_interval != desired_motion_interval):
+                if (desired_motion_interval != -1 and 
+                        motion_interval != desired_motion_interval):
                     print("%s Automatically setting %s/%s motion_interval:%d" % (
                         time.asctime(),
                         zone_name,
