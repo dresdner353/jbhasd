@@ -273,7 +273,9 @@ curl -XPOST 'http://192.168.12.251/control' -d '
 }
 ```
 
-Note the context field for the Desk Lamp is now showing "network" to indicate that it was put in this state by a network API call. The Green LED switch remains in "init" state as that was the state at boot time.
+Note: The context field for the Desk Lamp is now showing "network" to indicate that it was put in this state by a network API call. The Green LED switch remains in "init" state as that was the state at boot time.
+
+Note: The last_activity_millis and last_activity_delta_secs provide time references for the most recent switch activity. last_activity_millis is the value from the internal millis() counter and last_activity_delta_secs is the number of seconds elapsed which is based on (millis() - last_activity_millis) / 1000. From an analytic perspective, this provides a monitoring component a means of measuring activity on a switch.
 
 The use of a JSON payload allows us to apply multiple changes in a single API call:
 
