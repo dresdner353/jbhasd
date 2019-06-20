@@ -68,10 +68,20 @@ const char *get_json_status()
         obj["type"] = "switch";
         obj["state"] = gpio_switch->current_state;
         obj["context"] = get_sw_context(gpio_switch->state_context);
-        obj["motion_interval"] = gpio_switch->motion_interval;
-        obj["manual_interval"] = gpio_switch->manual_interval;
         obj["last_activity_millis"] = gpio_switch->last_activity;
         obj["last_activity_delta_secs"] = (now - gpio_switch->last_activity) / 1000;
+
+        // Motion details if a motion pin in use
+        if (gpio_switch->motion_pin != NO_PIN) {
+            obj["motion_interval"] = gpio_switch->motion_interval;
+        }
+
+        // Manual interval and auto off detail is a manual
+        // pin in use
+        if (gpio_switch->manual_pin != NO_PIN) {
+            obj["manual_interval"] = gpio_switch->manual_interval;
+            obj["manual_auto_off"] = gpio_switch->manual_auto_off;
+        }
     }
 
     // sensors
@@ -486,6 +496,18 @@ void sta_handle_control() {
                             // have a motion_interval field, treat as switch
                             set_switch_motion_interval(find_switch(control_name),
                                                        control["motion_interval"]);
+                        }
+
+                        if (!control["manual_interval"].isNull()) {
+                            // have a manual_interval field, treat as switch
+                            set_switch_manual_interval(find_switch(control_name),
+                                                       control["manual_interval"]);
+                        }
+
+                        if (!control["manual_auto_off"].isNull()) {
+                            // have a manual_auto_off field, treat as switch
+                            set_switch_manual_auto_off(find_switch(control_name),
+                                                       control["manual_auto_off"]);
                         }
 
                         if (!control["program"].isNull()) {
