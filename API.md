@@ -569,4 +569,4 @@ Another example:
 ```
 "program": "0xFFFFFF;0;2000,random;5;1000,0x000000;0;2000,0x00FF00;1;5000"
 ```
-This program will start with full white shown for 2 seconds, then a gradual fade to a random colour, turn off for 2 seconds and then fast fade to gree and repeat
+This program will start with full white shown for 2 seconds, then a gradual fade to a random colour, turn off for 2 seconds and then fast fade to green and repeat
