@@ -161,6 +161,7 @@ $ curl 'http://192.168.12.165/status'
 
 So now, we have a populated 'controls' array being returned that describes the available controls. This is crucial as it plays a role later on in how this device is then integrated with hub-type applications that need to discover capabilities and manipulate specific devices and controls. 
 
-## Manipulating controls on the Device
+## See Also..
 
-See API.md
+[Configuration Guide](./CONFIG_GUIDE.md)
+[API Guide](./API.md)
