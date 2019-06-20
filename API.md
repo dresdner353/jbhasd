@@ -1,0 +1,572 @@
+# jbhasd API Guide
+
+## Status Function
+This call is a GET or POST on the device URL and returns its current status and control details in JSON format. No actual parameter content is passed via URL fields or POST content. 
+
+Example:
+```
+$ curl http://192.168.12.251/status
+{
+  "name": "JBHASD-00A30CCA",
+  "zone": "Office",
+  "wifi_ssid": "My Wifi SSID",
+  "ota_enabled": 1,
+  "telnet_enabled": 1,
+  "mdns_enabled": 1,
+  "manual_switches_enabled": 1,
+  "configured": 1,
+  "system": {
+    "compile_date": "JBHASD-VERSION Jun 20 2019 14:30:19",
+    "reset_reason": "Software/System restart",
+    "free_heap": 19368,
+    "chip_id": 10685642,
+    "flash_id": 1327198,
+    "flash_size": 1048576,
+    "flash_real_size": 1048576,
+    "flash_speed": 40000000,
+    "cycle_count": 3316946957,
+    "millis": 5204859
+  },
+  "controls": [
+    {
+      "name": "Desk Lamp",
+      "type": "switch",
+      "state": 0,
+      "context": "init",
+      "last_activity_millis": 5184584,
+      "last_activity_delta_secs": 20,
+      "motion_interval": 10,
+      "manual_interval": 15,
+      "manual_auto_off": 1
+    },
+    {
+      "name": "Green LED",
+      "type": "switch",
+      "state": 0,
+      "context": "init",
+      "last_activity_millis": 6759,
+      "last_activity_delta_secs": 5198
+    },
+    {
+      "name": "PIR Temp",
+      "type": "temp/humidity",
+      "humidity": 53.4,
+      "temp": 21.5
+    }
+  ]
+}
+```
+
+## Reboot function
+The reboot function sets a trigger to force the device to reboot. Will work as a GET or POST call
+```
+curl 'http://192.168.12.251/reboot'
+```
+
+## AP Mode function
+This forces a once-off reboot into AP mode. Very handy when you want AP Mode but are too lazy to go and manually restart the device. 
+```
+curl 'http://192.168.12.251/apmode'
+```
+
+## Reset function
+This call forces config to be over-written by a default config. The device will then reboot and enter AP mode.
+```
+curl 'http://192.168.12.251/reset'
+```
+
+## Reconfigure function
+This function instructs the device to set it's configured property from 1 to 0. This is intended for use where you want an existing canned configuration to be pushed to the device via a network resource that is monitoring the devices. The call does not cause the device to reboot or act any differently other than advertise the configured property as 0.
+```
+curl 'http://192.168.12.251/reconfigure'
+```
+
+## Configure function
+See CONFIG_GUIDE.md
+
+## Control Function (turning on/off switches)
+To control a device from the network, we can POST JSON directives to the /control API function and manipulate the onboard controls. 
+
+To start with an example of a Sonoff S20 with PIR sensor and temp/humidity control:
+
+```
+curl http://192.168.12.251/status
+{
+  "name": "JBHASD-00A30CCA",
+  "zone": "Office",
+  "wifi_ssid": "My Wifi SSID",
+  "ota_enabled": 1,
+  "telnet_enabled": 1,
+  "mdns_enabled": 1,
+  "manual_switches_enabled": 1,
+  "configured": 1,
+  "system": {
+    "compile_date": "JBHASD-VERSION Jun 20 2019 14:30:19",
+    "reset_reason": "Software/System restart",
+    "free_heap": 19360,
+    "chip_id": 10685642,
+    "flash_id": 1327198,
+    "flash_size": 1048576,
+    "flash_real_size": 1048576,
+    "flash_speed": 40000000,
+    "cycle_count": 2388457467,
+    "millis": 132564
+  },
+  "controls": [
+    {
+      "name": "Desk Lamp",
+      "type": "switch",
+      "state": 0,
+      "context": "init",
+      "last_activity_millis": 65,
+      "last_activity_delta_secs": 132,
+      "motion_interval": 0,
+      "manual_interval": 3600,
+      "manual_auto_off": 1
+    },
+    {
+      "name": "Green LED",
+      "type": "switch",
+      "state": 0,
+      "context": "init",
+      "last_activity_millis": 65,
+      "last_activity_delta_secs": 132
+    },
+    {
+      "name": "PIR Temp",
+      "type": "temp/humidity",
+      "humidity": 55.1,
+      "temp": 21.6
+    }
+  ]
+}
+```
+The above shows us three controls on this device. Two switches and one temp/humidity sensor. 
+
+To turn on the Desk Lamp control, we would send a JSON payload to the /control function. In that JSON payload would be a controls array and in that a single object with name set to "Desk Lamp" and state set to 1 (on).
+
+```
+curl -XPOST 'http://192.168.12.251/control' -d '
+{
+    "controls" : [
+        {
+            "name": "Desk Lamp", 
+            "state": 1
+        }
+    ]
+}
+'
+{
+  "name": "JBHASD-00A30CCA",
+  "zone": "Office",
+  "wifi_ssid": "My Wifi SSID",
+  "ota_enabled": 1,
+  "telnet_enabled": 1,
+  "mdns_enabled": 1,
+  "manual_switches_enabled": 1,
+  "configured": 1,
+  "system": {
+    "compile_date": "JBHASD-VERSION Jun 20 2019 14:30:19",
+    "reset_reason": "Software/System restart",
+    "free_heap": 19112,
+    "chip_id": 10685642,
+    "flash_id": 1327198,
+    "flash_size": 1048576,
+    "flash_real_size": 1048576,
+    "flash_speed": 40000000,
+    "cycle_count": 868132762,
+    "millis": 274621
+  },
+  "controls": [
+    {
+      "name": "Desk Lamp",
+      "type": "switch",
+      "state": 1,
+      "context": "network",
+      "last_activity_millis": 274614,
+      "last_activity_delta_secs": 0,
+      "motion_interval": 0,
+      "manual_interval": 3600,
+      "manual_auto_off": 1
+    },
+    {
+      "name": "Green LED",
+      "type": "switch",
+      "state": 0,
+      "context": "init",
+      "last_activity_millis": 65,
+      "last_activity_delta_secs": 274
+    },
+    {
+      "name": "PIR Temp",
+      "type": "temp/humidity",
+      "humidity": 55.5,
+      "temp": 21.6
+    }
+  ]
+}
+```
+
+The response JSON shown above lists the Desk Lamp control to be in the on state as the state field is now set to 1. 
+Turning off this control is a simple case of sending the same payload but with the state set to 0:
+
+```
+curl -XPOST 'http://192.168.12.251/control' -d '
+{
+    "controls" : [
+        {
+            "name": "Desk Lamp", 
+            "state": 0
+        }
+    ]
+}
+'
+{
+  "name": "JBHASD-00A30CCA",
+  "zone": "Office",
+  "wifi_ssid": "My Wifi SSID",
+  "ota_enabled": 1,
+  "telnet_enabled": 1,
+  "mdns_enabled": 1,
+  "manual_switches_enabled": 1,
+  "configured": 1,
+  "system": {
+    "compile_date": "JBHASD-VERSION Jun 20 2019 14:30:19",
+    "reset_reason": "Software/System restart",
+    "free_heap": 18944,
+    "chip_id": 10685642,
+    "flash_id": 1327198,
+    "flash_size": 1048576,
+    "flash_real_size": 1048576,
+    "flash_speed": 40000000,
+    "cycle_count": 2362206508,
+    "millis": 400671
+  },
+  "controls": [
+    {
+      "name": "Desk Lamp",
+      "type": "switch",
+      "state": 0,
+      "context": "network",
+      "last_activity_millis": 400664,
+      "last_activity_delta_secs": 0,
+      "motion_interval": 0,
+      "manual_interval": 3600,
+      "manual_auto_off": 1
+    },
+    {
+      "name": "Green LED",
+      "type": "switch",
+      "state": 0,
+      "context": "init",
+      "last_activity_millis": 65,
+      "last_activity_delta_secs": 400
+    },
+    {
+      "name": "PIR Temp",
+      "type": "temp/humidity",
+      "humidity": 55.9,
+      "temp": 21.7
+    }
+  ]
+}
+```
+
+Note the context field for the Desk Lamp is now showing "network" to indicate that it was put in this state by a network API call. The Green LED switch remains in "init" state as that was the state at boot time.
+
+The use of a JSON payload allows us to apply multiple changes in a single API call:
+
+```
+curl -XPOST 'http://192.168.12.251/control' -d '
+{
+    "controls" : [
+        {
+            "name": "Desk Lamp", 
+            "state": 0
+        },
+        {
+            "name": "Green LED", 
+            "state": 1
+        }
+    ]
+}
+'
+{
+  "name": "JBHASD-00A30CCA",
+  "zone": "Office",
+  "wifi_ssid": "My Wifi SSID",
+  "ota_enabled": 1,
+  "telnet_enabled": 1,
+  "mdns_enabled": 1,
+  "manual_switches_enabled": 1,
+  "configured": 1,
+  "system": {
+    "compile_date": "JBHASD-VERSION Jun 20 2019 14:30:19",
+    "reset_reason": "Software/System restart",
+    "free_heap": 18920,
+    "chip_id": 10685642,
+    "flash_id": 1327198,
+    "flash_size": 1048576,
+    "flash_real_size": 1048576,
+    "flash_speed": 40000000,
+    "cycle_count": 3124417881,
+    "millis": 517573
+  },
+  "controls": [
+    {
+      "name": "Desk Lamp",
+      "type": "switch",
+      "state": 0,
+      "context": "network",
+      "last_activity_millis": 517566,
+      "last_activity_delta_secs": 0,
+      "motion_interval": 0,
+      "manual_interval": 3600,
+      "manual_auto_off": 1
+    },
+    {
+      "name": "Green LED",
+      "type": "switch",
+      "state": 1,
+      "context": "network",
+      "last_activity_millis": 517566,
+      "last_activity_delta_secs": 0
+    },
+    {
+      "name": "PIR Temp",
+      "type": "temp/humidity",
+      "humidity": 56.2,
+      "temp": 21.7
+    }
+  ]
+}
+```
+
+The returned status then shows the Green LED in state 1 and Desk Lamp onm state 0. Both context fields also set to "network". 
+
+## Control Function (setting motion interval for PIR-enabled switches)
+If the given switch has a configired PIR sensor (motion_pin), the "motion_interval" field will appear in it's status and it is possible dynamically enable/disable that PIR based on setting this motion_interval field. 
+
+In the above examples, the "Desk Lamp" has a PIR sensor and it's motion_interval field is set to 0. So this PIR is esentially disabled. We are ignoring it's signalling. 
+
+So to enable this sensor, we can simply set the motion_interval to a desired number of seconds > 0.
+
+```
+curl -XPOST 'http://192.168.12.251/control' -d '
+{
+    "controls" : [
+        {
+            "name": "Desk Lamp", 
+            "motion_interval": 10
+        }
+    ]
+}
+'
+
+{
+  "name": "JBHASD-00A30CCA",
+  "zone": "Office",
+  "wifi_ssid": "My Wifi SSID",
+  "ota_enabled": 1,
+  "telnet_enabled": 1,
+  "mdns_enabled": 1,
+  "manual_switches_enabled": 1,
+  "configured": 1,
+  "system": {
+    "compile_date": "JBHASD-VERSION Jun 20 2019 14:30:19",
+    "reset_reason": "Software/System restart",
+    "free_heap": 19048,
+    "chip_id": 10685642,
+    "flash_id": 1327198,
+    "flash_size": 1048576,
+    "flash_real_size": 1048576,
+    "flash_speed": 40000000,
+    "cycle_count": 3367144558,
+    "millis": 627981
+  },
+  "controls": [
+    {
+      "name": "Desk Lamp",
+      "type": "switch",
+      "state": 0,
+      "context": "network",
+      "last_activity_millis": 517566,
+      "last_activity_delta_secs": 110,
+      "motion_interval": 10,
+      "manual_interval": 3600,
+      "manual_auto_off": 1
+    },
+    {
+      "name": "Green LED",
+      "type": "switch",
+      "state": 1,
+      "context": "network",
+      "last_activity_millis": 517566,
+      "last_activity_delta_secs": 110
+    },
+    {
+      "name": "PIR Temp",
+      "type": "temp/humidity",
+      "humidity": 56.3,
+      "temp": 21.7
+    }
+  ]
+}
+```
+
+If motion now trigers the switch, we will see this reflected in the state and context of the switch control:
+
+```
+...
+...
+    {
+      "name": "Desk Lamp",
+      "type": "switch",
+      "state": 1,
+      "context": "motion",
+      "last_activity_millis": 741512,
+      "last_activity_delta_secs": 0,
+      "motion_interval": 10,
+      "manual_interval": 3600,
+      "manual_auto_off": 1
+    },
+...
+...
+```
+
+Once that motion interval expires and the switch is turned off, the state will update to 0 and context to "init":
+
+```
+...
+...
+    {
+      "name": "Desk Lamp",
+      "type": "switch",
+      "state": 0,
+      "context": "init",
+      "last_activity_millis": 957153,
+      "last_activity_delta_secs": 8,
+      "motion_interval": 10,
+      "manual_interval": 3600,
+      "manual_auto_off": 1
+    },
+...
+...
+```
+Motion can again be disabled by seting the interval to 0:
+```
+curl -XPOST 'http://192.168.12.251/control' -d '
+{
+    "controls" : [
+        {
+            "name": "Desk Lamp", 
+            "motion_interval": 0
+        }
+    ]
+}
+'
+```
+
+## Control Function (setting manual interval for manual-enabled switches)
+If the switch has a manual_pin defined in configuration, the status detail will include the settings for "manual_interval" and "manual_auto_off". In the same way as the above example, setting the property will return an updated JSON status showing that updated property.
+
+To manipulate the manual interval, we POST and specify the desired interval for the given control:
+```
+curl -XPOST 'http://192.168.12.251/control' -d '
+{
+    "controls" : [
+        {
+            "name": "Desk Lamp", 
+            "manual_interval": 30
+        }
+    ]
+}
+'
+```
+The above example sets an interval of 30 seconds after the last push of the manual button. What this does is block network calls to turn the "Desk Lamp" on or off for up to 30 seconds after the last manual update. So it doesn't matter if the control is on or off.. as long as it's in a manual context, it will block network attempts to manipulate it until that period has expired. This was designed to allow a control to be turned on or off and bypass any automated control that may bve in place.  
+
+When a control is manually turned on or off, it's context will show the "manual" value:
+```
+    {
+      "name": "Desk Lamp",
+      "type": "switch",
+      "state": 1,
+      "context": "manual",
+      "last_activity_millis": 1716166,
+      "last_activity_delta_secs": 3,
+      "motion_interval": 0,
+      "manual_interval": 30,
+      "manual_auto_off": 0
+    },
+```
+
+When the manual interval expires, the control context is reset to "init" but the state is left in the current 1 or 0 value:
+
+```
+    {
+      "name": "Desk Lamp",
+      "type": "switch",
+      "state": 1,
+      "context": "init",
+      "last_activity_millis": 1746166,
+      "last_activity_delta_secs": 139,
+      "motion_interval": 0,
+      "manual_interval": 30,
+      "manual_auto_off": 0
+    },
+```
+This behaviour is essentially indicating to a monitoring resource that the enforced manual context no longer applies. Consequently, a network API call to turn on or the control will now succeed.
+
+
+The manual interval can be further enhanced with a manual auto off setting. This simply creates a behaviour where the switch will automatically turn off after the manual interval has expired. It could be used for applications in temporary lighting or any kind of energy saving scenario.
+
+This example configures auto off and a manual interval at the same time but can equally be enabled/disabled on it's own:
+
+```
+curl -XPOST 'http://192.168.12.251/control' -d '
+{
+    "controls" : [
+        {
+            "name": "Desk Lamp", 
+            "manual_auto_off": 1,
+            "manual_interval": 3600
+        }
+    ]
+}
+'
+```
+
+## Control Function (Programming RGB Strips)
+RGB strips can by reprogrammed on demand by setting a new value for the program
+
+```
+curl -XPOST 'http://192.168.12.122/control' -d '
+{
+    "controls" : [
+        {
+            "name": "Deer", 
+            "program": "0x0000FF;1;0,0x000000;1;0"
+        }
+    ]
+}
+'
+```
+The resulting JSON status response will show the updated program:
+
+```
+    {
+      "name": "Deer",
+      "type": "rgb",
+      "program": "0x0000FF;1;0,0x000000;1;0",
+      "current_colour": "0x000000FF",
+      "step": 0
+    },
+```
+
+That program will start with a transition to blue and fade to black and repeat in loop
+
+Another example:
+```
+"program": "0xFFFFFF;0;2000,random;5;1000,0x000000;0;2000,0x00FF00;1;5000"
+```
+This program will start with full white shown for 2 seconds, then a gradual fade to a random colour, turn off for 2 seconds and then fast fade to gree and repeat

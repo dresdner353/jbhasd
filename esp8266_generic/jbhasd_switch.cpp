@@ -266,6 +266,60 @@ void set_switch_motion_interval(struct gpio_switch *gpio_switch,
     gpio_switch->motion_interval = interval;
 }
 
+// Function: set_switch_manual_interval
+// enables/disables manual intervals for a switch
+// by setting an interval (seconds).. 0 is off
+void set_switch_manual_interval(struct gpio_switch *gpio_switch,
+                                uint32_t interval)
+{
+    if (!gpio_switch) {
+        // can get called with a find_switch() call
+        // used for gpio_switch arg
+        // So this can be NULL
+        return;
+    }
+
+    log_message("set_switch_manual_interval(name=%s, interval=%u)",
+                gpio_switch->name,
+                interval);
+
+    // Sanity on value
+    // min of 5 seconds or 0
+    if (interval > 0 && interval < 5) {
+        interval = 5;
+    }
+
+    gpio_switch->manual_interval = interval;
+}
+
+// Function: set_switch_manual_auto_off
+// enables/disables manual auto off for a switch
+// by setting the auto_off param to 1 or 0
+void set_switch_manual_auto_off(struct gpio_switch *gpio_switch,
+                                uint8_t auto_off)
+{
+    if (!gpio_switch) {
+        // can get called with a find_switch() call
+        // used for gpio_switch arg
+        // So this can be NULL
+        return;
+    }
+
+    log_message("set_switch_manual_auto_off(name=%s, auto_off=%u)",
+                gpio_switch->name,
+                auto_off);
+
+    // Sanity on value
+    // keep 1 or 0
+    if (auto_off > 0) {
+        auto_off = 1;
+    }
+    else {
+        auto_off = 0;
+    }
+
+    gpio_switch->manual_auto_off = auto_off;
+}
 
 // Function: setup_switches
 // Scans the list of configured switches

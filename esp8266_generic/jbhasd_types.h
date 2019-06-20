@@ -248,6 +248,10 @@ void set_switch_state(struct gpio_switch *gpio_switch,
                       enum switch_state_context context);
 void set_switch_motion_interval(struct gpio_switch *gpio_switch,
                                 uint32_t interval);
+void set_switch_manual_interval(struct gpio_switch *gpio_switch,
+                                uint32_t interval);
+void set_switch_manual_auto_off(struct gpio_switch *gpio_switch,
+                                uint8_t auto_off);
 void setup_switches();
 void loop_task_check_switches();
 void loop_task_check_boot_switch();

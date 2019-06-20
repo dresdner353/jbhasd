@@ -63,10 +63,15 @@ json len:575
 ```
 
 The script uses zeroconf to locate services matching "_JBHASD._tcp.local." It outputs the URL of each discovered device and calls a GET on that URL showing the returned JSON state details. You will get the same JSON response with:
-
 ```
 curl http://192.168.12.165:80/status
 ```
+
+You can also reference the device by it's MDNS hostname:
+```
+curl http://JBHASD-0095EB30.local/status
+```
+The MDNS named approach will take longer as the IP resolution depends on a network broadcast for the given device to respond back with it's IP address.
 
 The section above for controls is where we would normally see details on any switches, sensors etc that are being managed by this device. Given this is a clean setup, no such detail is defined yet. Also the "configured" attribute of this device is set to 0 which confirms that no full device configuration has been pushed to this device.
 
@@ -79,8 +84,8 @@ curl -XPOST 'http://192.168.12.165/configure' -d '
 {
    "boot_pin": 0,
     "status_led_pin": 13,
-    "wifi_password": "h0tcak3y",
-    "wifi_ssid": "cormac-L",
+    "wifi_password": "XXXXXXXX",
+    "wifi_ssid": "My WiFI SSID",
     "zone": "Sonoff Desktop Test",
     "controls": [
         {
@@ -157,96 +162,5 @@ $ curl 'http://192.168.12.165/status'
 So now, we have a populated 'controls' array being returned that describes the available controls. This is crucial as it plays a role later on in how this device is then integrated with hub-type applications that need to discover capabilities and manipulate specific devices and controls. 
 
 ## Manipulating controls on the Device
-To control the device from the network, we can POST JSON directives to the /control API function as follows:
 
-```
-curl -XPOST 'http://192.168.12.165/control' -d '
-{
-    "controls" : [
-        {
-            "name": "My Relay", 
-            "state": 1
-        }
-    ]
-}'
-```
-
-The JSON payload contains a "controls" array and has an control object per control we wish to manipulate. In this case we specified a single control called "My Relay" and set it's state to 1. This will cause the Sonoff device I'm using to turn on the rely being controlled by the "My Relay" control. 
-
-The response I receive is simply the same JSON status you get from the /status API call and this status will now show the updated status of the targetted control. 
-
-```
-{
-  "name": "JBHASD-0095EB30",
-  "zone": "Sonoff Desktop Test",
-  "wifi_ssid": "My WiFI SSID",
-  "ota_enabled": 1,
-  "telnet_enabled": 1,
-  "mdns_enabled": 1,
-  "manual_switches_enabled": 1,
-  "configured": 1,
-  "system": {
-    "compile_date": "JBHASD-VERSION Jun 10 2019 23:58:14",
-    "reset_reason": "Software/System restart",
-    "free_heap": 19200,
-    "chip_id": 9825072,
-    "flash_id": 1327328,
-    "flash_size": 1048576,
-    "flash_real_size": 1048576,
-    "flash_speed": 40000000,
-    "cycle_count": 3285025550,
-    "millis": 2686841
-  },
-  "controls": [
-    {
-      "name": "My Relay",
-      "type": "switch",
-      "state": 1,
-      "context": "network",
-      "behaviour": "toggle",
-      "motion_interval": 0,
-      "manual_interval": 0,
-      "last_activity_millis": 2686840,
-      "last_activity_delta_secs": 0
-    }
-  ]
-}
-```
-
-To turn off that control, we just call the same function and set the state to 0:
-
-```
-curl -XPOST 'http://192.168.12.165/control' -d '
-{
-    "controls" : [
-        {
-            "name": "My Relay", 
-            "state": 0
-        }
-    ]
-}'
-```
-
-## Other API calls
-
-Reboot the device:
-```
-curl 'http://192.168.12.165/reboot'
-```
-
-Reboot the device to AP Mode:
-```
-curl 'http://192.168.12.165/apmode'
-```
-
-Reset the device (wipe config):
-```
-curl 'http://192.168.12.165/reset'
-```
-
-Set the device for reconfiguring:
-```
-curl 'http://192.168.12.165/reconfigure'
-```
-
-To be continued..
+See API.md
