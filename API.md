@@ -84,7 +84,7 @@ curl 'http://192.168.12.251/reconfigure'
 ## Configure function
 See [Configuration Guide](./CONFIG_GUIDE.md)  
 
-## Control Function (turning on/off switches)
+## Control Function
 To control a device from the network, we can POST JSON directives to the /control API function and manipulate the onboard controls. 
 
 To start with an example of a Sonoff S20 with PIR sensor and temp/humidity control:
@@ -143,6 +143,7 @@ curl http://192.168.12.251/status
 ```
 The above shows us three controls on this device. Two switches and one temp/humidity sensor. 
 
+### Turn on/off switches
 To turn on the Desk Lamp control, we would send a JSON payload to the /control function. In that JSON payload would be a controls array and in that a single object with name set to "Desk Lamp" and state set to 1 (on).
 
 ```
@@ -344,7 +345,7 @@ curl -XPOST 'http://192.168.12.251/control' -d '
 
 The returned status then shows the Green LED in state 1 and Desk Lamp onm state 0. Both context fields also set to "network". 
 
-## Control Function (setting motion interval for PIR-enabled switches)
+### Setting motion interval for PIR-enabled switches
 If the given switch has a configired PIR sensor (motion_pin), the "motion_interval" field will appear in it's status and it is possible dynamically enable/disable that PIR based on setting this motion_interval field. 
 
 In the above examples, the "Desk Lamp" has a PIR sensor and it's motion_interval field is set to 0. So this PIR is esentially disabled. We are ignoring it's signalling. 
@@ -467,7 +468,7 @@ curl -XPOST 'http://192.168.12.251/control' -d '
 '
 ```
 
-## Control Function (setting manual interval for manual-enabled switches)
+### Setting manual interval for manual-enabled switches
 If the switch has a manual_pin defined in configuration, the status detail will include the settings for "manual_interval" and "manual_auto_off". In the same way as the above example, setting the property will return an updated JSON status showing that updated property.
 
 To manipulate the manual interval, we POST and specify the desired interval for the given control:
@@ -536,7 +537,7 @@ curl -XPOST 'http://192.168.12.251/control' -d '
 '
 ```
 
-## Control Function (Programming RGB Strips)
+### Programming RGB Strips
 RGB strips can by reprogrammed on demand by setting a new value for the program
 
 ```
