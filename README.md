@@ -63,10 +63,15 @@ json len:575
 ```
 
 The script uses zeroconf to locate services matching "_JBHASD._tcp.local." It outputs the URL of each discovered device and calls a GET on that URL showing the returned JSON state details. You will get the same JSON response with:
-
 ```
 curl http://192.168.12.165:80/status
 ```
+
+You can also reference the device by it's MDNS hostname:
+```
+curl http://JBHASD-0095EB30.local/status
+```
+The MDNS named approach will take longer as the IP resolution depends on a network broadcast for the given device to respond back with it's IP address.
 
 The section above for controls is where we would normally see details on any switches, sensors etc that are being managed by this device. Given this is a clean setup, no such detail is defined yet. Also the "configured" attribute of this device is set to 0 which confirms that no full device configuration has been pushed to this device.
 
@@ -79,8 +84,8 @@ curl -XPOST 'http://192.168.12.165/configure' -d '
 {
    "boot_pin": 0,
     "status_led_pin": 13,
-    "wifi_password": "h0tcak3y",
-    "wifi_ssid": "cormac-L",
+    "wifi_password": "XXXXXXXX",
+    "wifi_ssid": "My WiFI SSID",
     "zone": "Sonoff Desktop Test",
     "controls": [
         {
