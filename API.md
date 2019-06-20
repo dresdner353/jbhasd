@@ -82,7 +82,7 @@ curl 'http://192.168.12.251/reconfigure'
 ```
 
 ## Configure function
-See CONFIG_GUIDE.md
+See [Configuration Guide](./CONFIG_GUIDE.md)  
 
 ## Control Function (turning on/off switches)
 To control a device from the network, we can POST JSON directives to the /control API function and manipulate the onboard controls. 
