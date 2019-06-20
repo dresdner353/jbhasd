@@ -1,4 +1,4 @@
-# Configuration Guide
+# jbhasd Configuration Guide
 
 This guide details all configuration options with examples.
 
