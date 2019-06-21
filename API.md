@@ -6,6 +6,9 @@ This call is a GET or POST on the device URL and returns its current status and 
 Example:
 ```
 $ curl http://192.168.12.251/status
+```
+Response:
+```
 {
   "name": "JBHASD-00A30CCA",
   "zone": "Office",
@@ -57,40 +60,45 @@ $ curl http://192.168.12.251/status
 }
 ```
 
-## Reboot function
+## Reboot Function (/reboot)
 The reboot function sets a trigger to force the device to reboot. Will work as a GET or POST call
 ```
 curl 'http://192.168.12.251/reboot'
 ```
 
-## AP Mode function
+## AP Mode function (/apmode)
 This forces a once-off reboot into AP mode. Very handy when you want AP Mode but are too lazy to go and manually restart the device. 
 ```
 curl 'http://192.168.12.251/apmode'
 ```
 
-## Reset function
+## Reset function (/reset)
 This call forces config to be over-written by a default config. The device will then reboot and enter AP mode.
 ```
 curl 'http://192.168.12.251/reset'
 ```
 
-## Reconfigure function
-This function instructs the device to set it's configured property from 1 to 0. This is intended for use where you want an existing canned configuration to be pushed to the device via a network resource that is monitoring the devices. The call does not cause the device to reboot or act any differently other than advertise the configured property as 0.
+## Reconfigure function (/reconfigure)
+This function instructs the device to set it's configured property from 1 to 0. This is intended for use where you want an existing canned configuration to be pushed to the device via a network resource that is monitoring the devices. The call does not cause the device to reboot, update its stored configuration or act any differently other than advertise the configured property as 0. In fact if the device is rebooted, this configured property will revert to 1 if the device was previously in a configured state.
 ```
 curl 'http://192.168.12.251/reconfigure'
 ```
 
-## Configure function
-See [Configuration Guide](./CONFIG_GUIDE.md)  
+## Configure function (/configure)
+This function is where you push full config data to the device. 
 
-## Control Function
+For comprehensive details on this function see [Configuration Guide](./CONFIG_GUIDE.md)  
+
+## Control Function (/control)
 To control a device from the network, we can POST JSON directives to the /control API function and manipulate the onboard controls. 
 
-To start with an example of a Sonoff S20 with PIR sensor and temp/humidity control:
+We can start with an example of a Sonoff S20 with PIR sensor and temp/humidity control:
 
 ```
 curl http://192.168.12.251/status
+```
+Response:
+```
 {
   "name": "JBHASD-00A30CCA",
   "zone": "Office",
@@ -141,10 +149,10 @@ curl http://192.168.12.251/status
   ]
 }
 ```
-The above shows us three controls on this device. Two switches and one temp/humidity sensor. 
+The above status call shows us three controls on this device. Two switches and one temp/humidity sensor. 
 
-### Turn on/off switches
-To turn on the Desk Lamp control, we would send a JSON payload to the /control function. In that JSON payload would be a controls array and in that a single object with name set to "Desk Lamp" and state set to 1 (on).
+### Turn On/Off Switches
+To turn on the Desk Lamp control, we would send a JSON payload to the /control function. In that JSON payload would be a controls array with a single object specifying the name "Desk Lamp" and desired state of 1 (on).
 
 ```
 curl -XPOST 'http://192.168.12.251/control' -d '
@@ -157,6 +165,9 @@ curl -XPOST 'http://192.168.12.251/control' -d '
     ]
 }
 '
+```
+Response:
+```
 {
   "name": "JBHASD-00A30CCA",
   "zone": "Office",
@@ -222,6 +233,9 @@ curl -XPOST 'http://192.168.12.251/control' -d '
     ]
 }
 '
+```
+Response:
+```
 {
   "name": "JBHASD-00A30CCA",
   "zone": "Office",
@@ -294,6 +308,9 @@ curl -XPOST 'http://192.168.12.251/control' -d '
     ]
 }
 '
+```
+Response:
+```
 {
   "name": "JBHASD-00A30CCA",
   "zone": "Office",
@@ -345,14 +362,14 @@ curl -XPOST 'http://192.168.12.251/control' -d '
 }
 ```
 
-The returned status then shows the Green LED in state 1 and Desk Lamp onm state 0. Both context fields also set to "network". 
+The returned status then shows the Green LED in state 1 and Desk Lamp in state 0. Both context fields also set to "network". 
 
-### Setting motion interval for PIR-enabled switches
-If the given switch has a configired PIR sensor (motion_pin), the "motion_interval" field will appear in it's status and it is possible dynamically enable/disable that PIR based on setting this motion_interval field. 
+### Setting Motion Interval For PIR-enabled Switches
+If the given switch has a configired PIR sensor (motion_pin), the "motion_interval" field will appear in it's status and it is possible to dynamically enable/disable that PIR based on setting this motion_interval field. 
 
 In the above examples, the "Desk Lamp" has a PIR sensor and it's motion_interval field is set to 0. So this PIR is esentially disabled. We are ignoring it's signalling. 
 
-So to enable this sensor, we can simply set the motion_interval to a desired number of seconds > 0.
+To enable this sensor, we set the motion_interval to a desired number of seconds > 0.
 
 ```
 curl -XPOST 'http://192.168.12.251/control' -d '
@@ -365,7 +382,9 @@ curl -XPOST 'http://192.168.12.251/control' -d '
     ]
 }
 '
-
+```
+Response:
+```
 {
   "name": "JBHASD-00A30CCA",
   "zone": "Office",
@@ -428,7 +447,7 @@ If motion now trigers the switch, we will see this reflected in the state and co
       "state": 1,
       "context": "motion",
       "last_activity_millis": 741512,
-      "last_activity_delta_secs": 0,
+      "last_activity_delta_secs": 3,
       "motion_interval": 10,
       "manual_interval": 3600,
       "manual_auto_off": 1
@@ -436,8 +455,11 @@ If motion now trigers the switch, we will see this reflected in the state and co
 ...
 ...
 ```
+The above shows the context set to "motion" and state of 1. So this control is turned on and due to a motion event. The time that happened was 741512 msecs according to the internal msec clock. That's not a whole lot of use to us but relatively speaking, that was determined to be 3 seconds ago (last_activity_delta_secs). 
 
-Once that motion interval expires and the switch is turned off, the state will update to 0 and context to "init":
+Note: The Ardiono millis() range is an unsigned 32-bit int. That equates to about 49 days rotation. Unsigned arithmetic will also work if this time wraps around. So the delta calculation here will be accurate for intervals that are safely less than 49 days. The shorter the interval, the longer the accuracy of the delta calculation. 
+
+Once that motion interval of 10 seconds expires and the switch is turned off, the state will update to 0 and context to "init":
 
 ```
 ...
@@ -470,7 +492,7 @@ curl -XPOST 'http://192.168.12.251/control' -d '
 '
 ```
 
-### Setting manual interval for manual-enabled switches
+### Setting Manual Interval For Switches
 If the switch has a manual_pin defined in configuration, the status detail will include the settings for "manual_interval" and "manual_auto_off". In the same way as the above example, setting the property will return an updated JSON status showing that updated property.
 
 To manipulate the manual interval, we POST and specify the desired interval for the given control:
@@ -573,3 +595,72 @@ Another example:
 "program": "0xFFFFFF;0;2000,random;5;1000,0x000000;0;2000,0x00FF00;1;5000"
 ```
 This program will start with full white shown for 2 seconds, then a gradual fade to a random colour, turn off for 2 seconds and then fast fade to green and repeat
+
+### Programming Addressable RGB Strips
+RGB strips can by reprogrammed on demand by setting a new value for the program. This is the same prnciple as used with programming of RGB strips except the program syntax is different.
+
+```
+curl -XPOST 'http://192.168.12.186/control' -d '
+{
+    "controls" : [
+        {
+            "name": "Front Door", 
+            "program": "1;50;0;0x00,0x0A,0x14,0x1E,0x28,0x32,0x3C,0x46,0x50,0x5A,0x64,0x6E,0x78,0x82,0x8C,0x96,0xA0,0xAA,0xB4,0xBE,0xC8,0xD2,0xDC,0xE6,0xF0,0xFA"
+        }
+    ]
+}
+'
+```
+The resulting JSON status response will show the updated program:
+
+```
+    {
+      "name": "Front Door",
+      "type": "argb",
+      "program": "1;50;0;0x00,0x0A,0x14,0x1E,0x28,0x32,0x3C,0x46,0x50,0x5A,0x64,0x6E,0x78,0x82,0x8C,0x96,0xA0,0xAA,0xB4,0xBE,0xC8,0xD2,0xDC,0xE6,0xF0,0xFA"
+    }
+```
+The program format is 
+```
+<direction 0/1/-1>;<pause msecs>;<drdraw mode>;<colour>,<colour>,<colour>,,,,,
+```
+
+This program uses direction 1 which is forward direction.. incrementing the starting pixel from 0 after each redraw. The pause is 50 msecs between render of the sequence. The draw mode is 0 (wipe before execution).
+
+So the end result will be that we draw this sequence of colours from the first pixel onward, pause for 5 msecs, clear the strip and draw the same sequence again but from one position forward. The effect is that the colour sequence will appear to travel along the strip and wrap around when it passes the end. 
+
+The colour sequence is based on RGB in 24-bit form. All the values you see are < 0xFF. So this is a sequence of blue shades from black up to increasing levels of blue. What you get is a very slick gradiant of 26 shades of blue.
+
+Another example:
+
+```
+curl -XPOST 'http://192.168.12.186/control' -d '
+{
+    "controls" : [
+        {
+            "name": "Front Door", 
+            "program": "1;200;2;0xFF0000,0x00FF00,0x0000FF"
+        }
+    ]
+}
+'
+```
+
+This draws a red, green & blue sequence in mode 2 (append) with a 200 msec delay between draws. This will show the strip continually fill up with the red, green & blue sequence every 200 msecs until the stip is totally filled and then it is wiped and fills up again.
+
+And an example using the fill mode:
+
+```
+curl -XPOST 'http://192.168.12.186/control' -d '
+{
+    "controls" : [
+        {
+            "name": "Front Door", 
+            "program": "1;200;1;0xFF0000,0x00FF00"
+        }
+    ]
+}
+'
+```
+
+This program instantly fills up the strip with a sequence of Red and Green. In conjunction wuth the direction of 1, the effect is that one draw displays a red-green-red-green..... and the next green-red-green-red. So we get a rotating effect on the green-red pattern.

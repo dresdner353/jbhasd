@@ -167,7 +167,7 @@ This field specifies a display pattern for the aRGB strip along with offset, del
 
 The program takes the form: 
 ```
-<direction>;<pause>;<fill mode>;RRGGBB,RRGGBB,.....
+<direction 0/1/-1>;<pause msecs>;<draw mode>;<colour>,<colour>,<colour>,,,,,
 ```
 The first three fields are semi-colon separated followed by a final semi-colon and the a comma-separated list of colour values in decimal or hex (0x-prefixed). 
 
@@ -175,7 +175,7 @@ Direction defines the way the starting offset is managed bwtween executions of t
 
 The pause period in msecs defines the delay between executions of the program
 
-The fill mode defines the strip fill to be one of the following:
+The draw mode defines the strip draw behaviour to be one of the following:
 - 0 (wipe before each execution)   
 The strip is populated with one execution of the colour sequence and wiped before each execution of the program. When used in conjunction with a direction value != 0, the effect is that the colour sequence appears to travel from one end of the strip to the other.
 
