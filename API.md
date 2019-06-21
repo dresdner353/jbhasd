@@ -627,9 +627,9 @@ The program format is
 
 This program uses direction 1 which is forward direction.. incrementing the starting pixel from 0 after each redraw. The pause is 50 msecs between render of the sequence. The draw mode is 0 (wipe before execution).
 
-So the end result will be that we draw this sequence of colours from the first pixel onward, pause for 5 msecs, clear the strip and draw the same sequence again but from one position forward. The effect is that the colour sequence will appear to travel along the strip and wrap around when it passes the end. 
+So the end result will be that we draw this sequence of colours from the first pixel onward, pause for 50 msecs, clear the strip and draw the same sequence again but from one position forward. The effect is that the colour sequence will appear to travel along the strip and wrap around when it passes the end. 
 
-The colour sequence is based on RGB in 24-bit form. All the values you see are < 0xFF. So this is a sequence of blue shades from black up to increasing levels of blue. What you get is a very slick gradiant of 26 shades of blue.
+The colour sequence is based on RGB in 24-bit integer form. All the values you see are < 0xFF. So this is a sequence of blue shades from black up to increasing levels of blue. What you get is a very slick gradiant of 26 shades of blue.
 
 Another example:
 
@@ -663,4 +663,4 @@ curl -XPOST 'http://192.168.12.186/control' -d '
 '
 ```
 
-This program instantly fills up the strip with a sequence of Red and Green. In conjunction wuth the direction of 1, the effect is that one draw displays a red-green-red-green..... and the next green-red-green-red. So we get a rotating effect on the green-red pattern.
+This program instantly fills up (mode 1) the strip with a sequence of Red and Green. In conjunction with the direction of 1, the effect is that we get a rotating effect on the repeating green-red pattern.
