@@ -460,59 +460,69 @@ def check_switch(zone_name,
     global gv_manual_switch_dict
 
     desired_state = -1 # implies no desired state
-    motion_interval = -1 # no implied motion
+    desired_motion_interval = -1 # no implied motion
 
     now = time.time()
 
     for timer in gv_json_config['switch_timers']:
         if timer['zone'] == zone_name and timer['control'] == control_name:
             # Motion interval (optional)
-            if 'motion_interval' in timer:
+            if ('motion_interval' in timer):
                 motion_on_time = get_timer_time(timer['motion_on'])
                 motion_off_time = get_timer_time(timer['motion_off'])
+
+                # Assume no motion interval to start
+                desired_motion_interval = 0
 
                 if (motion_on_time <= motion_off_time):
                     if (current_time >= motion_on_time and 
                         current_time < motion_off_time):
-                        motion_interval = timer['motion_interval']
+                        desired_motion_interval = timer['motion_interval']
                 else:
                     if (current_time > motion_on_time):
-                        motion_interval = timer['motion_interval']
+                        desired_motion_interval = timer['motion_interval']
                     else:
                         if (current_time < motion_on_time and
                             current_time < motion_off_time):
-                            motion_interval = timer['motion_interval']
+                            desired_motion_interval = timer['motion_interval']
 
-            # On/Off Start assuming its off
-            desired_state = 0
+            # timer on/off optional
+            if ('on' in timer and 
+                'off' in timer):
 
-            # sunset/sunrise keyword replacemenet with
-            # dynamic values
-            on_time = get_timer_time(timer['on'])
-            off_time = get_timer_time(timer['off'])
+                # On/Off Start assuming its off
+                desired_state = 0
 
-            # Test time ranges and break out on 
-            # first hit for the on state
-            if (on_time <= off_time):
-                if (current_time >= on_time and 
-                    current_time < off_time):
-                    desired_state = 1
-                    break
-            else:
-                if (current_time > on_time):
-                    desired_state = 1
-                    break
-                else:
-                    if (current_time < on_time and
+                # part times from fields 
+                # this also substitutes keywords
+                # like sunset and sunrise
+                on_time = get_timer_time(timer['on'])
+                off_time = get_timer_time(timer['off'])
+
+                # Test time ranges and break out on 
+                # first hit for the on state
+                if (on_time <= off_time):
+                    if (current_time >= on_time and 
                         current_time < off_time):
                         desired_state = 1
                         break
+                else:
+                    if (current_time > on_time):
+                        desired_state = 1
+                        break
+                    else:
+                        if (current_time < on_time and
+                            current_time < off_time):
+                            desired_state = 1
+                            break
 
-    #print("return zone:%s control:%s state:%d motion:%d" % (zone_name, 
-    #                                                        control_name,
-    #                                                        desired_state,
-    #                                                        motion_interval))
-    return desired_state, motion_interval
+    print("return zone:%s control:%s state:%d motion:%d" % (
+        zone_name, 
+        control_name,
+        desired_state,
+        desired_motion_interval))
+
+    return desired_state, desired_motion_interval
 
 
 def check_rgb(zone_name, 
