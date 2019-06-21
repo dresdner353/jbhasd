@@ -597,7 +597,7 @@ Another example:
 This program will start with full white shown for 2 seconds, then a gradual fade to a random colour, turn off for 2 seconds and then fast fade to green and repeat
 
 ### Programming Addressable RGB Strips
-RGB strips can by reprogrammed on demand by setting a new value for the program. This is the same prnciple as used with programming of RGB strips except the program syntax is different.
+RGB strips can by reprogrammed on demand by setting a new value for the program. This is the same principle as used with programming of RGB strips except the program syntax is different.
 
 ```
 curl -XPOST 'http://192.168.12.186/control' -d '
