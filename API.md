@@ -622,7 +622,7 @@ The resulting JSON status response will show the updated program:
 ```
 The program format is 
 ```
-<direction 0/1/-1>;<pause msecs>;<drdraw mode>;<colour>,<colour>,<colour>,,,,,
+<direction 0/1/-1>;<pause msecs>;<draw mode>;<colour>,<colour>,<colour>,,,,,
 ```
 
 This program uses direction 1 which is forward direction.. incrementing the starting pixel from 0 after each redraw. The pause is 50 msecs between render of the sequence. The draw mode is 0 (wipe before execution).
