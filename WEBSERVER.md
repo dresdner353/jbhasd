@@ -249,21 +249,21 @@ The webserver is operating a basic API that can be used to direct it to turn on/
 Note: This API is GET-based for now but will be updated to a POST-based alternative in due course.
 
 ## Rebooting Devices
-### API: ?device=DDD&reboot=1
+##### API: IP:port/?device=DDD&reboot=1
 If the device value is set to "all", then all devices will be rebooted. Otherwise just the specified device name will be looked up and it's device API caled to invoke a reboot.
 
 ## Reconfiguring Devices 
-### API: ?device=DDD&reconfig=1
+##### API: IP:port/?device=DDD&reconfig=1
 If the device is set to "all" then all devices are reconfigured. Otherwise just the specified name is looked up and its reconfigure API function is called.
 
 ## AP Mode
-### API ?device=DDD&apmode=1
+##### API IP:port/?device=DDD&apmode=1
 This call can put all (device=all) or just a single named device into AP mode.
 
 ## Switch Control
-### API: ?device=DDD&zone=ZZZ&control=CCC&state=SSS
+##### API: IP:port/?device=DDD&zone=ZZZ&control=CCC&state=SSS
 Specifies the device, zone and control to manipulate and the desired state to apply
 
 ## RGB/aRGB Control
-### API: ?device=DDD&zone=ZZZ&control=CCC&program=PPPPP
+##### API: IP:port/?device=DDD&zone=ZZZ&control=CCC&program=PPPPP
 Same concept as controlling switches but uses a desired program instead to pass to the underlying device and change it RGB/aRGB program
