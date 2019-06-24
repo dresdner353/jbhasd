@@ -1344,7 +1344,8 @@ def build_zone_web_page(num_cols):
     # Cells are vertically aligned to top to keep widgets 
     # top-down in layout and not vertically-centred
     dashboard_str = ('<div class="timestamp" align="right">'
-                     'Updated %s</div>') % (time.asctime())
+                     'Updated %s <a title="Switch to Device View" href="/device">&#x2699;</a></div>') % (time.asctime())
+
     dashboard_str += '<table border="0" width="50%%"><tr>'
     for col_str in dashboard_col_list:
         dashboard_str += '<td valign="top">'
@@ -1731,9 +1732,8 @@ def build_device_web_page(num_cols):
     # and the odd column will be given more width.
     # Cells are vertically aligned to top to keep widgets 
     # top-down in layout and not vertically-centred
-
     dashboard_str = ('<div class="timestamp" align="right">'
-                     'Updated %s</div>') % (time.asctime())
+                     'Updated %s <a title="Switch to Zone View" href="/zone">&#x1F441;</a></div>') % (time.asctime())
 
     dashboard_str += '<table border="0" width="50%%"><tr>'
     for col_str in dashboard_col_list:
