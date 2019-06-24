@@ -271,7 +271,7 @@ def set_default_config():
     json_config = {}
     # discovery
     json_config['discovery'] = {}
-    json_config['discovery']['zeroconf_refersh_interval'] = 60
+    json_config['discovery']['zeroconf_refresh_interval'] = 60
     json_config['discovery']['device_probe_interval'] = 10
     json_config['discovery']['device_purge_timeout'] = 30
 
@@ -615,7 +615,7 @@ def discover_devices():
 
         # loop interval sleep then 
         # close zeroconf object
-        time.sleep(gv_json_config['discovery']['zeroconf_refersh_interval'])
+        time.sleep(gv_json_config['discovery']['zeroconf_refresh_interval'])
         zeroconf.close()
 
 
