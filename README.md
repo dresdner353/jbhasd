@@ -164,5 +164,5 @@ So now, we have a populated 'controls' array being returned that describes the a
 ## See Also..
 
 [Configuration Guide](./CONFIG_GUIDE.md)  
-[API Guide](./API.md)
+[API Guide](./API.md)   
 [Webserver Guide](./WEBSERVER.md)
