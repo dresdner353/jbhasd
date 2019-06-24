@@ -819,10 +819,11 @@ def configure_device(url, device_name):
         # Indicate the origin profile
         config_dict['profile'] = profile_name
 
-        # Set mandatory zone, wifi creds
+        # Set mandatory zone and optional wifi creds
         config_dict['zone'] = device_specific_dict['zone']
-        config_dict['wifi_ssid'] = device_specific_dict['wifi_ssid']
-        config_dict['wifi_password'] = device_specific_dict['wifi_password']
+        if ('wifi_ssid' in device_specific_dict):
+            config_dict['wifi_ssid'] = device_specific_dict['wifi_ssid']
+            config_dict['wifi_password'] = device_specific_dict['wifi_password']
 
         # Optional over-rides
         # protect in try as they keys may not exist in 
