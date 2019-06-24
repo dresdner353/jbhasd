@@ -5,24 +5,30 @@
 
 Just a pet project to go and build some home automation devices, turn on and off appliances, read a few sensors, have some fun and learn something along the way. 
 
-The main objective of the project is to create firmware sketches for ESP-8266 devices that enables the devices to be easily configured on a WiFI network and then automatically discovered by a server running on a networked computer or even Raspberry Pi.
+There's some great existing options for home automation stacks out there and protocols such as MQTT. There are also some very powerful swissknife firmware sketches and LUA/Node-MCU scripts for the ESP-8266. 
 
-There's some great existing options for home automation stacks out there and protocols such as MQTT. There are also some very powerful firmware sketches and LUA/Node-MCU scripts for the ESP-8266. However I wanted to build a lean simplified model that made it easier to manage during setup. The objective was to use a JSON status string served via URL from the device as a means of presenting the capabilities to a querying server. The discovery would be based on DNS-SD/Zeroconf. 
+However, none as far as I can tell offer the simplified discovery model I wanted to see. You follow the steps to integrate your sketch with monitoring tools and this whole plethora of steps and hard-coding of IP addresses takes place.
+
+My objective was to deploy a device by putting it onto the local WiFI and then have it auto-discovered and instantly understood by a server. 
+
+After some thought I settled on getting the device to enable mDNS and DNS-SD to allow the device to be discovered based on a sub-system keyword. Then a simple web serving of a JSON status string from the discovered device would be all the server needed to know the device details.. basically it's name, zone and what controls it has attached. The objective was to use that discovered JSON status to equip the server to render dashboards and other timing functions from the "hub" server.
+
+So the combination of the use of JSON as API protocol along with DNS-SD ended up giving me the geeky name JBHASD. 
 
 ## Quick Summary of the Setup Steps
 - The generic firmware is flashed to any ESP-8266 Device
 - The device should power up in AP mode with SSID JBHASD-XXXXXXXX where XXXXXXXX is the CPU ID of the ESP8266
-- You connect to the SSID where you can then select Wifi SSID and Password and apply changes
+- You connect to the SSID and get brought to a web page where you can then select Wifi SSID and Password and apply changes
 - The device then reboots and connects to your network in STA mode (WiFI client)
 - You can then access the device with a JSON-based API and manage it from there
-- MDNS and DNS-SD are built-in and an accompanying web server can be used as a hub for the devices providing a web portal, means of managing automation and even downloading config data to newly attached or reset devices
+- MDNS and DNS-SD are built-in and an accompanying web server can be used as a hub for the devices providing a web portal, means of managing automation and even downloading config data to newly attached devices
 
 ## Using AP Mode to Configure WiFI
 When you first power up the device after flashing, it should auto launch as a open wireless AP. The SSID will be of the format "JBHASD-XXXXXXXX". 
 
 After connecting to the SSID, you get captive-DNS dropped into a config page that lets you set two fields.. WiFI SSID and password. 
 
-You then click/tap an apply button to save the config and reboot. The device should then enter STA mode after reboot and connect to your configured WiFI router. If you need to access the AP mode again, power-cycle the device and ground GPIO-0 within the first 5 seconds and it should re-enter AP mode. 
+You then click/tap the apply button to save the config and reboot. The device should then enter STA mode after reboot and connect to your configured WiFI router. If you need to access the AP mode again, power-cycle the device and ground GPIO-0 within the first 5 seconds and it should re-enter AP mode. 
 
 At this stage, all you have is a device that connects to your WiFI. It is not yet configured in terms of pin asignments for switch and sensor functions.
 
@@ -30,7 +36,7 @@ But you can now communicate to the device and see its status information. The de
 
 ## Getting the Device JSON Status
 
-You can use your WiFI router to tell you what IP was assigned but this project also includes a script to run a discovery of devices on your LAN.
+You can use your WiFI router to tell you what IP was assigned but this project also includes a script to run a discovery of devices on your LAN. Discovery is key here. So let's show that in action:
 
 ```
 python3 jbhasd/jbhad_discover.py
@@ -84,8 +90,6 @@ curl -XPOST 'http://192.168.12.165/configure' -d '
 {
    "boot_pin": 0,
     "status_led_pin": 13,
-    "wifi_password": "XXXXXXXX",
-    "wifi_ssid": "My WiFI SSID",
     "zone": "Sonoff Desktop Test",
     "controls": [
         {
@@ -113,10 +117,10 @@ The response to this call is:
 
 The is a JSON payload which includes an error value of 0 for success and 1 for failure. The description will give context to the specific failure at hand. The above is indicating that the device was successfully configured.
 
-With the config sent up, the device validates the JSON, saves the config to EEPROM and reboots again. It will flash the status LED at a medium rate for 5 seconds giving you time to ground GPIO-0 (boot_pin) and put the device into AP Mode. If you activate that boot PIN during that initial 5 seconds, the LED flashing will go to a fast rate to indicate AP mode. 
-If you leave that boot sequence alone, after 5 seconds, the initial medium flashing rate will drop to a slower rate to indicate that the WiFI connect stage has started and it will remain at that rate until it gets connected to the network. 
+With the config sent up, the device validates the JSON, saves the config to EEPROM and reboots again. It will now flash the status LED at a medium rate for 5 seconds giving you time to ground GPIO-0 (boot_pin) and put the device into AP Mode. If you activate that boot PIN during that initial 5 seconds, the LED flashing will go to a fast rate to indicate AP mode. 
+If you leave that boot sequence alone, after 5 seconds, the initial medium flashing rate will drop to a slower rate to indicate that the WiFI connect stage has started and it will remain at that slow rate until it gets connected to the network. 
 
-When it gets connected, it will issue a quick burst of flashes to indicate that the device has successfully conected to wifi and then turn off. 
+When it gets connected, it will issue a quick burst of flashes to indicate that the device has successfully conected to wifi and then turn off the status LED. 
 
 Once it reboots again, the following JSON is returned when the device is probed.. 
 
