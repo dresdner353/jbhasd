@@ -1331,6 +1331,39 @@ def build_zone_web_page(num_cols):
                         dashboard_col_list[col_index] += '<tr><td></td></tr>'
                         dashboard_col_list[col_index] += '<tr><td></td></tr>'
 
+                    if (sensor_type == 'argb'):
+                        # parse program, isolating 4th semi-colon 
+                        # section and spliting it by comma
+                        colour_list = []
+                        program_parts = sensor['program'].split(';')
+                        if (len(program_parts) == 4):
+                            colour_list = program_parts[3].split(',')
+
+                        # start row, format label and start of 
+                        # colour cell
+                        dashboard_col_list[col_index] += (
+                                '<tr>'
+                                '<td class="dash-label">%s</td>'
+                                '<td>') % (sensor_name)
+
+                        # Iterate colours and format in stack of
+                        # 5 dots
+                        i = 0
+                        for colour in colour_list:
+                            colour_int = int(colour, 0)
+                            dashboard_col_list[col_index] += (
+                                    '<span style="color:#%06X">'
+                                    '&#x2B24;'
+                                    '</span>') % (colour_int)
+                            i += 1
+                            if (i % 5 == 0):
+                                dashboard_col_list[col_index] += '<br>'
+
+                        # terminate the colour cell and row
+                        dashboard_col_list[col_index] += '</td></tr>'
+
+                        dashboard_col_list[col_index] += '<tr><td></td></tr>'
+                        dashboard_col_list[col_index] += '<tr><td></td></tr>'
 
         # terminate the zone table and container div
         dashboard_col_list[col_index] += '</table></div>'
@@ -1720,7 +1753,41 @@ def build_device_web_page(num_cols):
                 dashboard_col_list[col_index] += '<tr><td></td></tr>'
                 dashboard_col_list[col_index] += '<tr><td></td></tr>'
 
-        # terminate the zone table and container div
+            if (sensor_type == 'argb'):
+                # parse program, isolating 4th semi-colon 
+                # section and spliting it by comma
+                colour_list = []
+                program_parts = sensor['program'].split(';')
+                if (len(program_parts) == 4):
+                    colour_list = program_parts[3].split(',')
+
+                # start row, format label and start of 
+                # colour cell
+                dashboard_col_list[col_index] += (
+                        '<tr>'
+                        '<td class="dash-label">%s</td>'
+                        '<td>') % (sensor_name)
+
+                # Iterate colours and format in stack of
+                # 5 dots
+                i = 0
+                for colour in colour_list:
+                    colour_int = int(colour, 0)
+                    dashboard_col_list[col_index] += (
+                            '<span style="color:#%06X">'
+                            '&#x2B24;'
+                            '</span>') % (colour_int)
+                    i += 1
+                    if (i % 5 == 0):
+                        dashboard_col_list[col_index] += '<br>'
+
+                # terminate the colour cell and row
+                dashboard_col_list[col_index] += '</td></tr>'
+
+                dashboard_col_list[col_index] += '<tr><td></td></tr>'
+                dashboard_col_list[col_index] += '<tr><td></td></tr>'
+
+        # terminate the device table and container div
         dashboard_col_list[col_index] += '</table></div>'
         device_id += 1
 
