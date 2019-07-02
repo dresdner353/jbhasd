@@ -283,7 +283,7 @@ def set_default_config():
     # dashboard
     json_config['dashboard'] = {}
     json_config['dashboard']['initial_num_columns'] = 1
-    json_config['dashboard']['box_width'] = 210
+    json_config['dashboard']['box_width'] = 250
     json_config['dashboard']['col_division_offset'] = 20
 
     # sunset
@@ -398,6 +398,24 @@ gv_http_timeout_secs = 5
 
 # Dict to track manual switch scenarios
 gv_manual_switch_dict = {}
+
+# Dict to map switch context to Unicode
+# symbol
+gv_context_symbol_dict = {
+        'network' : '&#x1F551;',
+        'manual' : '&#x1F447',
+        'init' : ' ',
+        'motion' : '&#x1F3C3;',
+        }
+
+# Maps switch context to title
+# hover text
+gv_context_title_dict = {
+        'network' : 'Network/Timer Controlled',
+        'manual' : 'Manual Button Press',
+        'init' : ' ',
+        'motion' : 'Motion Detected',
+        }
 
 
 def reset_all_dicts():
@@ -1219,6 +1237,7 @@ def build_zone_web_page(num_cols):
 
                     if control_type == 'switch':
                         control_state = int(control['state'])
+                        control_context = control['context']
                         alternate_state = (control_state + 1) % 2
 
                         # prep args for transport
@@ -1256,9 +1275,12 @@ def build_zone_web_page(num_cols):
                                                           '<div class="slider round"></div>'
                                                           '</label>'
                                                           '</td>'
+                                                          '<td class="dash-title" title="%s">%s</td>'
                                                           '</tr>') % (control_name,
                                                                       switch_id,
-                                                                      checked_str)
+                                                                      checked_str,
+                                                                      gv_context_title_dict[control_context],
+                                                                      gv_context_symbol_dict[control_context])
 
                         # Jquery code for the click state
                         # Generated with the same switch id
@@ -1301,7 +1323,7 @@ def build_zone_web_page(num_cols):
                                 '<td class="dash-label" width="50%%">%s</td>'
                                 '<td class="dash-label">'
                                 '<table border="0" width="100%%">'
-                                '<tr><td class="dash-label" align="center">&#x263C;</td>'
+                                '<tr><td class="dash-label" align="center">&#x1F321;</td>'
                                 '<td class="dash-label" align="left">%s C</td></tr>'
                                 '<tr><td class="dash-label" align="center">&#x1F4A7;</td>'
                                 '<td class="dash-label" align="left">%s %%</td></tr>'
@@ -1648,6 +1670,7 @@ def build_device_web_page(num_cols):
 
             if control_type == 'switch':
                 control_state = int(control['state'])
+                control_context = control['context']
                 alternate_state = (control_state + 1) % 2
 
                 # prep args for transport
@@ -1695,9 +1718,12 @@ def build_device_web_page(num_cols):
                         '<div class="slider round"></div>'
                         '</label>'
                         '</td>'
+                        '<td class="dash-title" title="%s">%s</td>'
                         '</tr>') % (control_name,
                                     jquery_click_id,
-                                    checked_str)
+                                    checked_str,
+                                    gv_context_title_dict[control_context],
+                                    gv_context_symbol_dict[control_context])
 
                 # increment for next switch
                 switch_id += 1
