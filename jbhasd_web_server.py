@@ -212,6 +212,10 @@ input:checked + .slider:before {
     font-size: 20px;
 }
 
+.dash-icon {
+    font-size: 20px;
+}
+
 .dash-label {
     font: normal 16px/1 Verdana, Geneva, sans-serif;
     font-size: 15px;
@@ -1275,7 +1279,7 @@ def build_zone_web_page(num_cols):
                                                           '<div class="slider round"></div>'
                                                           '</label>'
                                                           '</td>'
-                                                          '<td class="dash-title" title="%s">%s</td>'
+                                                          '<td class="dash-icon" title="%s">%s</td>'
                                                           '</tr>') % (control_name,
                                                                       switch_id,
                                                                       checked_str,
@@ -1323,9 +1327,9 @@ def build_zone_web_page(num_cols):
                                 '<td class="dash-label" width="50%%">%s</td>'
                                 '<td class="dash-label">'
                                 '<table border="0" width="100%%">'
-                                '<tr><td class="dash-label" align="center">&#x1F321;</td>'
+                                '<tr><td class="dash-icon" align="center">&#x1F321;</td>'
                                 '<td class="dash-label" align="left">%s C</td></tr>'
-                                '<tr><td class="dash-label" align="center">&#x1F4A7;</td>'
+                                '<tr><td class="dash-icon" align="center">&#x1F4A7;</td>'
                                 '<td class="dash-label" align="left">%s %%</td></tr>'
                                 '</table></td>'
                                 '</tr>') % (sensor_name,
@@ -1399,7 +1403,7 @@ def build_zone_web_page(num_cols):
     # Cells are vertically aligned to top to keep widgets 
     # top-down in layout and not vertically-centred
     dashboard_str = ('<div class="timestamp" align="right">'
-                     'Updated %s <a title="Switch to Device View" href="/device">&#x2699;</a></div>') % (time.asctime())
+                     'Updated %s <a title="Switch to Device View" href="/device" class="dash-icon">&#x2699;</a></div>') % (time.asctime())
 
     dashboard_str += '<table border="0" width="50%%"><tr>'
     for col_str in dashboard_col_list:
@@ -1718,7 +1722,7 @@ def build_device_web_page(num_cols):
                         '<div class="slider round"></div>'
                         '</label>'
                         '</td>'
-                        '<td class="dash-title" title="%s">%s</td>'
+                        '<td class="dash-icon" title="%s">%s</td>'
                         '</tr>') % (control_name,
                                     jquery_click_id,
                                     checked_str,
@@ -1749,9 +1753,9 @@ def build_device_web_page(num_cols):
                         '<td class="dash-label" width="50%%">%s</td>'
                         '<td class="dash-label">'
                         '<table border="0" width="100%%">'
-                        '<tr><td class="dash-label" align="center">&#x263C;</td>'
+                        '<tr><td class="dash-icon" align="center">&#x1F321;</td>'
                         '<td class="dash-label" align="left">%s C</td></tr>'
-                        '<tr><td class="dash-label" align="center">&#x1F4A7;</td>'
+                        '<tr><td class="dash-icon" align="center">&#x1F4A7;</td>'
                         '<td class="dash-label" align="left">%s %%</td></tr>'
                         '</table></td>'
                         '</tr>') % (sensor_name,
@@ -1826,7 +1830,7 @@ def build_device_web_page(num_cols):
     # Cells are vertically aligned to top to keep widgets 
     # top-down in layout and not vertically-centred
     dashboard_str = ('<div class="timestamp" align="right">'
-                     'Updated %s <a title="Switch to Zone View" href="/zone">&#x1F441;</a></div>') % (time.asctime())
+                     'Updated %s <a title="Switch to Zone View" href="/zone" class="dash-icon">&#x1F441;</a></div>') % (time.asctime())
 
     dashboard_str += '<table border="0" width="50%%"><tr>'
     for col_str in dashboard_col_list:
