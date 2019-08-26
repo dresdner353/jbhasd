@@ -244,6 +244,10 @@ void load_config()
     // Configured state, default 0
     gv_device.configured = json_get_ival(json_cfg["configured"], 0);
 
+    // Idle Status for WiFi Restart and reboot, default 0
+    gv_device.idle_period_wifi = json_get_ival(json_cfg["idle_period_wifi"], 0);
+    gv_device.idle_period_reboot = json_get_ival(json_cfg["idle_period_reboot"], 0);
+
     JsonArray controls = json_cfg["controls"];
     if (controls.isNull()) {
         log_message("Failed to parse controls array from json cfg");
