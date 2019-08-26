@@ -182,6 +182,8 @@ struct device_profile {
     uint8_t status_led_pin;
     uint8_t status_led_on_high;
     uint8_t force_apmode_onboot;
+    uint32_t idle_period_wifi;
+    uint32_t idle_period_reboot;
     uint8_t configured;
     struct gpio_switch *switch_list;
     struct gpio_sensor *sensor_list;
@@ -302,6 +304,7 @@ void loop_task_check_wifi_down(void);
 void loop_task_check_wifi_up(void);
 void loop_task_status_led(void);
 void loop_task_ap_reboot(void);
+void loop_task_check_idle_status(void);
 
 
 
