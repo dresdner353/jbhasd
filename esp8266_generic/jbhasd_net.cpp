@@ -12,6 +12,10 @@ static DNSServer dns_server;
 static char small_buffer[1024];
 static char large_buffer[4096];
 
+// Track calls to /status API
+static uint32_t last_status = 0;
+static uint32_t last_wifi_restart = 0;
+
 
 // Function: get_json_status
 // formats and returns a JSON string representing
@@ -346,6 +350,16 @@ void wifi_init()
                      RUN_STATE_WIFI_STA_UP,
                      10000,
                      loop_task_check_wifi_down);
+
+    if (gv_device.idle_period_wifi > 0 ||
+        gv_device.idle_period_reboot > 0) {
+        // Idle Check every 30s if either idle 
+        // period enabled
+        TaskMan.add_task("Idle Status Check",
+                         RUN_STATE_WIFI_STA_UP,
+                         30000,
+                         loop_task_check_idle_status);
+    }
 }
 
 
@@ -387,6 +401,9 @@ void start_wifi_ap_mode()
 // callback handler for the /status 
 void sta_handle_status() {
     log_message("sta_handle_status()");
+
+    // Update timestamp of last call
+    last_status = millis();
 
     // Return current status 
     gv_web_server.send(200, "application/json", get_json_status());
@@ -715,11 +732,6 @@ void loop_task_check_wifi_down(void)
     if (WiFi.status() != WL_CONNECTED) {
         log_message("WiFI is down");
         TaskMan.set_run_state(RUN_STATE_WIFI_STA_DOWN);
-
-        log_message("Connecting to Wifi SSID:%s, Password:%s",
-                    gv_device.wifi_ssid,
-                    gv_device.wifi_password);
-
         start_wifi_sta_mode();
     }
 }
@@ -814,3 +826,46 @@ void loop_task_ap_reboot(void)
     gv_reboot_requested = 1;
 }
 
+// Function loop_task_check_idle_status
+// Checks for idle status based on calls to /status API
+// Can root out inacessible network scenario even if WiFi is up
+void loop_task_check_idle_status(void)
+{
+    uint32_t last_status_secs;
+    uint32_t last_wifi_restart_secs;
+    log_message("loop_task_check_idle_status()");
+
+    // Determine #secs since last status call
+    last_status_secs = (millis() - last_status) / 1000;
+    last_wifi_restart_secs = (millis() - last_wifi_restart) / 1000;
+
+    log_message("Configured Idle Status Periods (secs): Reboot:%d WiFi Restart:%d", 
+                gv_device.idle_period_reboot, 
+                gv_device.idle_period_wifi);
+    log_message("Last /status API call was %d seconds ago", last_status_secs);
+    log_message("WiFi last restart was %d seconds ago", last_wifi_restart_secs);
+
+    // Reboot scenario
+    if (gv_device.idle_period_reboot > 0 &&
+        last_status_secs >= gv_device.idle_period_reboot) {
+        log_message("Idle period >= %d (Rebooting)", 
+                    gv_device.idle_period_reboot);
+        gv_reboot_requested = 1;
+        return;
+    }
+
+    // Restart WiFi scenario
+    // bit more complex logic here
+    // looking to qualify a WiFi restart if idle >= the defined period
+    // but also need to ensure we have not already restarted the WiFi
+    // so we are comparing against two intervals.. actual idle status time 
+    // and the time since the last restart
+    if (gv_device.idle_period_wifi > 0 &&
+        last_status_secs >= gv_device.idle_period_wifi &&
+        last_wifi_restart_secs >= gv_device.idle_period_wifi) {
+        log_message("Idle period >= %d (Restarting WiFi)", 
+                    gv_device.idle_period_wifi);
+        last_wifi_restart = millis();
+        start_wifi_sta_mode();
+    }
+}
