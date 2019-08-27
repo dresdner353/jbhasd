@@ -398,7 +398,7 @@ gv_jbhasd_device_status_dict = {}
 gv_jbhasd_device_ts_dict = {}
 
 # timeout for all fetch calls
-gv_http_timeout_secs = 5
+gv_http_timeout_secs = 10
 
 # Dict to track manual switch scenarios
 gv_manual_switch_dict = {}
@@ -538,11 +538,11 @@ def check_switch(zone_name,
                             desired_state = 1
                             break
 
-    print("return zone:%s control:%s state:%d motion:%d" % (
-        zone_name, 
-        control_name,
-        desired_state,
-        desired_motion_interval))
+    #print("return zone:%s control:%s state:%d motion:%d" % (
+    #    zone_name, 
+    #    control_name,
+    #    desired_state,
+    #    desired_motion_interval))
 
     return desired_state, desired_motion_interval
 
