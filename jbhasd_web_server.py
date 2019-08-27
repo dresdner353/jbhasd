@@ -841,22 +841,10 @@ def configure_device(url, device_name):
         # Indicate the origin profile
         config_dict['profile'] = profile_name
 
-        # Set mandatory zone and optional wifi creds
-        config_dict['zone'] = device_specific_dict['zone']
-        if ('wifi_ssid' in device_specific_dict):
-            config_dict['wifi_ssid'] = device_specific_dict['wifi_ssid']
-            config_dict['wifi_password'] = device_specific_dict['wifi_password']
-
-        # Optional over-rides
-        # protect in try as they keys may not exist in 
-        # device dict
-        try:
-            config_dict['telnet_enabled'] = device_specific_dict['telnet_enabled']
-            config_dict['ota_enabled'] = device_specific_dict['ota_enabled']
-            config_dict['mdns_enabled'] = device_specific_dict['mdns_enabled']
-            config_dict['manual_switches_enabled'] = device_specific_dict['manual_switches_enabled']
-        except:
-            pass
+        # Copy over all top-level fields except controls
+        for key in device_specific_dict:
+            if (key != "controls"):
+                config_dict[key] = device_specific_dict[key]
 
         # Scan through device specific controls
         # and update defaults taken from profile
