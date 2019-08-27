@@ -12,9 +12,13 @@ static DNSServer dns_server;
 static char small_buffer[1024];
 static char large_buffer[4096];
 
-// Track calls to /status API
+// status health check
 static uint32_t last_status = 0;
 static uint32_t last_wifi_restart = 0;
+static uint16_t status_wifi_restart_count = 0;
+
+// signal monitoring
+static uint16_t signal_wifi_restart_count = 0;
 
 
 // Function: get_json_status
@@ -58,6 +62,8 @@ const char *get_json_status()
     system["flash_speed"] = ESP.getFlashChipSpeed();
     system["cycle_count"] = ESP.getCycleCount();
     system["millis"] = now;
+    system["status_wifi_restarts"] = status_wifi_restart_count;
+    system["signal_wifi_restarts"] = signal_wifi_restart_count;
 
     // controls section for switches & leds 
     JsonArray controls_arr = json_status.createNestedArray("controls");
@@ -726,11 +732,14 @@ void loop_task_mdns(void)
 // Checks is WiFI is down and acts accordingly
 // by restarting STA mode
 // Also changes state to indicate Wifi down
+// We are also tracking the count of times we detect this down
+// state
 void loop_task_check_wifi_down(void)
 {
     log_message("loop_task_check_wifi_down()");
     if (WiFi.status() != WL_CONNECTED) {
         log_message("WiFI is down");
+        signal_wifi_restart_count++;
         TaskMan.set_run_state(RUN_STATE_WIFI_STA_DOWN);
         start_wifi_sta_mode();
     }
@@ -866,6 +875,7 @@ void loop_task_check_idle_status(void)
         log_message("Idle period >= %d (Restarting WiFi)", 
                     gv_device.idle_period_wifi);
         last_wifi_restart = millis();
+        status_wifi_restart_count++;
         start_wifi_sta_mode();
     }
 }
