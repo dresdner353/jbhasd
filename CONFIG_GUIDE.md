@@ -18,20 +18,26 @@ This configures the GPIO input pin for the boot switch. This switch plays an imp
 * status_led_pin (integer, optional)  
 This pin defines an optional GPIO for use as a status LED. The initial 5-second boot sequence flashes the LED at a medium rate. If the boot_pin is grounded within that 5 seconds, AP mode is invoked and the LED flashes at a fast rate. If the boot sequence times out, the device enters STA mode and flashes at a slow rate until it connects to WiFi. Once connected, the status LED issues a fast burst of flashes and turns off. During normal usage, if the device detects WiFi down, the status LED once again starts to flash at a slow rate while it remains disconnected from WiFi and issues the short burst of flashes once it regains a connection. To disable the status LED, omit the field or by set to 255
 
-* status_led_on_high (intgeger 0/1, optional, default 0)  
+* status_led_on_high (integer 0/1, optional, default 0)  
 This option if set to 1 will use a HIGH state on the LED pin to turn it on. The default is to turn on the LED with LOW state. That default applies if the field is omitted.
 
-* manual_switches_enabled (intgeger 0/1, optional, default 1)  
+* manual_switches_enabled (integer 0/1, optional, default 1)  
 This field can be used to blanket-disable all manual switches configured on the device. Handy if it needs to be deployed where manual pushes on the buttons need to be avoided. This only applys to button pushes on configured switches and not the boot_pin. The same setting also disables motion control via PIR sensors. An alternative to using this option is to set the targetted switch to use PIN value 255 for the input (or omit that field) which essentially disables manual function on the switch.
 
-* mdns_enabled (intgeger 0/1, optional, default 1)  
+* mdns_enabled (integer 0/1, optional, default 1)  
 This can be used to enable/disable MDNS and DNS-SD for the device. The default is enabled as it will ensure the device can be discovered
 
-* ota_enabled (intgeger 0/1, optional, default 1)  
+* ota_enabled (integer 0/1, optional, default 1)  
 This enables Arduino OTA functionality and is a very handy way to flash updated firmware to devices. The feature is enabled by default.
 
-* telnet_enabled (intgeger 0/1, optional, default 1)  
+* telnet_enabled (integer 0/1, optional, default 1)  
 Telnet support is used for logging. If enabled, you can telnet to the device IP and receive a live debug log of actitiy on the device. Telnet support will disable serial logging once it activates. So in some cases when debugging, you may need to configure this option as disabled to ensure the device only logs to serial.
+
+* idle_period_wifi (integer <secs>, optional, default 0)  
+Defines an optional idle period in seconds between /status API calls that triggers a restart of WiFi. This is used to provide a level of LAN health check by montitoring the continual calling of the /status API function. If this period expires, the WiFi is restarted as a means of forcefully re-establishing network connectivity. Set to 0 or omit the field to disable the feature.
+
+* idle_period_reboot (integer <secs>, optional, default 0)  
+Defines an optional idle period in seconds between /status API calls that triggers a reboot of the device. This is similar to the "idle_period_wifi" setting but will trigger a full reboot of the device if it fires. The recommendation is to set this value to a much larger value that that used for "idle_period_wifi". The net effect then after a prolonged absence /status calls will be several restarts of WiFi and ultimately the device reboots when the larger "idle_period_reboot" value is reached. Omit the field or set to 0 to disable the feature.
 
 * configured (integer 0/1, internal)  
 This field is automatically added to the configuration after the configure function is called. There is no need to use this field when configuring a device and in fact if you set it to 0, it will be over-ridden to 1 during the configure call.
