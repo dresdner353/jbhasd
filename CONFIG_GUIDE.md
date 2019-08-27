@@ -33,10 +33,10 @@ This enables Arduino OTA functionality and is a very handy way to flash updated 
 * telnet_enabled (integer 0/1, optional, default 1)  
 Telnet support is used for logging. If enabled, you can telnet to the device IP and receive a live debug log of actitiy on the device. Telnet support will disable serial logging once it activates. So in some cases when debugging, you may need to configure this option as disabled to ensure the device only logs to serial.
 
-* idle_period_wifi (integer seconds, optional, default 0)  
+* idle_period_wifi (integer, optional, default 0)  
 Defines an optional idle period in seconds between /status API calls that triggers a restart of WiFi. This is used to provide a level of LAN health check by montitoring the continual calling of the /status API function. If this period expires, the WiFi is restarted as a means of forcefully re-establishing network connectivity. Set to 0 or omit the field to disable the feature.
 
-* idle_period_reboot (integer seconds, optional, default 0)  
+* idle_period_reboot (integer, optional, default 0)  
 Defines an optional idle period in seconds between /status API calls that triggers a reboot of the device. This is similar to the "idle_period_wifi" setting but will trigger a full reboot of the device if it fires. The recommendation is to set this value to a much larger value that that used for "idle_period_wifi". The net effect then after a prolonged absence /status calls will be several restarts of WiFi and ultimately the device reboots when the larger "idle_period_reboot" value is reached. Omit the field or set to 0 to disable the feature.
 
 * configured (integer 0/1, internal)  
