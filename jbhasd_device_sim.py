@@ -20,6 +20,8 @@ irish_counties_list = ['Antrim', 'Armagh', 'Carlow', 'Cavan', 'Clare', 'Cork', '
 
 irish_rivers_list = ['Shannon', 'Barrow', 'Suir', 'Blackwater', 'Bann', 'Nore', 'Suck', 'Liffey', 'Erne', 'Foyle', 'Slaney', 'Boyne', 'Moy', 'Clare', 'Blackwater', 'Inny', 'Lee', 'Lagan', 'Brosna', 'Laune', 'Feale', 'Bandon', 'Blackwater', 'Annalee', 'Bride', 'Boyle ', 'Deel', 'Robe', 'Finn', 'Maigue', 'Fane ', 'Ballisodare', 'Dee', 'Fergus', 'Little Brosna', 'Mulkear ', 'Glyde']
 
+switch_context_strs = ['init', 'network', 'manual', 'motion']
+
 # dictionary of simulated json status dicts
 # indexed on port value
 json_status_dict = {}
@@ -49,9 +51,10 @@ class device_status_server(object):
         json_data = json_status_dict[url_port]
         device_name = json_data['name']
 
-        print("%s port:%d device:%s" % (time.asctime(),
-                                        url_port,
-                                        device_name))
+        print("%s /status port:%d device:%s" % (
+            time.asctime(),
+            url_port,
+            device_name))
 
         return json.dumps(json_data, indent = 2)
 
@@ -76,16 +79,18 @@ class device_control_server(object):
         rawbody = cherrypy.request.body.read(int(cl)).decode("utf-8")
         json_request = json.loads(str(rawbody))
 
-        print("%s port:%d device:%s \nJSON:\n%s" % (time.asctime(),
-                                        url_port,
-                                        device_name,
-                                        json.dumps(json_request, 
-                                                   indent = 2)))
+        print("%s /control port:%d device:%s \nJSON:\n%s" % (
+            time.asctime(),
+            url_port,
+            device_name,
+            json.dumps(json_request, 
+                indent = 2)))
 
         for control in json_request['controls']:
             for json_control in json_data['controls']:
                 if json_control['name'] == control['name']:
                     json_control['state'] = control['state']
+                    json_control['context'] = 'network'
 
         return json.dumps(json_data, indent = 2)
 
@@ -117,16 +122,20 @@ def change_device_status():
                 control_type = device_json['controls'][control_index]['type']
                 if control_type == 'switch':
                     control_state = random.randint(0, 100) % 2
-                    print("Changing switch %s state to %d" % (device_json['controls'][control_index]['name'], 
-                                                              control_state))
+                    control_context = random.randint(0, 100) % 4
+                    print("Changing switch %s state to %d (%s)" % (
+                        device_json['controls'][control_index]['name'], 
+                        control_state, switch_context_strs[control_context]))
                     device_json['controls'][control_index]['state'] = control_state
+                    device_json['controls'][control_index]['context'] = switch_context_strs[control_context]
 
                 if control_type == 'temp/humidity':
                     sensor_temp = "%.2f" % (random.uniform(-30, 95))
                     sensor_humidity = "%.2f" % (random.uniform(0, 100))
-                    print("Changing sensor %s temp:%s humidity:%s" % (device_json['controls'][control_index]['name'], 
-                                                                      sensor_temp,
-                                                                      sensor_humidity))
+                    print("Changing sensor %s temp:%s humidity:%s" % (
+                        device_json['controls'][control_index]['name'], 
+                        sensor_temp,
+                        sensor_humidity))
                     device_json['controls'][control_index]['temp'] = sensor_temp
                     device_json['controls'][control_index]['humidity'] = sensor_humidity
 
@@ -141,6 +150,7 @@ my_ip = get_ip()
 # more involved start of cherrypy as we 
 # want to have multiple separate ports, one per device
 cherrypy.tree.mount(device_status_server(), '/')
+cherrypy.tree.mount(device_status_server(), '/status')
 cherrypy.tree.mount(device_control_server(), '/control')
 
 # Dummy status handlers for the other API functions
@@ -185,14 +195,24 @@ for id in range(0, num_states):
             # switch
             control_state = random.randint(0, 100) % 2
             control_name = irish_counties_list[control_index]
-            json_data['controls'].append({'name': control_name, 'type' : 'switch', 'state' : control_state})
+            switch = {}
+            switch['name'] = control_name
+            switch['type'] = 'switch'
+            switch['state'] = control_state
+            switch['context'] = 'init'
+            json_data['controls'].append(switch)
             control_index = (control_index + 1) % num_counties
         else:
             # sensor
             sensor_temp = "%.2f" % (random.uniform(-30, 95))
             sensor_humidity = "%.2f" % (random.uniform(0, 100))
             sensor_name = irish_rivers_list[sensor_index]
-            json_data['controls'].append({'name': sensor_name, 'type' : 'temp/humidity', 'temp' : sensor_temp, 'humidity' : sensor_humidity})
+            sensor = {}
+            sensor['name'] = sensor_name
+            sensor['type'] = 'temp/humidity'
+            sensor['temp'] = sensor_temp
+            sensor['humidity'] = sensor_humidity
+            json_data['controls'].append(sensor)
             sensor_index = (sensor_index + 1) % num_rivers
 
     json_status_dict[port] = json_data
