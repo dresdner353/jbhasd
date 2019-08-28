@@ -275,9 +275,8 @@ def set_default_config():
     json_config = {}
     # discovery
     json_config['discovery'] = {}
-    json_config['discovery']['zeroconf_refresh_interval'] = 60
     json_config['discovery']['device_probe_interval'] = 10
-    json_config['discovery']['device_purge_timeout'] = 30
+    json_config['discovery']['device_purge_threshold'] = 120
 
     # web
     json_config['web'] = {}
@@ -629,17 +628,15 @@ def json_is_the_same(a, b):
 
 
 def discover_devices():
-    # loop forever 
+
+    # Zeroconf service browser
+    zeroconf = Zeroconf()
+    listener = MyZeroConfListener()  
+    browser = ServiceBrowser(zeroconf, "_JBHASD._tcp.local.", listener)  
+
+    # Loop forever, browser object will do the rest
     while (1):
-        zeroconf = Zeroconf()
-        listener = MyZeroConfListener()  
-        browser = ServiceBrowser(zeroconf, "_JBHASD._tcp.local.", listener)  
-
-        # loop interval sleep then 
-        # close zeroconf object
-        time.sleep(gv_json_config['discovery']['zeroconf_refresh_interval'])
-        zeroconf.close()
-
+        time.sleep(1)
 
 def get_url(url, url_timeout, parse_json):
     # General purpose URL GETer
