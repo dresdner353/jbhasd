@@ -628,15 +628,18 @@ def json_is_the_same(a, b):
 
 
 def discover_devices():
-
     # Zeroconf service browser
-    zeroconf = Zeroconf()
-    listener = MyZeroConfListener()  
-    browser = ServiceBrowser(zeroconf, "_JBHASD._tcp.local.", listener)  
-
-    # Loop forever, browser object will do the rest
     while (1):
-        time.sleep(1)
+        zeroconf = Zeroconf()
+        listener = MyZeroConfListener()  
+        browser = ServiceBrowser(zeroconf, "_JBHASD._tcp.local.", listener)  
+
+        # Give time for discovery
+        time.sleep(60)
+
+        # Reset 
+        browser.cancel()
+        zeroconf.close()
 
 def get_url(url, url_timeout, parse_json):
     # General purpose URL GETer
@@ -977,7 +980,7 @@ def probe_devices():
         control_changes = 0
         for url in device_url_list:
             json_data = get_url(url, gv_http_timeout_secs, 1)
-            if (json_data is not None):
+            if (json_data is not None and 'name' in json_data):
                 device_name = json_data['name']
                 if ('configured' in json_data and
                         json_data['configured'] == 0):
