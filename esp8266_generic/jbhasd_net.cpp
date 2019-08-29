@@ -345,10 +345,10 @@ void wifi_init()
                      1000,
                      loop_task_status_led);
 
-    // WiFI Check (While Down) Every 10s
+    // WiFI Check (While Down) Every 2s
     TaskMan.add_task("WiFI Status Up Check",
                      RUN_STATE_WIFI_STA_DOWN,
-                     10000,
+                     2000,
                      loop_task_check_wifi_up);
 
     // WiFI Check (While Up) every 10s
@@ -359,11 +359,11 @@ void wifi_init()
 
     if (gv_device.idle_period_wifi > 0 ||
         gv_device.idle_period_reboot > 0) {
-        // Idle Check every 30s if either idle 
+        // Idle Check every 10s if either idle 
         // period enabled
         TaskMan.add_task("Idle Status Check",
                          RUN_STATE_WIFI_STA_UP,
-                         30000,
+                         10000,
                          loop_task_check_idle_status);
     }
 }
