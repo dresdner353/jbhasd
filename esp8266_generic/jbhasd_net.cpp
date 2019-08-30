@@ -674,14 +674,12 @@ void start_sta_mode_services()
 
     if (gv_device.mdns_enabled) {
         // MDNS & DNS-SD using "JBHASD"
-        log_message("Activating MDNS for hostname:%s", gv_device.hostname);
-        if (!MDNS.begin(gv_device.hostname)) {
-            log_message("Error setting up MDNS responder!");
-        }
-        else {
-            log_message("Activating DNS-SD");
-            MDNS.addService("JBHASD", "tcp", WEB_PORT);
-        }
+        log_message("Activating MDNS with JBHASD service for %s", gv_device.hostname);
+
+        // Close it first in case we may have already started it
+        MDNS.close();
+        MDNS.begin(gv_device.hostname);
+        MDNS.addService("JBHASD", "tcp", WEB_PORT);
     }
     else {
         log_message("MDNS disabled!");
