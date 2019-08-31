@@ -1537,7 +1537,10 @@ def build_device_web_page(num_cols):
     # account for size of master dash box
     dashboard_col_size_dict[0] += 6 
 
-    for device_name in device_list:
+    # Alphabetic name sort to begin
+    sorted_device_list = sorted(device_list)
+
+    for device_name in sorted_device_list:
         json_data = gv_jbhasd_device_status_dict[device_name]
         device_name = json_data['name']
         zone_name = json_data['zone']
