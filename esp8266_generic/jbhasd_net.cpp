@@ -351,10 +351,10 @@ void wifi_init()
                      2000,
                      loop_task_check_wifi_up);
 
-    // WiFI Check (While Up) every 10s
+    // WiFI Check (While Up) every 5s
     TaskMan.add_task("WiFI Status Down Check",
                      RUN_STATE_WIFI_STA_UP,
-                     10000,
+                     5000,
                      loop_task_check_wifi_down);
 
     if (gv_device.idle_period_wifi > 0 ||
