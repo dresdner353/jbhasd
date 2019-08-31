@@ -377,10 +377,10 @@ void setup_switches()
                      200,
                      loop_task_check_boot_switch);
 
-    // Manual Switches every 200ms
+    // Manual Switches every 50ms
     TaskMan.add_task("Switch Checks",
                      RUN_STATE_WIFI_STA_DOWN | RUN_STATE_WIFI_STA_UP,
-                     200,
+                     50,
                      loop_task_check_switches);
 }
 
@@ -392,8 +392,6 @@ void setup_switches()
 void loop_task_check_switches()
 {
     uint8_t button_state;
-    uint8_t took_action = 0;
-    static uint32_t last_action_timestamp = 0;
     struct gpio_switch *gpio_switch;
     struct gpio_rgb *gpio_rgb;
 
@@ -401,19 +399,17 @@ void loop_task_check_switches()
         return;
     }
 
-    if (millis() - last_action_timestamp < 500) {
-        // fast repeat switching bypassed
-        // the loop calls this function every 200ms
-        // that will ensure a rapid response to a switch
-        // press but we don't want 10 actions per second
-        // so as soon as a switch is pressed, we want 500 msecs
-        // grace before we allow that again
-        return;
-    }
-
     for (gpio_switch = HTM_LIST_NEXT(gv_device.switch_list);
          gpio_switch != gv_device.switch_list;
          gpio_switch = HTM_LIST_NEXT(gpio_switch)) {
+
+        // Repitition check 2 second protection
+        // We keep this silent in terms of logging
+        // But repetitive fires of a manual detection will be supressed 
+        // per switch until at least 2 seconds have elapsed
+        if (millis() - gpio_switch->last_activity < 2000) {
+            continue;
+        }
 
         // Only work with entries with a manual pin
         if (gpio_switch->manual_pin != NO_PIN) {
@@ -430,7 +426,6 @@ void loop_task_check_switches()
                     set_switch_state(gpio_switch,
                                      (gpio_switch->current_state + 1) % 2,
                                      SW_ST_CTXT_MANUAL);
-                    took_action = 1; // note any activity
                     break;
 
                   case SW_BHVR_ON:
@@ -439,7 +434,6 @@ void loop_task_check_switches()
                         set_switch_state(gpio_switch,
                                          1, // On
                                          SW_ST_CTXT_MANUAL);
-                        took_action = 1; // note any activity
                     }
                     break;
 
@@ -448,7 +442,6 @@ void loop_task_check_switches()
                         set_switch_state(gpio_switch,
                                          0, // Off
                                          SW_ST_CTXT_MANUAL);
-                        took_action = 1; // note any activity
                     }
                     break;
                 }
@@ -497,7 +490,6 @@ void loop_task_check_switches()
                 set_switch_state(gpio_switch,
                                  1, // On
                                  SW_ST_CTXT_MOTION);
-                took_action = 1; // note any activity
             }
             else {
                 // no motion detected.. see if we can turn it 
@@ -533,15 +525,8 @@ void loop_task_check_switches()
                             gpio_rgb->name,
                             gpio_rgb->manual_pin);
                 set_rgb_random_program(gpio_rgb);
-                took_action = 1; // note any activity
             }
         }
-    }
-
-    if (took_action) {
-        // record timestamp for fast
-        // re-entry protection
-        last_action_timestamp = millis();
     }
 }
 
