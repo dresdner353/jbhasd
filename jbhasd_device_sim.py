@@ -56,7 +56,9 @@ class device_status_server(object):
             url_port,
             device_name))
 
-        return json.dumps(json_data, indent = 2)
+        return json.dumps(
+                json_data, 
+                indent = 2)
 
 
     # Force trailling slash off on called URL
@@ -83,8 +85,9 @@ class device_control_server(object):
             time.asctime(),
             url_port,
             device_name,
-            json.dumps(json_request, 
-                indent = 2)))
+            json.dumps(
+                json_request, 
+                indent = 4)))
 
         for control in json_request['controls']:
             for json_control in json_data['controls']:
@@ -92,7 +95,9 @@ class device_control_server(object):
                     json_control['state'] = control['state']
                     json_control['context'] = 'network'
 
-        return json.dumps(json_data, indent = 2)
+        return json.dumps(
+                json_data, 
+                indent = 4)
 
 
     # Force trailling slash off on called URL
