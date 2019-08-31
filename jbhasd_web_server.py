@@ -520,8 +520,6 @@ def check_switch(zone_name,
     desired_state = -1 # implies no desired state
     desired_motion_interval = -1 # no implied motion
 
-    now = time.time()
-
     for timer in gv_json_config['switch_timers']:
         if timer['zone'] == zone_name and timer['control'] == control_name:
             # Motion interval (optional)
@@ -640,42 +638,46 @@ class ZeroConfListener(object):
     def add_service(self, zeroconf, type, name):
         # extract dns-sd info, build URL
         # and store in set
+
+        global gv_jbhasd_device_ts_dict
+        global gv_jbhasd_zconf_url_set
+
         info = zeroconf.get_service_info(type, name)
         if info is not None:
             address = socket.inet_ntoa(info.address)
             port = info.port
             url = "http://%s:%d" % (address, port)
+            now = int(time.time())
+
+            # Name is formatted 
+            # JBHASD-XXXXXXXX._JBHASD._tcp.local.
+            # So split on '.' and isolate field field
+            fields = name.split('.')
+            device_name = fields[0]
 
             # Merge into URL set
+            # and init the timestamp
             if not url in gv_jbhasd_zconf_url_set:
                 gv_jbhasd_zconf_url_set.add(url)
+                gv_jbhasd_device_ts_dict[device_name] = now
                 log_message("Discovered %s (%s)" % (
-                    name,
+                    device_name,
                     url))
 
         return
 
 
-def json_is_the_same(a, b):
-    a_str = json.dumps(a, sort_keys=True)
-    b_str = json.dumps(b, sort_keys=True)
-    rc = 0
-
-    if (a_str == b_str):
-        rc = 1
-
-    return rc
-
-
 def discover_devices():
     # Zeroconf service browser
+    # Done in a permanent loop where it backgrounds for 2 mins 
+    # and it then reset. Possibly not needed but no harm to reset it
     while (1):
         zeroconf = Zeroconf()
         listener = ZeroConfListener()  
         browser = ServiceBrowser(zeroconf, "_JBHASD._tcp.local.", listener)  
 
         # Give time for discovery
-        time.sleep(60)
+        time.sleep(120)
 
         # Reset 
         browser.cancel()
@@ -959,10 +961,15 @@ def probe_devices():
     global gv_actual_sunset_time 
     global gv_actual_sunrise_time 
 
+    global gv_jbhasd_device_url_dict
+    global gv_jbhasd_device_status_dict
+    global gv_jbhasd_device_ts_dict
+    global gv_jbhasd_zconf_url_set
+
     # loop forever
     while (1):
         # Sunset calculations
-        now = time.time()
+        now = int(time.time())
         if ((now - gv_last_sunset_check) >= 6*60*60): # every 6 hours
             # Re-calculate
             log_message("Getting Sunset times..")
@@ -1021,17 +1028,6 @@ def probe_devices():
                     configure_device(url, device_name)
                 else:
                     successful_probes += 1
-                    # check the json we got back against what we may have 
-                    # stored. But only compare controls for now  
-                    # if its a first time store, then its a change
-                    if (device_name in gv_jbhasd_device_status_dict):
-                        controls_same = json_is_the_same(json_data['controls'], 
-                                                         gv_jbhasd_device_status_dict[device_name]['controls'])
-                        if (controls_same == 0):
-                            control_changes += 1
-                    else:
-                        control_changes += 1
-
                     # Track what we got back
                     # this is done after the compare above to ensure old is 
                     # checked against new
@@ -1042,33 +1038,6 @@ def probe_devices():
         
         # Purge dead devices and URLs
         now = int(time.time())
-
-        # Iterate known URLs and seek out URLs with no 
-        # recorded status. These would probaby be duds
-        # We do this with a set snapshot from the same list
-        # we iterated above . Then we iterate the device url dict
-        # and remove all urls from the snapshot set
-        # The remaining URLs are then the duds
-
-        # Take a fresh copy of the URL list/set 
-        # as reconfiguring earlier may have purged some
-        # URLs
-        device_url_list = list(gv_jbhasd_zconf_url_set)
-        device_url_set = set(device_url_list)
-        for device_name in gv_jbhasd_device_url_dict:
-            url = gv_jbhasd_device_url_dict[device_name]
-            if url in device_url_set:
-                device_url_set.remove(url)
-
-        for url in device_url_set:
-            reason = "never got a valid status response" 
-            log_message("Purging URL:%s.. reason:%s" % (
-                url,
-                reason))
-
-            if url in gv_jbhasd_zconf_url_set:
-                purged_urls += 1
-                gv_jbhasd_zconf_url_set.remove(url)
 
         # iterate the known devices with status values 
         # that were previously recorded. 
@@ -1160,11 +1129,10 @@ def probe_devices():
                     analytics_file.write("%s\n" % (csv_row)) 
                     analytics_file.flush()
 
-        log_message("Probe.. total:%d successful:%d failed:%d changed:%d purged:%d" % (
+        log_message("Probe.. total:%d successful:%d failed:%d purged:%d" % (
             total_probes,
             successful_probes,
             failed_probes,
-            control_changes,
             purged_urls))
 
         # loop sleep interval
