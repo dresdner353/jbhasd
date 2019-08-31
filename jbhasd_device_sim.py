@@ -176,10 +176,12 @@ num_rivers = len(irish_rivers_list)
 
 for id in range(0, num_states):
     # DNS-SD/MDNS
-    instance = 'JBHASD-BEEFED%02X' % (id)
+    instance = '_JBHASD-BEEFED%02X' % (id)
     port = 9000 + id
 
-    zone = us_states_list[id]
+    # Precede with leading '_' to ensure simulated devices
+    # sort after legit ones
+    zone = '_' + us_states_list[id]
     print("Generating cherrypy server.. %s zone:%s port:%d" % (instance, zone, port))
 
     json_data = {}
