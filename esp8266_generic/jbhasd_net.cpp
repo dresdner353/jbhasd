@@ -24,7 +24,7 @@ static uint16_t signal_wifi_restart_count = 0;
 // Function: get_json_status
 // formats and returns a JSON string representing
 // the device details, configuration status and system info
-const char *get_json_status()
+const char *get_json_status(void)
 {
     struct gpio_switch *gpio_switch;
     struct gpio_sensor *gpio_sensor;
@@ -62,6 +62,8 @@ const char *get_json_status()
     system["flash_speed"] = ESP.getFlashChipSpeed();
     system["cycle_count"] = ESP.getCycleCount();
     system["millis"] = now;
+    system["wifi_bssid"] = WiFi.BSSIDstr();
+    system["wifi_rssi"] = WiFi.RSSI();
     system["status_wifi_restarts"] = status_wifi_restart_count;
     system["signal_wifi_restarts"] = signal_wifi_restart_count;
 
@@ -291,7 +293,7 @@ void ap_handle_root()
 // common Wifi inits 
 // and the stack of task management functions for WiFi 
 // modes
-void wifi_init()
+void wifi_init(void)
 {
     static uint8_t first_run = 1;
 
@@ -321,17 +323,25 @@ void wifi_init()
                      50,
                      loop_task_webserver);
 
-    // DNS Server every 50ms
+    // DNS Server every 10ms
     TaskMan.add_task("DNS",
                      RUN_STATE_WIFI_AP,
-                     50,
+                     10,
                      loop_task_dns);
 
-    // MDNS Server every 50ms
-    TaskMan.add_task("MDNS",
+    // MDNS Server update every 10ms
+    TaskMan.add_task("MDNS Update",
                      RUN_STATE_WIFI_STA_UP,
-                     50,
+                     10,
                      loop_task_mdns);
+
+    // MDNS Server restart every 1 min
+    // To work around scenarios where it stops
+    // working sometimes
+    TaskMan.add_task("MDNS Restart",
+                     RUN_STATE_WIFI_STA_UP,
+                     60000,
+                     start_mdns);
 
     // AP WiFI LED every 100 ms (fast)
     TaskMan.add_task("AP Status LED",
@@ -371,7 +381,7 @@ void wifi_init()
 
 // Function: start_wifi_ap_mode
 // Sets up the device in AP mode
-void start_wifi_ap_mode()
+void start_wifi_ap_mode(void)
 {
     wifi_init();
     log_message("start_wifi_ap_mode()");
@@ -405,7 +415,8 @@ void start_wifi_ap_mode()
 
 // Function sta_handle_status
 // callback handler for the /status 
-void sta_handle_status() {
+void sta_handle_status(void) 
+{
     log_message("sta_handle_status()");
 
     // Update timestamp of last call
@@ -418,7 +429,8 @@ void sta_handle_status() {
 
 // Function sta_handle_reboot
 // handles /reboot API call
-void sta_handle_reboot() {
+void sta_handle_reboot(void) 
+{
     log_message("sta_handle_reboot()");
 
     log_message("Received reboot command");
@@ -431,7 +443,8 @@ void sta_handle_reboot() {
 
 // Function sta_handle_apmode
 // handles /apmode API call
-void sta_handle_apmode() {
+void sta_handle_apmode(void) 
+{
     log_message("sta_handle_apmode()");
 
     log_message("Received apmode command");
@@ -446,7 +459,8 @@ void sta_handle_apmode() {
 
 // Function sta_handle_reset
 // resets device config when /reset API is called
-void sta_handle_reset() {
+void sta_handle_reset(void) 
+{
     log_message("sta_handle_reset()");
 
     log_message("Received reset command");
@@ -462,7 +476,8 @@ void sta_handle_reset() {
 // Sets configured state of device to 0 to 
 // invoke a configure directive from a monitoring 
 // web server
-void sta_handle_reconfigure() {
+void sta_handle_reconfigure(void) 
+{
     log_message("sta_handle_reconfigure()");
 
     log_message("Received reconfigure command");
@@ -477,7 +492,8 @@ void sta_handle_reconfigure() {
 // performs control functions for /control API call
 // Parses JSON body and it's "controls" list for actions
 // to perform on specified controls
-void sta_handle_control() {
+void sta_handle_control(void) 
+{
     log_message("sta_handle_control()");
 
     // JSON POST
@@ -554,7 +570,8 @@ void sta_handle_control() {
 // Function sta_handle_configure
 // Processes /configure API call 
 // applying JSON POST contents as the new saved config
-void sta_handle_configure() {
+void sta_handle_configure(void) 
+{
     log_message("sta_handle_configure()");
 
     DynamicJsonDocument json_response(1024);
@@ -633,7 +650,7 @@ void sta_handle_configure() {
 
 // Function: start_wifi_sta_mode
 // Configures the device as a WiFI client
-void start_wifi_sta_mode()
+void start_wifi_sta_mode(void)
 {
     wifi_init();
     log_message("start_wifi_sta_mode(ssid:%s password:%s)", 
@@ -651,26 +668,15 @@ void start_wifi_sta_mode()
     WiFi.disconnect();
     WiFi.mode(WIFI_STA);
     WiFi.hostname(gv_device.hostname);
+    WiFi.setAutoReconnect(false);
     WiFi.begin(gv_device.wifi_ssid,
                gv_device.wifi_password);
 }
 
 
-// Function: start_sta_mode_services
-// Run after we confirm WiFI up
-// records IP and starts MDNS & DNS-SD
-// This provides a safe reassertion of these services
-// in case the IP address changed
-void start_sta_mode_services()
+void start_mdns(void)
 {
-    log_message("start_sta_mode_services()");
-
-    sta_ip = WiFi.localIP();
-    log_message("Connected.. IP:%d.%d.%d.%d",
-                sta_ip[0],
-                sta_ip[1],
-                sta_ip[2],
-                sta_ip[3]);
+    log_message("start_mdns()");
 
     if (gv_device.mdns_enabled) {
         // MDNS & DNS-SD using "JBHASD"
@@ -684,6 +690,29 @@ void start_sta_mode_services()
     else {
         log_message("MDNS disabled!");
     }
+}
+
+
+// Function: start_sta_mode_services
+// Run after we confirm WiFI up
+// records IP and starts MDNS & DNS-SD
+// This provides a safe reassertion of these services
+// in case the IP address changed
+void start_sta_mode_services(void)
+{
+    log_message("start_sta_mode_services()");
+
+    sta_ip = WiFi.localIP();
+    log_message("Connected.. IP:%d.%d.%d.%d",
+                sta_ip[0],
+                sta_ip[1],
+                sta_ip[2],
+                sta_ip[3]);
+
+
+    // Close any existing web server and 
+    // wipe handlers
+    gv_web_server.close();
 
     // Web server handlers
     gv_web_server.onNotFound(sta_handle_status);
@@ -698,6 +727,7 @@ void start_sta_mode_services()
     gv_web_server.begin();
     log_message("HTTP server started for client mode");
 
+    start_mdns();
     start_ota();
     start_telnet();
 }
