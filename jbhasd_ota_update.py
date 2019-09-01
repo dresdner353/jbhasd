@@ -95,6 +95,8 @@ http_timeout_secs = 5
 print("Giving %d seconds for discovery.." % (discovery_secs))
 time.sleep(discovery_secs)
 
+print("Discovered %d devices in total" % (len(ip_set)))
+flashed_total = 0
 for ip in ip_set:
     url = 'http://%s' % (ip)
     print( "Discovered.. %s" % (url))
@@ -112,4 +114,6 @@ for ip in ip_set:
             ota_cmd = "espota.py -i %s -f %s" % (ip, firmware)
             print(ota_cmd)
             os.system(ota_cmd)
+            flashed_total += 1
 
+print("Flashed %d devices in total" % (flashed_total))
