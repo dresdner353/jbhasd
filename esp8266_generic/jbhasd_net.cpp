@@ -686,6 +686,7 @@ void start_mdns(void)
         MDNS.close();
         MDNS.begin(gv_device.hostname);
         MDNS.addService("JBHASD", "tcp", WEB_PORT);
+        MDNS.addServiceTxt("JBHASD", "tcp", "zone", gv_device.zone);
     }
     else {
         log_message("MDNS disabled!");
