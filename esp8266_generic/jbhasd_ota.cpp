@@ -4,7 +4,7 @@
 // Function: start_ota()
 // Enables OTA service for firmware
 // flashing OTA
-void start_ota()
+void start_ota(void)
 {
     static uint8_t already_setup = 0;
 

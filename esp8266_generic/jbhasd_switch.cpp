@@ -9,7 +9,7 @@ uint8_t gv_low_state_reg[] = { HIGH, LOW };
 
 // Function gpio_switch_alloc
 // allocates gpio switch struct
-struct gpio_switch* gpio_switch_alloc()
+struct gpio_switch* gpio_switch_alloc(void)
 {
     struct gpio_switch *gpio_switch;
 
@@ -68,7 +68,7 @@ const char *get_sw_behaviour(enum switch_behaviour behaviour)
 // Function: restore_status_led_state
 // Restores state of status LED to match
 // it's assigned switch state if applicable
-void restore_status_led_state()
+void restore_status_led_state(void)
 {
     uint8_t found = 0;
     struct gpio_switch *gpio_switch;
@@ -324,7 +324,7 @@ void set_switch_manual_auto_off(struct gpio_switch *gpio_switch,
 // Function: setup_switches
 // Scans the list of configured switches
 // and performs the required pin setups
-void setup_switches()
+void setup_switches(void)
 {
     struct gpio_switch *gpio_switch;
 
@@ -389,7 +389,7 @@ void setup_switches()
 // Scans the input pins of all switches and
 // invokes a toggle of the current state if it detects
 // LOW state
-void loop_task_check_switches()
+void loop_task_check_switches(void)
 {
     uint8_t button_state;
     struct gpio_switch *gpio_switch;
@@ -534,7 +534,7 @@ void loop_task_check_switches()
 // Function: loop_task_check_boot_switch
 // Checks for a pressed state on the boot program
 // pin to drive a switch to AP mode
-void loop_task_check_boot_switch()
+void loop_task_check_boot_switch(void)
 {
     static uint8_t pin_wait_timer = 25;
     uint8_t button_state;

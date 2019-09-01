@@ -3,7 +3,7 @@
 
 // Function gpio_tgb_alloc
 // allocated RGB controller struct
-struct gpio_rgb* gpio_rgb_alloc()
+struct gpio_rgb* gpio_rgb_alloc(void)
 {
     struct gpio_rgb *gpio_rgb;
 
@@ -199,7 +199,7 @@ void fade_rgb(struct gpio_rgb *gpio_rgb)
 // Checks active RGB devices and
 // progresses to next step in program
 // or applies transitions to existing step
-void loop_task_transition_rgb()
+void loop_task_transition_rgb(void)
 {
     struct gpio_rgb *gpio_rgb;
 
@@ -492,7 +492,7 @@ void set_rgb_state(struct gpio_rgb *gpio_rgb)
 // Function: setup_rgbs
 // Scans the configured RGB controls and configures the defined led
 // pins including initial values
-void setup_rgbs()
+void setup_rgbs(void)
 {
     struct gpio_rgb *gpio_rgb;
     uint16_t rgb_count = 0;

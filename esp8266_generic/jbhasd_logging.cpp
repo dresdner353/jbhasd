@@ -8,7 +8,7 @@
 // Pins 3 and 1 are the danger scenarios 
 // here.. if in use, serial logging can't be 
 // performed
-void start_serial()
+void start_serial(void)
 {
     if (!pin_in_use(3) &&  // Rx
         !pin_in_use(1)) {  // Tx
@@ -133,7 +133,7 @@ void log_message(char *format, ... )
 // session handling both accepting new
 // sessions and flushing data from existing
 // sessions
-void loop_task_telnet()
+void loop_task_telnet(void)
 {
     uint8_t i;
     static char banner[128];
@@ -194,7 +194,7 @@ void loop_task_telnet()
 
 // Function start_telnet
 // enables telnet server
-void start_telnet()
+void start_telnet(void)
 {
     log_message("start_telnet()");
 

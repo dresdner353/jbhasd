@@ -3,7 +3,7 @@
 
 // Function gpio_sensor_alloc
 // Allocates a GPIO sensor struct
-struct gpio_sensor* gpio_sensor_alloc()
+struct gpio_sensor* gpio_sensor_alloc(void)
 {
     struct gpio_sensor *gpio_sensor;
 
@@ -16,7 +16,7 @@ struct gpio_sensor* gpio_sensor_alloc()
 // Function: setup_sensors
 // Scans the configured sensors and activates the
 // defined sensor pins
-void setup_sensors()
+void setup_sensors(void)
 {
     static uint8_t first_run = 1;
     struct gpio_sensor *gpio_sensor;
@@ -100,7 +100,7 @@ uint32_t float_get_fp(float f, uint8_t precision) {
 
 // Function read_sensors()
 // Read sensor information from configured sensors
-void read_sensors()
+void read_sensors(void)
 {
     DHT *dhtp;
     float f1, f2;

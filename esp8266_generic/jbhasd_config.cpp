@@ -42,7 +42,7 @@ const char *json_get_sval(JsonVariant variant,
 }
 // Function: save_config
 // Writes config to EEPROM
-void save_config()
+void save_config(void)
 {
     log_message("save_config()");
 
@@ -119,7 +119,7 @@ void update_config(char *field,
 // wipes all config 
 // puts in sensible defaults
 // writes to EEPROM
-void reset_config()
+void reset_config(void)
 {
     struct gpio_switch *gpio_switch;
     struct gpio_sensor *gpio_sensor;
@@ -154,7 +154,7 @@ void reset_config()
 // Loads config from EEPROM, checks for the marker
 // octet value and resets config to in-memory array
 // defaults
-void load_config()
+void load_config(void)
 {
     struct gpio_switch *gpio_switch;
     struct gpio_sensor *gpio_sensor;

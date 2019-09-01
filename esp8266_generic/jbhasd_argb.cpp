@@ -1,7 +1,7 @@
 #include "HandyTaskMan.h"
 #include "jbhasd_types.h"
 
-struct gpio_argb* gpio_argb_alloc()
+struct gpio_argb* gpio_argb_alloc(void)
 {
     struct gpio_argb *gpio_argb;
 
@@ -337,7 +337,7 @@ void set_argb_program(struct gpio_argb *gpio_argb,
 // Function loop_task_transition_argb
 // Drives aRGB strips from task 
 // manager
-void loop_task_transition_argb()
+void loop_task_transition_argb(void)
 {
     struct gpio_argb *gpio_argb;
 
@@ -352,7 +352,7 @@ void loop_task_transition_argb()
 
 
 // Function: setup_argbs
-void setup_argbs()
+void setup_argbs(void)
 {
     struct gpio_argb *gpio_argb;
     uint8_t argb_count = 0;
