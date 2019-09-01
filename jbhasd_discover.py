@@ -8,23 +8,22 @@ import socket
 import time
 import requests
 import sys
+import os
 
-url_set = set()
-http_timeout_secs = 2
+http_timeout_secs = 5
 
 class MyListener(object):  
     def remove_service(self, zeroconf, type, name):
-        print("\nService %s removed" % (name))
         return
 
     def add_service(self, zeroconf, type, name):
+
         info = zeroconf.get_service_info(type, name)
         address = socket.inet_ntoa(info.address)
         port = info.port
         url = 'http://%s:%d/status' % (address, port)
         server = info.server
-        url_set.add(url)
-        print("\nDiscovered: %s URL: %s" % (server, url))
+        print("Discovered: %s URL: %s" % (server, url))
 
         response = None
         api_session = requests.session()
@@ -40,9 +39,11 @@ class MyListener(object):
 
         sys.stdout.flush()
 
+
+
 zeroconf = Zeroconf()  
 listener = MyListener()  
 browser = ServiceBrowser(zeroconf, "_JBHASD._tcp.local.", listener)  
+time.sleep(30)
+zeroconf.close()
 
-while 1:
-    time.sleep(5)
