@@ -226,24 +226,24 @@ extern enum gv_logging_enum gv_logging;
 extern uint8_t gv_reboot_requested;
 
 // Logging
-void start_serial();
+void start_serial(void);
 void vlog_message(char *format, va_list args);
 void log_message(char *format, ... );
-void loop_task_telnet();
-void start_telnet();
+void loop_task_telnet(void);
+void start_telnet(void);
 
 
 // Sensor
-struct gpio_sensor* gpio_sensor_alloc();
-void setup_sensors();
-void read_sensors();
+struct gpio_sensor* gpio_sensor_alloc(void);
+void setup_sensors(void);
+void read_sensors(void);
 
 
 // Switch
-struct gpio_switch* gpio_switch_alloc();
+struct gpio_switch* gpio_switch_alloc(void);
 const char *get_sw_context(enum switch_state_context context);
 const char *get_sw_behaviour(enum switch_behaviour behaviour);
-void restore_status_led_state();
+void restore_status_led_state(void);
 void toggle_status_led(uint16_t delay_msecs);
 void set_switch_state(struct gpio_switch *gpio_switch,
                       uint8_t state,
@@ -254,49 +254,50 @@ void set_switch_manual_interval(struct gpio_switch *gpio_switch,
                                 uint32_t interval);
 void set_switch_manual_auto_off(struct gpio_switch *gpio_switch,
                                 uint8_t auto_off);
-void setup_switches();
-void loop_task_check_switches();
-void loop_task_check_boot_switch();
+void setup_switches(void);
+void loop_task_check_switches(void);
+void loop_task_check_boot_switch(void);
 struct gpio_switch* find_switch(const char *name);
 
 
 // RGB
-struct gpio_rgb* gpio_rgb_alloc();
-void loop_task_transition_rgb();
+struct gpio_rgb* gpio_rgb_alloc(void);
+void loop_task_transition_rgb(void);
 void set_rgb_program(struct gpio_rgb *gpio_rgb,
                      const char *program);
 void set_rgb_random_program(struct gpio_rgb *gpio_rgb);
 void set_rgb_state(struct gpio_rgb *gpio_rgb);
-void setup_rgbs();
+void setup_rgbs(void);
 struct gpio_rgb* find_rgb(const char *name);
 
 
 // ARGB
-struct gpio_argb* gpio_argb_alloc();
+struct gpio_argb* gpio_argb_alloc(void);
 void set_argb_state(struct gpio_argb *gpio_argb);
 void set_argb_program(struct gpio_argb *gpio_argb,
                      const char *program);
-void loop_task_transition_argb();
-void setup_argbs();
+void loop_task_transition_argb(void);
+void setup_argbs(void);
 struct gpio_argb* find_argb(const char *name);
 
 // Config
-void save_config();
+void save_config(void);
 void update_config(char *field, 
                    const char *sval,
                    int32_t ival,
                    uint8_t save_now);
-void reset_config();
-void load_config();
+void reset_config(void);
+void load_config(void);
 
 // OTA
-void start_ota();
+void start_ota(void);
 void loop_task_ota(void);
 
 // Network
-void start_wifi_ap_mode();
-void start_wifi_sta_mode();
-void start_sta_mode_services();
+void start_wifi_ap_mode(void);
+void start_wifi_sta_mode(void);
+void start_mdns(void);
+void start_sta_mode_services(void);
 void loop_task_webserver(void);
 void loop_task_dns(void);
 void loop_task_mdns(void);
