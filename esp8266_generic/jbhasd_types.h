@@ -227,6 +227,7 @@ extern uint8_t gv_reboot_requested;
 
 // Logging
 void start_serial(void);
+char *millis_str(uint32_t msecs);
 void vlog_message(char *format, va_list args);
 void log_message(char *format, ... );
 void loop_task_telnet(void);
