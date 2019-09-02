@@ -1072,7 +1072,7 @@ def probe_devices():
             # 'system' section may not be present 
             # for say simulated devices
             if 'system' in json_data:
-                device_millis = json_data['system']['millis']
+                device_uptime_msecs = json_data['system']['uptime_msecs']
                 free_heap = json_data['system']['free_heap']
                 csv_row = "%d,%d,%s,%s,%s,%s,%s,%d" % (3,
                                                        status_ts, 
@@ -1081,7 +1081,7 @@ def probe_devices():
                                                        "", 
                                                        "", 
                                                        "",
-                                                       device_millis)
+                                                       device_uptime_msecs)
                 analytics_file.write("%s\n" % (csv_row)) 
                 csv_row = "%d,%d,%s,%s,%s,%s,%s,%d" % (4,
                                                        status_ts, 
