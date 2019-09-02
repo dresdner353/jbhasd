@@ -61,7 +61,8 @@ const char *get_json_status(void)
     system["flash_real_size"] = ESP.getFlashChipRealSize();
     system["flash_speed"] = ESP.getFlashChipSpeed();
     system["cycle_count"] = ESP.getCycleCount();
-    system["millis"] = now;
+    system["uptime"] = millis_str(now);
+    system["uptime_msecs"] = now;
     system["wifi_bssid"] = WiFi.BSSIDstr();
     system["wifi_rssi"] = WiFi.RSSI();
     system["status_wifi_restarts"] = status_wifi_restart_count;
@@ -80,7 +81,7 @@ const char *get_json_status(void)
         obj["type"] = "switch";
         obj["state"] = gpio_switch->current_state;
         obj["context"] = get_sw_context(gpio_switch->state_context);
-        obj["last_activity_millis"] = gpio_switch->last_activity;
+        obj["last_activity_msecs"] = gpio_switch->last_activity;
         obj["last_activity_delta_secs"] = (now - gpio_switch->last_activity) / 1000;
 
         // Motion details if a motion pin in use
@@ -682,8 +683,6 @@ void start_mdns(void)
         // MDNS & DNS-SD using "JBHASD"
         log_message("Activating MDNS with JBHASD service for %s", gv_device.hostname);
 
-        // Close it first in case we may have already started it
-        MDNS.close();
         MDNS.begin(gv_device.hostname);
         MDNS.addService("JBHASD", "tcp", WEB_PORT);
         MDNS.addServiceTxt("JBHASD", "tcp", "zone", gv_device.zone);
