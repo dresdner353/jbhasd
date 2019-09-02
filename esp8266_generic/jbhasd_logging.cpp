@@ -28,6 +28,41 @@ WiFiServer gv_telnet_server(23);
 WiFiClient gv_telnet_clients[MAX_TELNET_CLIENTS];
 uint8_t  gv_num_telnet_clients = 0;
 
+char *millis_str(uint32_t msecs)
+{
+    static char str[20];
+
+    uint8_t days;
+    uint8_t hours;
+    uint8_t mins;
+    uint8_t secs;
+
+    // Timestamp
+    // Break down relative msecs
+    // into days, hours. mins, secs & msecs
+    // msecs self-mods on each breakdown until
+    // it's left with the surplus msecs
+    days = msecs / (1000 * 60 * 60 * 24);
+    msecs %= (1000 * 60 * 60 * 24);
+    hours = msecs / (1000 * 60 * 60);
+    msecs %= (1000 * 60 * 60);
+    mins = msecs / (1000 * 60);
+    msecs %= (1000 * 60);
+    secs = msecs / 1000;
+    msecs %= 1000;
+
+    // format as DD:HH:MM:SS:sss
+    ets_sprintf(str,
+                "%02u:%02u:%02u:%02u:%03u",
+                days,
+                hours,
+                mins,
+                secs,
+                msecs);
+
+    return str;
+}
+
 
 // Function: vlog_message
 // Wraps calls to Serial.print or connected
@@ -40,13 +75,11 @@ void vlog_message(char *format, va_list args)
     static char log_buf[LOGBUF_MAX + 1];
     uint8_t  i;
     uint8_t  prefix_len;
-    uint32_t now;
-    uint16_t days;
-    uint16_t hours;
-    uint16_t mins;
-    uint16_t secs;
-    uint16_t msecs;
-    uint16_t remainder;
+    uint32_t msecs;
+    uint8_t days;
+    uint8_t hours;
+    uint8_t mins;
+    uint8_t secs;
     
     if (gv_logging == LOGGING_NONE) {
         // Logging not enabled
@@ -63,25 +96,22 @@ void vlog_message(char *format, va_list args)
     // Timestamp
     // Break down relative msecs
     // into days, hours. mins, secs & msecs
-    now = millis();
-    days = now / (1000 * 60 * 60 * 24);
-    remainder = now % (1000 * 60 * 60 * 24);
-    hours = remainder / (1000 * 60 * 60);
-    remainder = remainder % (1000 * 60 * 60);
-    mins = remainder / (1000 * 60);
-    remainder = remainder % (1000 * 60);
-    secs = remainder / 1000;
-    msecs = remainder % 1000;
+    // msecs self-mods on each breakdown until
+    // it's left with the surplus msecs
+    msecs = millis();
+    days = msecs / (1000 * 60 * 60 * 24);
+    msecs %= (1000 * 60 * 60 * 24);
+    hours = msecs / (1000 * 60 * 60);
+    msecs %= (1000 * 60 * 60);
+    mins = msecs / (1000 * 60);
+    msecs %= (1000 * 60);
+    secs = msecs / 1000;
+    msecs %= 1000;
 
-    // pre-write timestamp to log buffer
-    ets_sprintf(log_buf,
-                "%02u:%02u:%02u:%02u:%03u  ",
-                days,
-                hours,
-                mins,
-                secs,
-                msecs);
-
+    // Put formatted millis() in place at 
+    // front of buffer
+    strcpy(log_buf, millis_str(millis()));
+    strcat(log_buf, "  "); // append 2-space separator
     prefix_len = strlen(log_buf);
 
     // handle va arg list and write to buffer offset by 
