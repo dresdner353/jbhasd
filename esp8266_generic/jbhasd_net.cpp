@@ -82,7 +82,10 @@ const char *get_json_status(void)
         obj["state"] = gpio_switch->current_state;
         obj["context"] = get_sw_context(gpio_switch->state_context);
         obj["last_activity_msecs"] = gpio_switch->last_activity;
-        obj["last_activity_delta_secs"] = (now - gpio_switch->last_activity) / 1000;
+
+        // String form is based on delta msecs between now and last activity
+        // msec value
+        obj["last_activity"] = millis_str(now - gpio_switch->last_activity);
 
         // Motion details if a motion pin in use
         if (gpio_switch->motion_pin != NO_PIN) {
