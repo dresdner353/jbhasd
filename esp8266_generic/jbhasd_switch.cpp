@@ -263,6 +263,21 @@ void set_switch_motion_interval(struct gpio_switch *gpio_switch,
         interval = 5;
     }
 
+    // If the interval is being set to 0
+    // and the switch is already on and in a motion 
+    // context, then we need to turn it off right away
+    // The normal logic in loop_task_check_switches() 
+    // won't fix this for free.
+    if (interval == 0 &&
+        gpio_switch->motion_interval != 0 &&
+        gpio_switch->current_state == 1 &&
+        gpio_switch->state_context == SW_ST_CTXT_MOTION) {
+        log_message("Forcing switch off to cancel current motion scenario");
+        set_switch_state(gpio_switch,
+                         0, // Off
+                         SW_ST_CTXT_INIT);
+    }
+
     gpio_switch->motion_interval = interval;
 }
 
@@ -403,7 +418,7 @@ void loop_task_check_switches(void)
          gpio_switch != gv_device.switch_list;
          gpio_switch = HTM_LIST_NEXT(gpio_switch)) {
 
-        // Repitition check 2 second protection
+        // Repetition check 2 second protection
         // We keep this silent in terms of logging
         // But repetitive fires of a manual detection will be supressed 
         // per switch until at least 2 seconds have elapsed
