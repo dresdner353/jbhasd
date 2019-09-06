@@ -236,6 +236,12 @@ input:checked + .slider:before {
     color: rgba(255,255,255,1);
 }
 
+.status-text {
+    font: normal 14px/1 Courier;
+    font-size: 14px;
+    color: rgba(255,255,255,1);
+}
+
 a {
     color: rgba(255,255,255,1);
     text-decoration: none;
@@ -1141,6 +1147,9 @@ def probe_devices():
 
 
 def build_zone_web_page(num_cols):
+    global gv_jbhasd_zconf_url_set
+    global gv_jbhasd_device_status_dict
+    global gv_jbhasd_device_url_dict
 
     # safe snapshot of dict keys into list
     device_list = list(gv_jbhasd_device_status_dict)
@@ -1415,6 +1424,9 @@ def build_device_web_page(num_cols):
     global gv_sunrise_time
     global gv_actual_sunrise_time
     global gv_json_config
+    global gv_jbhasd_zconf_url_set
+    global gv_jbhasd_device_status_dict
+    global gv_jbhasd_device_url_dict
 
     # safe snapshot of dict keys into list
     device_list = list(gv_jbhasd_device_status_dict)
@@ -1460,7 +1472,15 @@ def build_device_web_page(num_cols):
 
     dashboard_col_list[0] += (
             '<tr>'
-            '<td class="dash-label">Devices</td>'
+            '<td class="dash-label">Discovered Devices</td>'
+            '<td align="center" class="dash-value">'
+            '%s'
+            '</td>'
+            '</tr>') % (len(gv_jbhasd_zconf_url_set))
+
+    dashboard_col_list[0] += (
+            '<tr>'
+            '<td class="dash-label">Probed Devices</td>'
             '<td align="center" class="dash-value">'
             '%s'
             '</td>'
@@ -1839,6 +1859,141 @@ def build_device_web_page(num_cols):
     return web_page_str
 
 
+def build_status_web_page():
+    # Very plain web page to show internal 
+    # stats from web server
+    # Intended for trouble-shooting more 
+    # than normal use.
+    # No clickable actions in play here or style
+    # sheets
+    global gv_json_config
+    global gv_jbhasd_zconf_url_set
+    global gv_jbhasd_device_status_dict
+    global gv_jbhasd_device_url_dict
+    global gv_jbhasd_device_ts_dict
+    global gv_startup_time
+
+    # safe snapshot of dict keys into list
+    device_list = list(gv_jbhasd_device_status_dict)
+    url_dict_copy = copy.deepcopy(gv_jbhasd_device_url_dict)
+    ts_dict_copy = copy.deepcopy(gv_jbhasd_device_ts_dict)
+
+    # Alphabetic name sort to begin
+    sorted_device_list = sorted(device_list)
+
+    now = int(time.time())
+
+    # Top-right status
+    dashboard_str = ('<div align="right">'
+                     'Updated %s </div>') % (time.asctime())
+
+    # Initial details on uptime of server
+    # and totals in terms of discovered and probed
+    # devices
+    dashboard_str += ('<div align="left">'
+            'Started: %s </div>') % (gv_startup_time)
+    dashboard_str += ('<div align="left">'
+            'Discovered URLs: %d </div>') % (len(gv_jbhasd_zconf_url_set))
+    dashboard_str += ('<div align="left">'
+            'Probed Devices: %d </div>') % (len(sorted_device_list))
+
+    # Separator
+    dashboard_str += '<br>'
+
+    # Table of each Device summary
+    dashboard_str += '<table border="0" width="90%%">'
+    dashboard_str += '<tr>'
+    dashboard_str += '<td>Device Name</td>'
+    dashboard_str += '<td>Zone</td>'
+    dashboard_str += '<td>URL</td>'
+    dashboard_str += '<td>Updated</td>'
+    dashboard_str += '<td>Version</td>'
+    dashboard_str += '<td>Uptime</td>'
+    dashboard_str += '<td>Free Memory</td>'
+    dashboard_str += '</tr>'
+
+    for device_name in sorted_device_list:
+        json_data = gv_jbhasd_device_status_dict[device_name]
+        device_name = json_data['name']
+        zone_name = json_data['zone']
+
+        # System data (only present in real devices)
+        # So we condtionally access 
+        version = 'N/A'
+        uptime = 'N/A'
+        memory = 0
+        if ('system' in json_data):
+            version = json_data['system']['compile_date'].replace('JBHASD-VERSION ', '')
+            uptime = json_data['system']['uptime']
+            memory = json_data['system']['free_heap']
+
+        url = url_dict_copy[device_name]
+        last_update_ts = ts_dict_copy[device_name]
+
+        dashboard_str += '<tr>'
+        dashboard_str += '<td valign="top">%s</td>' % (
+                device_name)
+        dashboard_str += '<td valign="top">%s</td>' % (
+                zone_name)
+        dashboard_str += '<td valign="top">%s</td>' % (
+                url)
+        dashboard_str += '<td valign="top">%02d secs</td>' % (
+                now - last_update_ts)
+        dashboard_str += '<td valign="top">%s</td>' % (
+                version)
+        dashboard_str += '<td valign="top">%s</td>' % (
+                uptime)
+        dashboard_str += '<td valign="top">%.1f Kb</td>' % (
+                memory / 1024)
+        dashboard_str += '</tr>'
+
+    dashboard_str += '</table>'
+
+    # Separator
+    dashboard_str += '<br>'
+
+    # JSON Status for each Device
+    dashboard_str += '<table border="0" width="90%%">'
+    for device_name in sorted_device_list:
+        json_data = gv_jbhasd_device_status_dict[device_name]
+        device_name = json_data['name']
+        zone_name = json_data['zone']
+        url = url_dict_copy[device_name]
+        last_update_ts = ts_dict_copy[device_name]
+
+        json_str = json.dumps(
+                json_data, 
+                indent=4, 
+                sort_keys=True)
+
+        dashboard_str += '<tr>'
+        dashboard_str += '<td valign="top">%s<br>%s</td>' % (
+                device_name,
+                url)
+        dashboard_str += '<td valign="top"><pre>%s</pre></td>' % (
+                json_str)
+        dashboard_str += '</tr>'
+
+        # separator row
+        dashboard_str += '<tr><td><br></td></tr>'
+
+    dashboard_str += '</table>'
+
+    # Build and return the web page
+    # dropping in CSS, generated jquery code
+    # and dashboard.
+    web_page_str = web_page_template
+    web_page_str = web_page_str.replace("__TITLE__", "JBHASD Status Console")
+    web_page_str = web_page_str.replace("__CSS__", "") # N/A
+    web_page_str = web_page_str.replace("__DASHBOX_WIDTH__", str(gv_json_config['dashboard']['box_width']))
+    web_page_str = web_page_str.replace("__SWITCH_FUNCTIONS__", "") # N/A
+    web_page_str = web_page_str.replace("__DASHBOARD__", dashboard_str)
+    web_page_str = web_page_str.replace("__REFRESH_URL__", "/status")
+    web_page_str = web_page_str.replace("__RELOAD__", str(gv_json_config['discovery']['device_probe_interval'] * 1000))
+
+    return web_page_str
+
+
 def process_console_action(
         device, 
         zone, 
@@ -2042,6 +2197,59 @@ class web_console_device_handler(object):
     index._cp_config = {'tools.trailing_slash.on': False}
 
 
+class web_console_status_handler(object):
+    @cherrypy.expose()
+
+    def index(self, width=None):
+
+        log_message("device client:%s:%d params:%s" % (
+            cherrypy.request.remote.ip,
+            cherrypy.request.remote.port,
+            cherrypy.request.params))
+        # Normal client without width
+        if width is None:
+            log_message("forcing reload to get width")
+            reload_str = web_page_reload_template
+            reload_str = reload_str.replace("__REFRESH_URL__", "/status")
+            return reload_str
+
+        return build_status_web_page()
+
+    # Force trailling slash off on called URL
+    index._cp_config = {'tools.trailing_slash.on': False}
+class web_console_device_handler(object):
+    @cherrypy.expose()
+
+    def index(self, width=None):
+
+        log_message("device client:%s:%d params:%s" % (
+            cherrypy.request.remote.ip,
+            cherrypy.request.remote.port,
+            cherrypy.request.params))
+        # Normal client without width
+        if width is None:
+            log_message("forcing reload to get width")
+            reload_str = web_page_reload_template
+            reload_str = reload_str.replace("__REFRESH_URL__", "/device")
+            return reload_str
+
+        # set defautl cols
+        # Then calculate more accurate version based on 
+        # supplied window width divided by dashbox width
+        # plus an offset for padding consideration
+        num_cols = gv_json_config['dashboard']['initial_num_columns']
+        if width is not None:
+            num_cols = int(int(width) / (gv_json_config['dashboard']['box_width'] + 
+                                         gv_json_config['dashboard']['col_division_offset']))
+
+        # return dashboard in specified number of 
+        # columns
+        return build_device_web_page(num_cols)
+
+    # Force trailling slash off on called URL
+    index._cp_config = {'tools.trailing_slash.on': False}
+
+
 class web_console_api_handler(object):
     @cherrypy.expose()
 
@@ -2124,6 +2332,7 @@ def web_server():
     cherrypy.tree.mount(web_console_zone_handler(), '/', conf)
     cherrypy.tree.mount(web_console_zone_handler(), '/zone', conf)
     cherrypy.tree.mount(web_console_device_handler(), '/device', conf)
+    cherrypy.tree.mount(web_console_status_handler(), '/status', conf)
 
     # webhook for API
     cherrypy.tree.mount(web_console_api_handler(), '/api')
@@ -2133,6 +2342,7 @@ def web_server():
     cherrypy.engine.block()
 
 # main()
+gv_startup_time = time.asctime()
 
 # Analytics
 analytics_file = open("analytics.csv", "a")
