@@ -1909,6 +1909,8 @@ def build_status_web_page():
     dashboard_str += '<td>Updated</td>'
     dashboard_str += '<td>Version</td>'
     dashboard_str += '<td>Uptime</td>'
+    dashboard_str += '<td>Status<br>Restarts</td>'
+    dashboard_str += '<td>Signal<br>Restarts</td>'
     dashboard_str += '<td>Free Memory</td>'
     dashboard_str += '</tr>'
 
@@ -1922,10 +1924,14 @@ def build_status_web_page():
         version = 'N/A'
         uptime = 'N/A'
         memory = 0
+        signal_restarts = 0
+        status_restarts = 0
         if ('system' in json_data):
             version = json_data['system']['compile_date'].replace('JBHASD-VERSION ', '')
             uptime = json_data['system']['uptime']
             memory = json_data['system']['free_heap']
+            signal_restarts = json_data['system']['signal_wifi_restarts']
+            status_restarts = json_data['system']['status_wifi_restarts']
 
         url = url_dict_copy[device_name]
         last_update_ts = ts_dict_copy[device_name]
@@ -1943,6 +1949,10 @@ def build_status_web_page():
                 version)
         dashboard_str += '<td valign="top">%s</td>' % (
                 uptime)
+        dashboard_str += '<td valign="top">%s</td>' % (
+                status_restarts)
+        dashboard_str += '<td valign="top">%s</td>' % (
+                signal_restarts)
         dashboard_str += '<td valign="top">%.1f Kb</td>' % (
                 memory / 1024)
         dashboard_str += '</tr>'
