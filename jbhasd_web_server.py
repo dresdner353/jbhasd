@@ -292,6 +292,7 @@ def log_message(message):
     print("%s %s" % (
         time.asctime(),
         message))
+    sys.stdout.flush()
 
 
 def set_default_config():
