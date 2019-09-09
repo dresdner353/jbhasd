@@ -722,7 +722,7 @@ def get_url(url, url_timeout, parse_json):
                 json_data = response.json()
             except:
                 log_message("Error in JSON parse.. Name:%s URL:%s Data:%s" % (
-                    name, 
+                    url_name, 
                     url, 
                     response_str))
                 return None
