@@ -1885,7 +1885,7 @@ def build_status_web_page():
     now = int(time.time())
 
     # Top-right status
-    dashboard_str = ('<div align="right">'
+    dashboard_str = ('<div id="top" align="right">'
                      'Updated %s </div>') % (time.asctime())
 
     # Initial details on uptime of server
@@ -1938,7 +1938,8 @@ def build_status_web_page():
         last_update_ts = ts_dict_copy[device_name]
 
         dashboard_str += '<tr>'
-        dashboard_str += '<td valign="top">%s</td>' % (
+        dashboard_str += '<td valign="top"><a href="#%s">&#x2913;</a>&nbsp;%s</td>' % (
+                device_name,
                 device_name)
         dashboard_str += '<td valign="top">%s</td>' % (
                 zone_name)
@@ -1978,7 +1979,8 @@ def build_status_web_page():
                 sort_keys=True)
 
         dashboard_str += '<tr>'
-        dashboard_str += '<td valign="top">%s<br>%s</td>' % (
+        dashboard_str += '<td id="%s" valign="top"><a href="#top">&#x2912;</a>&nbsp;%s<br>%s</td>' % (
+                device_name,
                 device_name,
                 url)
         dashboard_str += '<td valign="top"><pre>%s</pre></td>' % (
