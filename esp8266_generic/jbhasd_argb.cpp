@@ -10,6 +10,32 @@ struct gpio_argb* gpio_argb_alloc(void)
     return gpio_argb;
 }
 
+// rainbow effect adapted from Neopixel examples
+// modified here to atore the firstPixelHue value statically
+void rainbow(Adafruit_NeoPixel *neopixel) {
+    static long firstPixelHue = 0; 
+    for(int i = 0; i < neopixel->numPixels(); i++) { 
+        int pixelHue = firstPixelHue + (i * 65536L / neopixel->numPixels());
+        neopixel->setPixelColor(i, neopixel->gamma32(neopixel->ColorHSV(pixelHue)));
+    }
+    firstPixelHue = (firstPixelHue + 256) % 65536;
+}
+
+// chasing rainbow effect adapted from Neopixel 
+// examples. Some variabls made static to hold state 
+// between calls
+void chase_rainbow(Adafruit_NeoPixel *neopixel) {
+    static int firstPixelHue = 0;
+    static int b = 0; 
+    neopixel->clear(); 
+    for(int c = b; c < neopixel->numPixels(); c += 3) {
+        int hue = firstPixelHue + c * 65536L / neopixel->numPixels();
+        uint32_t color = neopixel->gamma32(neopixel->ColorHSV(hue)); 
+        neopixel->setPixelColor(c, color); 
+    }
+    firstPixelHue += 65536 / 90; 
+    b = (b + 1) % 3;
+}
 
 // Function set_argb_state
 // Drives aRGB program by applying the 
@@ -52,138 +78,147 @@ void set_argb_state(struct gpio_argb *gpio_argb)
                 gpio_argb->fill_mode,
                 gpio_argb->pause);
 
-    // Wipe strip before draw
-    switch(gpio_argb->fill_mode) {
-      case 0:
-        wipe = 1;
-        break;
-
-      case 2:
-        // For append mode, we wipe only at the start of 
-        // the program
-        if (start_index == 0) {
-            wipe = 1;
-        }
-        break;
-
-      default:
-        // no wipe
-        wipe = 0;
-        break;
+    // special cases
+    if (gpio_argb->fill_mode == 3) {
+        rainbow(gpio_argb->neopixel);
     }
-
-    if (wipe) {
-        for (i = 0; 
-             i < gpio_argb->num_leds; 
-             i++) {
-            gpio_argb->neopixel->setPixelColor(i,
-                                               gpio_argb->neopixel->Color(0,0,0));
-        }
+    else if (gpio_argb->fill_mode == 4) {
+        chase_rainbow(gpio_argb->neopixel);
     }
-
-    // enter permanent loop now to populate
-    // the neopixel array from the program data
-    // loop will exit depending on fill mode
-    p = gpio_argb->program_start;
-    led_count = 0;
-    loop = 1;
-    while (loop) {
-        // find colour separator
-        q = strchr(p, ',');
-        if (q &&
-            q - p < sizeof(colour_buf)) {
-
-            // isolate colour 
-            strncpy(colour_buf, 
-                    p,
-                    q - p);
-            colour_buf[q - p] = '\0';
-
-            // move to next in sequence
-            p = q + 1;
-        }
-        else {
-            // last colour in program
-            strncpy(colour_buf, 
-                    p,
-                    sizeof(colour_buf) - 1);
-            colour_buf[sizeof(colour_buf) - 1] = '\0';
-
-            // Program reset scenarios
-            switch(gpio_argb->fill_mode) {
-              case 1:
-                // reset the program for repeat
-                // write 
-                p = gpio_argb->program_start;
-                break;
-
-              default:
-                // once
-                p = NULL;
-                break;
-            }
-        }
-
-        log_message("Read colour from program: %s", 
-                    colour_buf);
-
-        // convert given colour to int
-        if (strlen(colour_buf) > 2 &&
-            colour_buf[0] == '0' &&
-            (colour_buf[1] == 'x' || colour_buf[1] == 'X')) {
-            // hex decode
-            colour = strtoul(&colour_buf[2], NULL, 16);
-        }
-        else {
-            // decimal unsigned int
-            colour = strtoul(colour_buf, NULL, 10);
-        }
-
-        // split to RGB
-        red = colour >> 16 & 0xFF;
-        green = colour >> 8 & 0xFF;
-        blue = colour & 0xFF;
-
-        // Set current pixel index to colour
-        // We use Neopixel Color method as this will 
-        // apply the RGB, BGR, GBR variation accordingly
-        log_message("Setting LED %d to Red:0x%02X Green:0x%02X Blue:0x%02X", 
-                    gpio_argb->index,
-                    red,
-                    green,
-                    blue);
-        gpio_argb->neopixel->setPixelColor(gpio_argb->index, 
-                                           gpio_argb->neopixel->Color(red, 
-                                                                      green,
-                                                                      blue));
-        led_count++;
-
-        // advance index for next colour
-        gpio_argb->index = (gpio_argb->index + 1) % gpio_argb->num_leds;
-        log_message("Next LED is %d", 
-                    gpio_argb->index);
-
-        log_message("LED count is %d", led_count);
-
-        // Loop exit scenarios
+    else {
+        // Wipe strip before draw
         switch(gpio_argb->fill_mode) {
           case 0:
-          case 2:
-            if (p == NULL) {
-                loop = 0;
-            }
+            wipe = 1;
             break;
 
-          case 1:
-            if (led_count >= gpio_argb->num_leds) {
-                loop = 0;
+          case 2:
+            // For append mode, we wipe only at the start of 
+            // the program
+            if (start_index == 0) {
+                wipe = 1;
             }
             break;
 
           default:
-            // break loop for safety
-            loop = 0;
+            // no wipe
+            wipe = 0;
             break;
+        }
+
+        if (wipe) {
+            for (i = 0; 
+                 i < gpio_argb->num_leds; 
+                 i++) {
+                gpio_argb->neopixel->setPixelColor(i,
+                                                   gpio_argb->neopixel->Color(0,0,0));
+            }
+        }
+
+        // enter permanent loop now to populate
+        // the neopixel array from the program data
+        // loop will exit depending on fill mode
+        p = gpio_argb->program_start;
+        led_count = 0;
+        loop = 1;
+        while (loop) {
+            // find colour separator
+            q = strchr(p, ',');
+            if (q &&
+                q - p < sizeof(colour_buf)) {
+
+                // isolate colour 
+                strncpy(colour_buf, 
+                        p,
+                        q - p);
+                colour_buf[q - p] = '\0';
+
+                // move to next in sequence
+                p = q + 1;
+            }
+            else {
+                // last colour in program
+                strncpy(colour_buf, 
+                        p,
+                        sizeof(colour_buf) - 1);
+                colour_buf[sizeof(colour_buf) - 1] = '\0';
+
+                // Program reset scenarios
+                switch(gpio_argb->fill_mode) {
+                  case 1:
+                    // reset the program for repeat
+                    // write 
+                    p = gpio_argb->program_start;
+                    break;
+
+                  default:
+                    // once
+                    p = NULL;
+                    break;
+                }
+            }
+
+            log_message("Read colour from program: %s", 
+                        colour_buf);
+
+            // convert given colour to int
+            if (strlen(colour_buf) > 2 &&
+                colour_buf[0] == '0' &&
+                (colour_buf[1] == 'x' || colour_buf[1] == 'X')) {
+                // hex decode
+                colour = strtoul(&colour_buf[2], NULL, 16);
+            }
+            else {
+                // decimal unsigned int
+                colour = strtoul(colour_buf, NULL, 10);
+            }
+
+            // split to RGB
+            red = colour >> 16 & 0xFF;
+            green = colour >> 8 & 0xFF;
+            blue = colour & 0xFF;
+
+            // Set current pixel index to colour
+            // We use Neopixel Color method as this will 
+            // apply the RGB, BGR, GBR variation accordingly
+            log_message("Setting LED %d to Red:0x%02X Green:0x%02X Blue:0x%02X", 
+                        gpio_argb->index,
+                        red,
+                        green,
+                        blue);
+            gpio_argb->neopixel->setPixelColor(gpio_argb->index, 
+                                               gpio_argb->neopixel->Color(red, 
+                                                                          green,
+                                                                          blue));
+            led_count++;
+
+            // advance index for next colour
+            gpio_argb->index = (gpio_argb->index + 1) % gpio_argb->num_leds;
+            log_message("Next LED is %d", 
+                        gpio_argb->index);
+
+            log_message("LED count is %d", led_count);
+
+            // Loop exit scenarios
+            switch(gpio_argb->fill_mode) {
+              case 0:
+              case 2:
+                if (p == NULL) {
+                    loop = 0;
+                }
+                break;
+
+              case 1:
+                if (led_count >= gpio_argb->num_leds) {
+                    loop = 0;
+                }
+                break;
+
+              default:
+                // break loop for safety
+                loop = 0;
+                break;
+            }
         }
     }
 
@@ -255,12 +290,7 @@ void set_argb_program(struct gpio_argb *gpio_argb,
 
     // resets on neopixel
     // turn all pixels off
-    for (i = 0; 
-         i < gpio_argb->num_leds; 
-         i++) {
-        gpio_argb->neopixel->setPixelColor(i,
-                                           gpio_argb->neopixel->Color(0,0,0));
-    }
+    gpio_argb->neopixel->clear();
     gpio_argb->neopixel->show(); 
 
     gpio_argb->timestamp = 0;
