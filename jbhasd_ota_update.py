@@ -106,7 +106,7 @@ for ip in ip_set:
     if json_data is not None:
         name = json_data['name']
         zone = json_data['zone']
-        device_flash_size = json_data['system']['flash_real_size']
+        device_flash_size = json_data['system']['flash_size']
         print( "Name:%s Zone:%s Flash:%d" % (name, zone, device_flash_size))
         if device_flash_size == flash_size:
             # Flash
