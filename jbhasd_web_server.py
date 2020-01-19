@@ -322,8 +322,10 @@ def set_default_config():
     json_config['sunset']['offset'] = 1800
     json_config['sunset']['refresh'] = 3600
 
-    # Timed switches
+    # Timed & paired controls
     json_config['switch_timers'] = []
+    json_config['rgb_timers'] = []
+    json_config['paired_switches'] = []
 
     # Device config
     json_config['device_profiles'] = []
@@ -580,11 +582,16 @@ def check_switch(zone_name,
                             desired_state = 1
                             break
 
-    #log_message("return zone:%s control:%s state:%d motion:%d" % (
-    #    zone_name, 
-    #    control_name,
-    #    desired_state,
-    #    desired_motion_interval))
+    # paired switches
+    # anything found on the b-side of the
+    # will have its state to the state of the paired
+    # a-side
+    for paired_switch in gv_json_config['paired_switches']:
+        if (paired_switch['b_zone'] == zone_name and 
+                paired_switch['b_control'] == control_name):
+            desired_state = get_control_state(
+                    paired_switch['a_zone'], 
+                    paired_switch['a_control'])
 
     return desired_state, desired_motion_interval
 
@@ -780,6 +787,31 @@ def format_control_request(
 
     return json_req
 
+
+def get_control_state(zone_name, control_name):
+    # Get state of specified control
+    # return 0 or 1 or -1 (not found)
+
+    state = -1
+
+    device_list = list(gv_jbhasd_device_status_dict)
+    for device_name in device_list:
+        json_data = gv_jbhasd_device_status_dict[device_name]
+        device_zone_name = json_data['zone']
+
+        if (device_zone_name != zone_name):
+            continue
+
+        # Control name check 
+        for control in json_data['controls']:
+            device_control_name = control['name']
+            device_control_type = control['type']
+
+            if (device_control_type == 'switch' and 
+                    device_control_name == control_name):
+                state = int(control['state'])
+
+    return state
 
 
 def check_automated_devices():
