@@ -320,9 +320,12 @@ def set_default_config():
     json_config['sunset'] = {}
     json_config['sunset']['url'] = 'http://api.sunrise-sunset.org/json?lat=53.349809&lng=-6.2624431&formatted=0'
     json_config['sunset']['offset'] = 1800
+    json_config['sunset']['refresh'] = 3600
 
-    # Timed switches
+    # Timed & paired controls
     json_config['switch_timers'] = []
+    json_config['rgb_timers'] = []
+    json_config['paired_switches'] = []
 
     # Device config
     json_config['device_profiles'] = []
@@ -556,7 +559,7 @@ def check_switch(zone_name,
                 # On/Off Start assuming its off
                 desired_state = 0
 
-                # part times from fields 
+                # parse times from fields 
                 # this also substitutes keywords
                 # like sunset and sunrise
                 on_time = get_timer_time(timer['on'])
@@ -579,11 +582,16 @@ def check_switch(zone_name,
                             desired_state = 1
                             break
 
-    #log_message("return zone:%s control:%s state:%d motion:%d" % (
-    #    zone_name, 
-    #    control_name,
-    #    desired_state,
-    #    desired_motion_interval))
+    # paired switches
+    # anything found on the b-side of the
+    # will have its state to the state of the paired
+    # a-side
+    for paired_switch in gv_json_config['paired_switches']:
+        if (paired_switch['b_zone'] == zone_name and 
+                paired_switch['b_control'] == control_name):
+            desired_state = get_control_state(
+                    paired_switch['a_zone'], 
+                    paired_switch['a_control'])
 
     return desired_state, desired_motion_interval
 
@@ -605,14 +613,11 @@ def check_rgb(zone_name,
             # we can now assert a default of off
             desired_program = timer['off_program']
 
-            # sunset keyword replacemenet with
-            # dynamic sunset offset time
-            if (timer['on'] == "sunset"):
-                on_time = gv_sunset_time
-            else:
-                on_time = int(timer['on'].replace(':', ''))
-
-            off_time = int(timer['off'].replace(':', ''))
+            # parse times from fields 
+            # this also substitutes keywords
+            # like sunset and sunrise
+            on_time = get_timer_time(timer['on'])
+            off_time = get_timer_time(timer['off'])
 
             if (on_time <= off_time):
                 if (current_time >= on_time and 
@@ -779,6 +784,31 @@ def format_control_request(
 
     return json_req
 
+
+def get_control_state(zone_name, control_name):
+    # Get state of specified control
+    # return 0 or 1 or -1 (not found)
+
+    state = -1
+
+    device_list = list(gv_jbhasd_device_status_dict)
+    for device_name in device_list:
+        json_data = gv_jbhasd_device_status_dict[device_name]
+        device_zone_name = json_data['zone']
+
+        if (device_zone_name != zone_name):
+            continue
+
+        # Control name check 
+        for control in json_data['controls']:
+            device_control_name = control['name']
+            device_control_type = control['type']
+
+            if (device_control_type == 'switch' and 
+                    device_control_name == control_name):
+                state = int(control['state'])
+
+    return state
 
 
 def check_automated_devices():
@@ -976,10 +1006,14 @@ def probe_devices():
     # loop forever
     while (1):
         # Sunset calculations
+        # refresh this based on second interval
+        # gv_json_config['sunset']['refresh']
         now = int(time.time())
-        if ((now - gv_last_sunset_check) >= 6*60*60): # every 6 hours
+        if ((now - gv_last_sunset_check) >= 
+                gv_json_config['sunset']['refresh']):
             # Re-calculate
-            log_message("Getting Sunset times..")
+            log_message("Refreshing Sunset times (every %d seconds).." % (
+                gv_json_config['sunset']['refresh']))
             json_data = get_url(gv_json_config['sunset']['url'], 20, 1)
             if json_data is not None:
                 # Sunset
