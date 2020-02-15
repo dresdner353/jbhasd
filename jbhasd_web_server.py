@@ -559,7 +559,7 @@ def check_switch(zone_name,
                 # On/Off Start assuming its off
                 desired_state = 0
 
-                # part times from fields 
+                # parse times from fields 
                 # this also substitutes keywords
                 # like sunset and sunrise
                 on_time = get_timer_time(timer['on'])
@@ -613,14 +613,11 @@ def check_rgb(zone_name,
             # we can now assert a default of off
             desired_program = timer['off_program']
 
-            # sunset keyword replacemenet with
-            # dynamic sunset offset time
-            if (timer['on'] == "sunset"):
-                on_time = gv_sunset_time
-            else:
-                on_time = int(timer['on'].replace(':', ''))
-
-            off_time = int(timer['off'].replace(':', ''))
+            # parse times from fields 
+            # this also substitutes keywords
+            # like sunset and sunrise
+            on_time = get_timer_time(timer['on'])
+            off_time = get_timer_time(timer['off'])
 
             if (on_time <= off_time):
                 if (current_time >= on_time and 
