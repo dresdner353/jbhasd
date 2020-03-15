@@ -551,26 +551,25 @@ void loop_task_check_switches(void)
 // pin to drive a switch to AP mode
 void loop_task_check_boot_switch(void)
 {
-    static uint8_t pin_wait_timer = 25;
     uint8_t button_state;
+    uint32_t now;
+
+    now = millis();
 
     // Can toggle LED with no 
     // delay as the main loop tasks
     // apply the timing
     toggle_status_led(0);
 
-    // decrement pin wait timer on each call
-    // 25 calls against a 200msec call interval
-    // is roughly 5 seconds
-    if (pin_wait_timer > 0) {
-        log_message("Boot wait #%d", pin_wait_timer);
+    if (now < (gv_device.boot_wait * 1000)) {
+        log_message("Boot wait %d secs remaining", 
+                    ((gv_device.boot_wait * 1000) - now) / 1000);
         button_state = digitalRead(gv_device.boot_pin);
         if (button_state == LOW) {
             log_message("Detected pin down.. going to AP mode");
             start_wifi_ap_mode();
             return;
         }
-        pin_wait_timer--;
     }
     else {
         log_message("Passed boot wait stage.. going to STA mode");
