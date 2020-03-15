@@ -179,6 +179,7 @@ struct device_profile {
     uint8_t mdns_enabled;
     uint8_t manual_switches_enabled;
     uint8_t boot_pin;
+    uint16_t boot_wait;
     uint8_t status_led_pin;
     uint8_t status_led_on_high;
     uint8_t force_apmode_onboot;
