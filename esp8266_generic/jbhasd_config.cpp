@@ -217,6 +217,9 @@ void load_config(void)
         return;
     }
 
+    // Boot delay, default is 5 seconds
+    gv_device.boot_wait = json_get_ival(json_cfg["boot_wait"], 5);
+
     // OTA enabled, default 1
     gv_device.ota_enabled = json_get_ival(json_cfg["ota_enabled"], 1);
 
