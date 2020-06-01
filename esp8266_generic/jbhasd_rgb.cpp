@@ -247,6 +247,16 @@ void set_rgb_program(struct gpio_rgb *gpio_rgb,
                 gpio_rgb->name,
                 program);
 
+    // init interval protection
+    // if set, the millis() miust match or exceed the interval 
+    // before we allow a program to be set
+    if (gpio_rgb->init_interval > 0 &&
+        millis() < gpio_rgb->init_interval * 1000) {
+        log_message("ignoring network program event.. init interval in play (%d secs)",
+                    gpio_rgb->init_interval);
+        return;
+    }
+
     gpio_rgb->timestamp = 0;
 
     // copy in program string
