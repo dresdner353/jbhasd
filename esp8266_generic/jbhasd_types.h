@@ -116,6 +116,7 @@ struct gpio_rgb {
     uint8_t manual_pin; // Random Program
     char program[2048]; // default program
     char *program_ptr;
+    uint32_t init_interval;
 
     // Hue + RGB values
     // for current colour
