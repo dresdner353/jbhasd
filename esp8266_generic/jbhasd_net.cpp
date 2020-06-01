@@ -130,6 +130,7 @@ const char *get_json_status(void)
         obj["name"] = gpio_rgb->name;
         obj["type"] = "rgb";
         obj["program"] = gpio_rgb->program;
+        obj["init_interval"] = gpio_rgb->init_interval;
         ets_sprintf(small_buffer,
                     "0x%08X",
                     gpio_rgb->current_colour);
@@ -666,9 +667,11 @@ void start_wifi_sta_mode(void)
     TaskMan.set_run_state(RUN_STATE_WIFI_STA_DOWN);
 
     // WIFI
+    // Disable persistence (read/write to flash)
     // Turn off first as it better 
     // handles recovery after WIFI router
     // outages
+    WiFi.persistent(false);
     WiFi.disconnect();
     WiFi.mode(WIFI_STA);
     WiFi.hostname(gv_device.hostname);
