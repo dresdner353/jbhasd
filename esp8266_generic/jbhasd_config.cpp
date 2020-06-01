@@ -355,14 +355,16 @@ void load_config(void)
 
                 strcpy(gpio_rgb->name, control_name);
 
-
                 // RGB pins and manual switch
                 // all default to NO_PIN
                 gpio_rgb->red_pin = json_get_ival(control["red_pin"], NO_PIN);
                 gpio_rgb->green_pin = json_get_ival(control["green_pin"], NO_PIN);
                 gpio_rgb->blue_pin = json_get_ival(control["blue_pin"], NO_PIN);
                 gpio_rgb->manual_pin = json_get_ival(control["manual_pin"], NO_PIN);
+
+                // Default init program and init interval
                 strcpy(gpio_rgb->program, json_get_sval(control["program"], ""));
+                gpio_rgb->init_interval = json_get_ival(control["init_interval"], 0);
             }
 
             if (!strcmp(control_type, "argb")) {
