@@ -9,8 +9,6 @@
 # It also uses a register of automated devices
 # and time parameters to use in automating the on and
 # off times for the devices.
-# Finally analytics from switches and sensors are written to 
-# analytics.csv after each probe
 
 import time
 import socket
@@ -822,10 +820,6 @@ def check_automated_devices():
         zone_name = json_data['zone']
         url = gv_jbhasd_device_url_dict[device_name]
 
-        # use timestamp from ts dict as sample time
-        # for analytics
-        status_ts = gv_jbhasd_device_ts_dict[device_name]
-
         # Control status check 
         for control in json_data['controls']:
             control_name = control['name']
@@ -1095,80 +1089,6 @@ def probe_devices():
 
         # Automated devices
         check_automated_devices()
-
-        # Analytics
-        device_list = list(gv_jbhasd_device_status_dict)
-        # get time in hhmm format
-        current_time = int(time.strftime("%H%M", time.localtime()))
-        for device_name in device_list:
-            json_data = gv_jbhasd_device_status_dict[device_name]
-            zone_name = json_data['zone']
-            url = gv_jbhasd_device_url_dict[device_name]
-
-            # use timestamp from ts dict as sample time
-            # for analytics
-            status_ts = gv_jbhasd_device_ts_dict[device_name]
-
-            # system details
-            # 'system' section may not be present 
-            # for say simulated devices
-            if 'system' in json_data:
-                device_uptime_msecs = json_data['system']['uptime_msecs']
-                free_heap = json_data['system']['free_heap']
-                csv_row = "%d,%d,%s,%s,%s,%s,%s,%d" % (3,
-                                                       status_ts, 
-                                                       zone_name, 
-                                                       device_name, 
-                                                       "", 
-                                                       "", 
-                                                       "",
-                                                       device_uptime_msecs)
-                analytics_file.write("%s\n" % (csv_row)) 
-                csv_row = "%d,%d,%s,%s,%s,%s,%s,%d" % (4,
-                                                       status_ts, 
-                                                       zone_name, 
-                                                       device_name, 
-                                                       "", 
-                                                       "", 
-                                                       "",
-                                                       free_heap)
-                analytics_file.write("%s\n" % (csv_row)) 
-                analytics_file.flush()
-
-            # Switch status check 
-            for control in json_data['controls']:
-                control_name = control['name']
-                control_type = control['type']
-
-                if (control_type == 'switch'):
-                    control_state = int(control['state'])
- 
-                    # Record analytics
-                    csv_row = "%d,%d,%s,%s,%s,%s,%s,%d" % (2,
-                                                           status_ts, 
-                                                           zone_name, 
-                                                           device_name, 
-                                                           control_name, 
-                                                           "", 
-                                                           "",
-                                                           control_state)
-                    analytics_file.write("%s\n" % (csv_row)) 
-                    analytics_file.flush()
-
-
-                if (control_type == 'temp/humidity'):
-                    temp = control['temp']
-                    humidity = control['humidity']
-                    csv_row = "%d,%d,%s,%s,%s,%s,%s,%d" % (1,
-                                                           status_ts, 
-                                                           zone_name, 
-                                                           device_name, 
-                                                           control_name, 
-                                                           temp, 
-                                                           humidity,
-                                                           0)
-                    analytics_file.write("%s\n" % (csv_row)) 
-                    analytics_file.flush()
 
         log_message("Probe.. total:%d successful:%d failed:%d purged:%d" % (
             total_probes,
@@ -2390,9 +2310,6 @@ def web_server():
 
 # main()
 gv_startup_time = time.asctime()
-
-# Analytics
-analytics_file = open("analytics.csv", "a")
 
 thread_list = []
 
