@@ -13,6 +13,8 @@
     (head)->next = (head); \
 }
 
+#define HTM_LIST_EMPTY(head) (head->next == head && head->prev == head)
+
 #define HTM_LIST_INSERT(head, node) { \
     (node)->next = (head); \
     (node)->prev = (head)->prev; \
