@@ -125,11 +125,11 @@ void loop_task_log_stats(void)
 // Does an initial config load and switch/sensor setup calls.
 void setup()
 {
+    gv_logging = LOGGING_SERIAL;
+    Serial.begin(115200);
+
     // Get the config
     load_config();
-
-    // Start logging from serial to start
-    start_serial();
 
     // Set Task manager logging callback
     // Init run state
@@ -191,10 +191,9 @@ void setup()
     }
 
     // Activate switches, leds and sensors
-    setup_switches();
-    setup_rgbs();
-    setup_argbs();
-    setup_sensors();
+    switch_init();
+    rgb_init();
+    argb_init();
 
     log_message("Setup stage complete");
 }
