@@ -37,6 +37,22 @@ void chase_rainbow(Adafruit_NeoPixel *neopixel) {
     b = (b + 1) % 3;
 }
 
+void random_leds(Adafruit_NeoPixel *neopixel) {
+    static uint8_t first_run = 1;
+    uint16_t index, i;
+    uint32_t colour;
+
+    if (first_run) {
+        neopixel->clear(); 
+        first_run = 0;
+    }
+
+    // Set random colour on random pixel
+    index = random(0, neopixel->numPixels());
+    colour = neopixel->gamma32(random(0, 0xFFFFFF)); 
+    neopixel->setPixelColor(index, colour);
+}
+
 // Function set_argb_state
 // Drives aRGB program by applying the 
 // program list of colours to the addressable LED
@@ -44,222 +60,106 @@ void chase_rainbow(Adafruit_NeoPixel *neopixel) {
 void set_argb_state(struct gpio_argb *gpio_argb)
 {
     uint32_t now;
+    uint16_t limit;
+    uint16_t i, prog_index, pixel_index;
     uint32_t colour;
-    uint8_t red, green, blue;
-    char colour_buf[12];
-    char *p, *q;
-    uint16_t led_count;
-    uint32_t i;
-    uint32_t start_index;
-    uint8_t loop;
-    uint8_t wipe = 0;
-
-    if (gpio_argb->program_start == NULL) {
-        log_message("program is empty.. nothing to do");
-        return;
-    }
 
     // invoke early return until delay
     // msec period reached
     now = millis();
-    if (now - gpio_argb->timestamp < 
-        gpio_argb->pause) {
+    if (gpio_argb->delay && 
+        now - gpio_argb->timestamp < 
+        gpio_argb->delay) {
         return;
     }
 
     log_message("set_argb_state(name=%s)",
                 gpio_argb->name);
 
-    start_index = gpio_argb->index;
-
-    log_message("index:%d direction:%d fill_mode:%d pause:%d",
-                start_index,
-                gpio_argb->direction,
-                gpio_argb->fill_mode,
-                gpio_argb->pause);
+    log_message("index:%d offset:%d mode:%s delay:%d",
+                gpio_argb->index,
+                gpio_argb->offset,
+                gpio_argb->mode,
+                gpio_argb->delay);
 
     // special cases
-    if (gpio_argb->fill_mode == 3) {
+    if (!strcmp(gpio_argb->mode, "off")) {
+        log_message("Mode is off.. returning");
+        gpio_argb->timestamp = now;
+        return;
+    }
+    else if (!strcmp(gpio_argb->mode, "rainbow")) {
         rainbow(gpio_argb->neopixel);
     }
-    else if (gpio_argb->fill_mode == 4) {
+    else if (!strcmp(gpio_argb->mode, "chase_rainbow")) {
         chase_rainbow(gpio_argb->neopixel);
     }
+    else if (!strcmp(gpio_argb->mode, "random")) {
+        random_leds(gpio_argb->neopixel);
+    }
     else {
-        // Wipe strip before draw
-        switch(gpio_argb->fill_mode) {
-          case 0:
-            wipe = 1;
-            break;
-
-          case 2:
-            // For append mode, we wipe only at the start of 
-            // the program
-            if (start_index == 0) {
-                wipe = 1;
-            }
-            break;
-
-          default:
-            // no wipe
-            wipe = 0;
-            break;
+        // optional wipe on each draw
+        if (gpio_argb->wipe) {
+            gpio_argb->neopixel->clear();
         }
 
-        if (wipe) {
-            for (i = 0; 
-                 i < gpio_argb->num_leds; 
-                 i++) {
-                gpio_argb->neopixel->setPixelColor(i,
-                                                   gpio_argb->neopixel->Color(0,0,0));
-            }
+        pixel_index = gpio_argb->index;
+
+        // Set limit based on num LEDS (fill)
+        // or program
+        if (gpio_argb->fill) {
+            limit = gpio_argb->num_leds;
+        }
+        else {
+            limit = gpio_argb->program_len;
         }
 
-        // enter permanent loop now to populate
-        // the neopixel array from the program data
-        // loop will exit depending on fill mode
-        p = gpio_argb->program_start;
-        led_count = 0;
-        loop = 1;
-        while (loop) {
-            // find colour separator
-            q = strchr(p, ',');
-            if (q &&
-                q - p < sizeof(colour_buf)) {
+        for (i = 0;
+             i < limit;
+             i++) { 
 
-                // isolate colour 
-                strncpy(colour_buf, 
-                        p,
-                        q - p);
-                colour_buf[q - p] = '\0';
 
-                // move to next in sequence
-                p = q + 1;
+            // read program in reverse always
+            prog_index = (gpio_argb->program_len - 1) - (i % gpio_argb->program_len);
+             
+            colour = gpio_argb->program[prog_index];
+
+            // full int value implies random
+            if (colour == 0xFFFFFFFF) {
+                colour = random(0, 0xFFFFFF);
+            }
+            log_message("Setting LED %d to program[%d] -> %08X", 
+                        pixel_index,
+                        prog_index,
+                        colour);
+
+            gpio_argb->neopixel->setPixelColor(pixel_index,
+                                               gpio_argb->neopixel->gamma32(colour));
+
+            if (gpio_argb->offset >= 0) {
+                // forward modulo
+                pixel_index = (pixel_index + 1) % gpio_argb->num_leds;
             }
             else {
-                // last colour in program
-                strncpy(colour_buf, 
-                        p,
-                        sizeof(colour_buf) - 1);
-                colour_buf[sizeof(colour_buf) - 1] = '\0';
-
-                // Program reset scenarios
-                switch(gpio_argb->fill_mode) {
-                  case 1:
-                    // reset the program for repeat
-                    // write 
-                    p = gpio_argb->program_start;
-                    break;
-
-                  default:
-                    // once
-                    p = NULL;
-                    break;
-                }
-            }
-
-            log_message("Read colour from program: %s", 
-                        colour_buf);
-
-            // convert given colour to int
-            if (strlen(colour_buf) > 2 &&
-                colour_buf[0] == '0' &&
-                (colour_buf[1] == 'x' || colour_buf[1] == 'X')) {
-                // hex decode
-                colour = strtoul(&colour_buf[2], NULL, 16);
-            }
-            else {
-                // decimal unsigned int
-                colour = strtoul(colour_buf, NULL, 10);
-            }
-
-            // split to RGB
-            red = colour >> 16 & 0xFF;
-            green = colour >> 8 & 0xFF;
-            blue = colour & 0xFF;
-
-            // Set current pixel index to colour
-            // We use Neopixel Color method as this will 
-            // apply the RGB, BGR, GBR variation accordingly
-            log_message("Setting LED %d to Red:0x%02X Green:0x%02X Blue:0x%02X", 
-                        gpio_argb->index,
-                        red,
-                        green,
-                        blue);
-            gpio_argb->neopixel->setPixelColor(gpio_argb->index, 
-                                               gpio_argb->neopixel->Color(red, 
-                                                                          green,
-                                                                          blue));
-            led_count++;
-
-            // advance index for next colour
-            gpio_argb->index = (gpio_argb->index + 1) % gpio_argb->num_leds;
-            log_message("Next LED is %d", 
-                        gpio_argb->index);
-
-            log_message("LED count is %d", led_count);
-
-            // Loop exit scenarios
-            switch(gpio_argb->fill_mode) {
-              case 0:
-              case 2:
-                if (p == NULL) {
-                    loop = 0;
-                }
-                break;
-
-              case 1:
-                if (led_count >= gpio_argb->num_leds) {
-                    loop = 0;
-                }
-                break;
-
-              default:
-                // break loop for safety
-                loop = 0;
-                break;
+                // reverse modulo
+                pixel_index = (pixel_index - 1 + gpio_argb->num_leds) % gpio_argb->num_leds;
             }
         }
+
+        // advance index for next colour
+        if (gpio_argb->offset >= 0) {
+            gpio_argb->index = 
+                (gpio_argb->index + gpio_argb->offset) % gpio_argb->num_leds;
+        }
+        else {
+            gpio_argb->index = 
+                (gpio_argb->index + gpio_argb->offset + gpio_argb->num_leds) % gpio_argb->num_leds;
+        }
+        log_message("Next LED is %d", 
+                    gpio_argb->index);
     }
 
     gpio_argb->neopixel->show();
-
-    // reset index for next call
-    switch(gpio_argb->fill_mode) {
-      default:
-      case 0:
-      case 1:
-        // Standard single pixel movement according 
-        // to set direction
-        // or standstill
-        if (gpio_argb->direction > 0) {
-            gpio_argb->index = (start_index + 1) % gpio_argb->num_leds;
-        }
-        if (gpio_argb->direction < 0) {
-            gpio_argb->index = (start_index - 1) % gpio_argb->num_leds;
-        }
-        if (gpio_argb->direction == 0) {
-            gpio_argb->index = start_index;
-        }
-        break;
-
-      case 2:
-        // append draw
-        // for forward motion, we leave it as is
-        // for backward, we need to offset from start_index
-        // so we determine the unsigned difference between where
-        // we started and are now and then further subtract
-        // this from the current position
-        if (gpio_argb->direction < 0) {
-            gpio_argb->index = (start_index - led_count) % gpio_argb->num_leds;
-        }
-        break;
-
-    }
-
-    log_message("Done.. LEDs written:%d index:%d",
-                led_count,
-                gpio_argb->index);
 
     // Update activity timestamp
     gpio_argb->timestamp = millis();
@@ -270,96 +170,85 @@ void set_argb_state(struct gpio_argb *gpio_argb)
 // Sets the desired aRGB program for the 
 // addessable LED strip
 void set_argb_program(struct gpio_argb *gpio_argb,
-                     const char *program)
+                      JsonObject program)
 {
-    char *p;
-    char *direction_p = NULL;
-    char *pause_p = NULL;
-    char *fill_p = NULL; 
-    char field_buffer[50];
-    uint16_t i;
+    int i;
+    char colour_buffer[50];
 
     if (!gpio_argb) {
         log_message("No argb specified");
         return;
     }
 
-    log_message("set_argb_program(name=%s, program=%s)",
-                gpio_argb->name,
-                program);
+    log_message("set_argb_program(name=%s)",
+                gpio_argb->name);
 
     // resets on neopixel
     // turn all pixels off
-    gpio_argb->neopixel->clear();
-    gpio_argb->neopixel->show(); 
+    // but only if it's activated
+    if (gpio_argb->neopixel) {
+        gpio_argb->neopixel->clear();
+        gpio_argb->neopixel->show(); 
+    }
 
     gpio_argb->timestamp = 0;
 
-    // copy in program string
-    // if its not a pointer to itself
-    if (gpio_argb->program != program) {
-        strcpy(gpio_argb->program, program);
-    }
+    // wipe any existing program
+    gpio_argb->program_len = 0;
     gpio_argb->index = 0;
-    gpio_argb->program_start = NULL;
+    if (gpio_argb->program) {
+        free(gpio_argb->program);
+        gpio_argb->program = NULL;
+    }
 
-    // parse program
-    // <direction>;<pause>;<fill mode>;RRGGBB,RRGGBB,.....
+    // parse details from JSON program object
+    strcpy(gpio_argb->mode, json_get_sval(program["mode"], "off"));
+    gpio_argb->wipe = json_get_ival(program["wipe"], 1);
+    gpio_argb->fill = json_get_ival(program["fill"], 1);
+    gpio_argb->offset = json_get_ival(program["offset"], 1);
+    gpio_argb->delay = json_get_ival(program["delay"], 5000);
 
-    // copy over first 50 octets of text
-    // should be enough to contain main front 
-    // fields
-    strncpy(field_buffer, 
-            gpio_argb->program, 
-            sizeof(field_buffer) - 1);
-    field_buffer[sizeof(field_buffer) - 1] = '\0';
+    log_message("Program: mode:%s offset:%d delay:%d",
+                gpio_argb->mode,
+                gpio_argb->offset,
+                gpio_argb->delay);
 
-    // Set pointers and NULL separators
-    // for key lead fields for direction, pause and fill mode
-    direction_p = field_buffer;
-    p = strchr(direction_p, ';');
-    if (p) {
-        *p = '\0';
-        p++;
-        pause_p = p;
-        p = strchr(pause_p, ';');
-        if (p) {
-            *p = '\0';
-            p++;
-            fill_p = p;
-            p = strchr(fill_p, ';');
-            if (p) {
-                *p = '\0';
-                p++;
+    JsonArray colours = program["colours"];
 
-                // program start in main string will be same offset as 
-                // p is now having traversed pass all ';' delimiters
-                gpio_argb->program_start = gpio_argb->program + 
-                    (p - field_buffer);
-            }
-            else {
-                log_message("Failed to find program separator");
-            }
+    if (program.isNull()) {
+        log_message("No colours array present");
+        return;
+    }
+    gpio_argb->program_len = colours.size();
+    gpio_argb->program = new uint32_t[gpio_argb->program_len];
+
+    log_message("Program length %d",
+                gpio_argb->program_len);
+
+    i = 0;
+    for (JsonVariant colour : colours) {
+        strcpy(colour_buffer, colour);
+        if (!strcmp(colour_buffer, "random")) {
+            // Full value implies random
+            gpio_argb->program[i] = 0xFFFFFFFF;
+        }
+        else if (strlen(colour_buffer) > 2 &&
+            colour_buffer[0] == '0' &&
+            (colour_buffer[1] == 'x' || colour_buffer[1] == 'X')) {
+            gpio_argb->program[i] = 
+                strtoul(&colour_buffer[2], NULL, 16);
         }
         else {
-            log_message("Failed to find fill mode separator");
+            gpio_argb->program[i] = 
+                strtoul(colour_buffer, NULL, 10);
         }
-    }
-    else {
-        log_message("Failed to find pause separator");
-    }
 
-    if (direction_p && 
-        pause_p && 
-        fill_p && 
-        gpio_argb->program_start) {
-        gpio_argb->direction = atoi(direction_p);
-        gpio_argb->pause = atoi(pause_p);
-        gpio_argb->fill_mode = atoi(fill_p);
+        log_message("Colour[%d] %s -> 0x%06X",
+                    i,
+                    colour_buffer,
+                    gpio_argb->program[i]);
 
-    }
-    else {
-        log_message("Failed to parse program");
+        i++;
     }
 }
 
@@ -374,57 +263,44 @@ void loop_task_transition_argb(void)
     for (gpio_argb = HTM_LIST_NEXT(gv_device.argb_list);
          gpio_argb != gv_device.argb_list;
          gpio_argb = HTM_LIST_NEXT(gpio_argb)) {
-        if (gpio_argb->program_start != NULL) {
-            set_argb_state(gpio_argb);
-        }
+        set_argb_state(gpio_argb);
     }
 }
 
 
-// Function: setup_argbs
-void setup_argbs(void)
+// Function: setup_argb
+void setup_argb(struct gpio_argb *gpio_argb)
 {
-    struct gpio_argb *gpio_argb;
-    uint8_t argb_count = 0;
+    log_message("setup_argb(name:%s LEDs:%d Pin:%d Neopixel Flags:0x%08X)",
+                gpio_argb->name,
+                gpio_argb->num_leds, 
+                gpio_argb->pin, 
+                gpio_argb->neopixel_flags);
 
-    log_message("setup_argbs()");
-
-    for (gpio_argb = HTM_LIST_NEXT(gv_device.argb_list);
-         gpio_argb != gv_device.argb_list;
-         gpio_argb = HTM_LIST_NEXT(gpio_argb)) {
-            log_message("Setting up A-RGB:%s LEDs:%d Pin:%d Neopixel Flags:0x%08X",
-                        gpio_argb->name,
-                        gpio_argb->num_leds, 
-                        gpio_argb->pin, 
-                        gpio_argb->neopixel_flags);
-
-            if (gpio_argb->pin == NO_PIN) {
-                log_message("A-RGB pin disabled.. skipping");
-            }
-            else {
-                argb_count++;
-
-                gpio_argb->neopixel = 
-                    new Adafruit_NeoPixel(gpio_argb->num_leds, 
-                                          gpio_argb->pin, 
-                                          gpio_argb->neopixel_flags);
-
-                // Initialize all pixels to 'off'
-                gpio_argb->neopixel->begin();
-                gpio_argb->neopixel->show(); 
-
-                set_argb_program(gpio_argb,
-                                 gpio_argb->program);
-
-                if (gpio_argb->manual_pin != NO_PIN) {
-                    log_message("    Manual pin:%d",
-                                gpio_argb->manual_pin);
-                    pinMode(gpio_argb->manual_pin, INPUT_PULLUP);
-                }
-            }
+    if (gpio_argb->pin == NO_PIN) {
+        log_message("A-RGB pin disabled.. skipping");
     }
+    else {
+        gpio_argb->neopixel = 
+            new Adafruit_NeoPixel(gpio_argb->num_leds, 
+                                  gpio_argb->pin, 
+                                  gpio_argb->neopixel_flags);
 
-    if (argb_count > 0) {
+        // Initialize all pixels to 'off'
+        gpio_argb->neopixel->begin();
+        gpio_argb->neopixel->show(); 
+
+        if (gpio_argb->manual_pin != NO_PIN) {
+            log_message("    Manual pin:%d",
+                        gpio_argb->manual_pin);
+            pinMode(gpio_argb->manual_pin, INPUT_PULLUP);
+        }
+    }
+}
+
+void argb_init(void)
+{
+    if (!HTM_LIST_EMPTY(gv_device.argb_list)) {
         TaskMan.add_task("Neopixel LED Transitions",
                          RUN_STATE_WIFI_STA_UP,
                          1,

@@ -336,53 +336,45 @@ void set_switch_manual_auto_off(struct gpio_switch *gpio_switch,
     gpio_switch->manual_auto_off = auto_off;
 }
 
-// Function: setup_switches
-// Scans the list of configured switches
-// and performs the required pin setups
-void setup_switches(void)
+// Function: setup_switch
+void setup_switch(struct gpio_switch *gpio_switch)
 {
-    struct gpio_switch *gpio_switch;
+    log_message("setup_switch(name:%s)", gpio_switch->name);
 
-    log_message("setup_switches()");
-
-    for (gpio_switch = HTM_LIST_NEXT(gv_device.switch_list);
-         gpio_switch != gv_device.switch_list;
-         gpio_switch = HTM_LIST_NEXT(gpio_switch)) {
-
-        log_message("Setting up switch:%s, state:%d",
-                    gpio_switch->name,
-                    gpio_switch->current_state);
-
-        if (gpio_switch->relay_pin != NO_PIN) {
-            log_message("    switch pin:%d",
-                        gpio_switch->relay_pin);
-            pinMode(gpio_switch->relay_pin, OUTPUT);
-        }
-
-        if (gpio_switch->led_pin != NO_PIN) {
-            log_message("    LED pin:%d",
-                        gpio_switch->led_pin);
-            pinMode(gpio_switch->led_pin, OUTPUT);
-        }
-
-        if (gpio_switch->manual_pin != NO_PIN) {
-            log_message("    Manual pin:%d",
-                        gpio_switch->manual_pin);
-            pinMode(gpio_switch->manual_pin, INPUT_PULLUP);
-        }
-
-        if (gpio_switch->motion_pin != NO_PIN) {
-            log_message("    Motion pin:%d",
-                        gpio_switch->motion_pin);
-            pinMode(gpio_switch->motion_pin, INPUT_PULLUP);
-        }
-
-        // set initial state
-        set_switch_state(gpio_switch,
-                         gpio_switch->current_state,
-                         SW_ST_CTXT_INIT);
-
+    if (gpio_switch->relay_pin != NO_PIN) {
+        log_message("    switch pin:%d",
+                    gpio_switch->relay_pin);
+        pinMode(gpio_switch->relay_pin, OUTPUT);
     }
+
+    if (gpio_switch->led_pin != NO_PIN) {
+        log_message("    LED pin:%d",
+                    gpio_switch->led_pin);
+        pinMode(gpio_switch->led_pin, OUTPUT);
+    }
+
+    if (gpio_switch->manual_pin != NO_PIN) {
+        log_message("    Manual pin:%d",
+                    gpio_switch->manual_pin);
+        pinMode(gpio_switch->manual_pin, INPUT_PULLUP);
+    }
+
+    if (gpio_switch->motion_pin != NO_PIN) {
+        log_message("    Motion pin:%d",
+                    gpio_switch->motion_pin);
+        pinMode(gpio_switch->motion_pin, INPUT_PULLUP);
+    }
+
+    // set initial state
+    set_switch_state(gpio_switch,
+                     gpio_switch->current_state,
+                     SW_ST_CTXT_INIT);
+}
+
+
+void switch_init(void)
+{
+    log_message("switch_init())");
 
     // Task managers for switch checks
 

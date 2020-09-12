@@ -14,59 +14,37 @@ struct gpio_sensor* gpio_sensor_alloc(void)
 
 
 // Function: setup_sensors
-// Scans the configured sensors and activates the
-// defined sensor pins
-void setup_sensors(void)
+void setup_sensor(struct gpio_sensor *gpio_sensor)
 {
-    static uint8_t first_run = 1;
-    struct gpio_sensor *gpio_sensor;
     DHT *dhtp;
 
-    log_message("setup_sensors()");
+    log_message("setup_sensor(name:%s)", gpio_sensor->name);
 
-    // Protect against multiple calls
-    // can only really set these sensors up once
-    // because of the pointer ref field
-    // could try to get smart and call delete on set pointers
-    // but its probably safer to just do this once.
-    if (!first_run) {
-        log_message("already setup (returning)");
-        return;
-    }
-    first_run = 0;
+    switch (gpio_sensor->sensor_type) {
+      case GP_SENS_TYPE_NONE:
+        // do nothing
+        log_message("    Unknown Type (dummy)");
+        break;
 
-    for (gpio_sensor = HTM_LIST_NEXT(gv_device.sensor_list);
-         gpio_sensor != gv_device.sensor_list;
-         gpio_sensor = HTM_LIST_NEXT(gpio_sensor)) {
-        log_message("Setting up sensor %s",
-                    gpio_sensor->name);
+      case GP_SENS_TYPE_DHT:
+        log_message("    DHT Type %d on pin %d",
+                    gpio_sensor->sensor_variant,
+                    gpio_sensor->sensor_pin);
 
-        switch (gpio_sensor->sensor_type) {
-          case GP_SENS_TYPE_NONE:
-            // do nothing
-            log_message("    Unknown Type (dummy)");
-            break;
-
-          case GP_SENS_TYPE_DHT:
-            log_message("    DHT Type %d on pin %d",
-                        gpio_sensor->sensor_variant,
-                        gpio_sensor->sensor_pin);
-
-            if (gpio_sensor->sensor_pin != NO_PIN) {
-                // Setup DHT temp/humidity sensor and record
-                // class pointer in void* ref
-                dhtp = new DHT(gpio_sensor->sensor_pin,
-                               gpio_sensor->sensor_variant);
-                gpio_sensor->ref = dhtp;
-            }
-            else {
-                log_message("    Sensor not assigned to pin (fake)");
-                // non-pin assigned DHT
-                // for faking/simulation
-                gpio_sensor->ref = NULL;
-            }
-            break;
+        if (gpio_sensor->sensor_pin != NO_PIN) {
+            // Setup DHT temp/humidity sensor and record
+            // class pointer in void* ref
+            dhtp = new DHT(gpio_sensor->sensor_pin,
+                           gpio_sensor->sensor_variant);
+            gpio_sensor->ref = dhtp;
         }
+        else {
+            log_message("    Sensor not assigned to pin (fake)");
+            // non-pin assigned DHT
+            // for faking/simulation
+            gpio_sensor->ref = NULL;
+        }
+        break;
     }
 }
 

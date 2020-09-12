@@ -1,23 +1,6 @@
 #include "HandyTaskMan.h"
 #include "jbhasd_types.h"
 
-// Function start_serial
-// Starts serial logging after
-// checking GPIO pin usage
-// across switches and sensors
-// Pins 3 and 1 are the danger scenarios 
-// here.. if in use, serial logging can't be 
-// performed
-void start_serial(void)
-{
-    if (!pin_in_use(3) &&  // Rx
-        !pin_in_use(1)) {  // Tx
-        gv_logging = LOGGING_SERIAL;
-        Serial.begin(115200);
-        delay(1000);
-    }
-}
-
 // Global logging mode
 enum gv_logging_enum gv_logging = LOGGING_NONE;
 

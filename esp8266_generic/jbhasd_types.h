@@ -105,33 +105,27 @@ struct led_program_step {
     uint32_t colour;
     uint16_t fade_delay; // msec gap between RGB fade
     uint16_t pause; // msec gap at end of RGB fade
+    uint8_t random; // randomise indicator
 };
 
 struct gpio_rgb {
+    uint8_t enabled;   // enabled
     struct gpio_rgb *prev, *next;
     char name[MAX_FIELD_LEN];
     uint8_t red_pin;   // Red pin
     uint8_t green_pin; // Green pin
     uint8_t blue_pin;  // Blue pin
     uint8_t manual_pin; // Random Program
-    char program[2048]; // default program
-    char *program_ptr;
+    struct led_program_step *program; // default program
+    uint16_t program_len;
+    int index;
     uint32_t init_interval;
-
-    // Hue + RGB values
-    // for current colour
-    uint32_t current_colour;
 
     // arrays of desired and current states
     // for pins
     // these are PWM values not RGB
     uint16_t desired_states[3];
     uint16_t current_states[3];
-
-    // current step
-    // Tracks logical step in program
-    // from 0 upward
-    uint8_t step;
 
     // Determined if we discover we encounter an end
     // of program while extracting first step
@@ -141,11 +135,6 @@ struct gpio_rgb {
 
     // msec timestamp for tracking fade 
     unsigned long timestamp;
-
-    // delay and pauses
-    // in msecs
-    uint16_t fade_delay;
-    uint16_t pause;
 };
 
 // Addressable RGB (Neopixel)
@@ -156,15 +145,18 @@ struct gpio_argb {
     uint8_t manual_pin; // Random Program
     uint16_t num_leds;
     uint32_t neopixel_flags;
-    char program[2048]; // default program
-    char *program_start;
 
     uint32_t timestamp;
     uint16_t index;
 
-    int8_t direction;
-    uint16_t pause;
-    uint8_t fill_mode;
+    // program details
+    char mode[MAX_FIELD_LEN];
+    uint8_t wipe;
+    uint8_t fill;
+    int16_t offset;
+    uint16_t delay;
+    uint32_t *program;
+    uint16_t program_len;
 
     Adafruit_NeoPixel *neopixel;
 };
@@ -228,7 +220,6 @@ extern enum gv_logging_enum gv_logging;
 extern uint8_t gv_reboot_requested;
 
 // Logging
-void start_serial(void);
 char *millis_str(uint32_t msecs);
 void vlog_message(char *format, va_list args);
 void log_message(char *format, ... );
@@ -238,7 +229,7 @@ void start_telnet(void);
 
 // Sensor
 struct gpio_sensor* gpio_sensor_alloc(void);
-void setup_sensors(void);
+void setup_sensor(gpio_sensor *gpio_sensor);
 void read_sensors(void);
 
 
@@ -257,7 +248,8 @@ void set_switch_manual_interval(struct gpio_switch *gpio_switch,
                                 uint32_t interval);
 void set_switch_manual_auto_off(struct gpio_switch *gpio_switch,
                                 uint8_t auto_off);
-void setup_switches(void);
+void setup_switch(struct gpio_switch* gpio_switch);
+void switch_init(void);
 void loop_task_check_switches(void);
 void loop_task_check_boot_switch(void);
 struct gpio_switch* find_switch(const char *name);
@@ -267,10 +259,11 @@ struct gpio_switch* find_switch(const char *name);
 struct gpio_rgb* gpio_rgb_alloc(void);
 void loop_task_transition_rgb(void);
 void set_rgb_program(struct gpio_rgb *gpio_rgb,
-                     const char *program);
+                     JsonObject program);
 void set_rgb_random_program(struct gpio_rgb *gpio_rgb);
 void set_rgb_state(struct gpio_rgb *gpio_rgb);
-void setup_rgbs(void);
+void setup_rgb(struct gpio_rgb* gpio_rgb);
+void rgb_init(void);
 struct gpio_rgb* find_rgb(const char *name);
 
 
@@ -278,12 +271,17 @@ struct gpio_rgb* find_rgb(const char *name);
 struct gpio_argb* gpio_argb_alloc(void);
 void set_argb_state(struct gpio_argb *gpio_argb);
 void set_argb_program(struct gpio_argb *gpio_argb,
-                     const char *program);
+                     JsonObject program);
 void loop_task_transition_argb(void);
-void setup_argbs(void);
+void setup_argb(struct gpio_argb* gpio_argb);
+void argb_init(void);
 struct gpio_argb* find_argb(const char *name);
 
 // Config
+int json_get_ival(JsonVariant variant,
+                  int def_ival);
+const char *json_get_sval(JsonVariant variant,
+                          const char *def_sval);
 void save_config(void);
 void update_config(char *field, 
                    const char *sval,

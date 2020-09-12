@@ -261,7 +261,7 @@ void load_config(void)
     // each should have a name and type as standard
     for (JsonObject control : controls) {
 
-        // contriol name, type and enabled fields
+        // control name, type and enabled fields
         const char *control_name = json_get_sval(control["name"], "");
         const char *control_type = json_get_sval(control["type"], "");
         uint8_t control_enabled = json_get_ival(control["enabled"], 0);
@@ -317,6 +317,9 @@ void load_config(void)
                 // default no pin and zero interval
                 gpio_switch->motion_pin = json_get_ival(control["motion_pin"], NO_PIN);
                 gpio_switch->motion_interval = json_get_ival(control["motion_interval"], 0);
+
+                // Activate
+                setup_switch(gpio_switch);
             }
 
             if (!strcmp(control_type, "temp/humidity")) {
@@ -347,6 +350,9 @@ void load_config(void)
 
                 // temp offset, default 0
                 gpio_sensor->temp_offset = json_get_ival(control["temp_offset"], 0);
+
+                // Activate
+                setup_sensor(gpio_sensor);
             }
 
             if (!strcmp(control_type, "rgb")) {
@@ -362,9 +368,10 @@ void load_config(void)
                 gpio_rgb->blue_pin = json_get_ival(control["blue_pin"], NO_PIN);
                 gpio_rgb->manual_pin = json_get_ival(control["manual_pin"], NO_PIN);
 
-                // Default init program and init interval
-                strcpy(gpio_rgb->program, json_get_sval(control["program"], ""));
                 gpio_rgb->init_interval = json_get_ival(control["init_interval"], 0);
+                JsonObject program = control["program"];
+                setup_rgb(gpio_rgb);
+                set_rgb_program(gpio_rgb, program);
             }
 
             if (!strcmp(control_type, "argb")) {
@@ -379,7 +386,9 @@ void load_config(void)
                 gpio_argb->manual_pin = json_get_ival(control["manual_pin"], 255);
                 gpio_argb->num_leds = json_get_ival(control["num_leds"], 0);
                 gpio_argb->neopixel_flags = json_get_ival(control["neopixel_flags"], 0);
-                strcpy(gpio_argb->program, json_get_sval(control["program"], ""));
+                JsonObject program = control["program"];
+                setup_argb(gpio_argb);
+                set_argb_program(gpio_argb, program);
             }
         }
     }

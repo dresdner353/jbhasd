@@ -14,6 +14,7 @@ static char large_buffer[4096];
 
 // status health check
 static uint32_t last_status = 0;
+static uint32_t last_wifi_up = 0;
 static uint32_t last_wifi_restart = 0;
 static uint16_t status_wifi_restart_count = 0;
 
@@ -31,6 +32,7 @@ const char *get_json_status(void)
     struct gpio_rgb *gpio_rgb;
     struct gpio_argb *gpio_argb;
     uint32_t now;
+    uint32_t i;
 
     log_message("get_json_status()");
 
@@ -129,13 +131,31 @@ const char *get_json_status(void)
         JsonObject obj = controls_arr.createNestedObject();
         obj["name"] = gpio_rgb->name;
         obj["type"] = "rgb";
-        obj["program"] = gpio_rgb->program;
+        JsonObject program = obj.createNestedObject("program");
+        JsonArray steps = program.createNestedArray("steps");
+        for (i = 0; 
+             i < gpio_rgb->program_len;
+             i++) {
+            JsonObject step = steps.createNestedObject();
+            if (gpio_rgb->program[i].random) {
+                step["colour"] = "random";
+            }
+            else {
+                ets_sprintf(small_buffer,
+                            "0x%08X",
+                            gpio_rgb->program[i].colour);
+                step["colour"] = small_buffer;
+            }
+            step["pause"] = gpio_rgb->program[i].pause;
+            step["fade_delay"] = gpio_rgb->program[i].fade_delay;
+        }
         obj["init_interval"] = gpio_rgb->init_interval;
         ets_sprintf(small_buffer,
                     "0x%08X",
-                    gpio_rgb->current_colour);
+                    gpio_rgb->program[gpio_rgb->index].colour);
         obj["current_colour"] = small_buffer;
-        obj["step"] = gpio_rgb->step;
+        obj["step"] = gpio_rgb->index;
+        obj["total_steps"] = gpio_rgb->program_len;
     }
     
     // argb
@@ -146,7 +166,26 @@ const char *get_json_status(void)
         JsonObject obj = controls_arr.createNestedObject();
         obj["name"] = gpio_argb->name;
         obj["type"] = "argb";
-        obj["program"] = gpio_argb->program;
+        JsonObject program = obj.createNestedObject("program");
+        program["mode"] = gpio_argb->mode;
+        program["wipe"] = gpio_argb->wipe;
+        program["offset"] = gpio_argb->offset;
+        program["delay"] = gpio_argb->delay;
+        program["fill"] = gpio_argb->fill;
+        JsonArray colours = program.createNestedArray("colours");
+        for (i = 0; 
+             i < gpio_argb->program_len;
+             i++) {
+            if (gpio_argb->program[i] == 0xFFFFFFFF) {
+                colours.add("random");
+            }
+            else {
+                ets_sprintf(small_buffer,
+                            "0x%06X",
+                            gpio_argb->program[i]);
+                colours.add(small_buffer);
+            }
+        }
     }
 
     // Format string in prety format
@@ -161,7 +200,7 @@ const char *get_json_status(void)
 
 
 // Function: ap_handle_root
-// Provides basic web page allowing user to select WiFI
+// Provides basic web page allowing user to select WiFi
 // and input pasword. The current JSON config is also shown
 // The same code will process a rest request and setting of SSID
 // as part of the POST handling
@@ -348,26 +387,26 @@ void wifi_init(void)
                      60000,
                      start_mdns);
 
-    // AP WiFI LED every 100 ms (fast)
+    // AP WiFi LED every 100 ms (fast)
     TaskMan.add_task("AP Status LED",
                      RUN_STATE_WIFI_AP,
                      100,
                      loop_task_status_led);
 
-    // STA WiFI LED every 1s (slow)
+    // STA WiFi LED every 1s (slow)
     TaskMan.add_task("STA Status LED",
                      RUN_STATE_WIFI_STA_DOWN,
                      1000,
                      loop_task_status_led);
 
-    // WiFI Check (While Down) Every 2s
-    TaskMan.add_task("WiFI Status Up Check",
+    // WiFi Check (While Down) Every 2s
+    TaskMan.add_task("WiFi Status Up Check",
                      RUN_STATE_WIFI_STA_DOWN,
                      2000,
                      loop_task_check_wifi_up);
 
-    // WiFI Check (While Up) every 5s
-    TaskMan.add_task("WiFI Status Down Check",
+    // WiFi Check (While Up) every 5s
+    TaskMan.add_task("WiFi Status Down Check",
                      RUN_STATE_WIFI_STA_UP,
                      5000,
                      loop_task_check_wifi_down);
@@ -554,12 +593,13 @@ void sta_handle_control(void)
                                                        control["manual_auto_off"]);
                         }
 
-                        if (!control["program"].isNull()) {
-                            // have a program field, treat as RGB or aRGB
+                        JsonObject program = control["program"];
+                        if (!program.isNull()) {
+                            // have a program object, treat as RGB or aRGB
                             set_rgb_program(find_rgb(control_name), 
-                                            control["program"]);
+                                            program);
                             set_argb_program(find_argb(control_name), 
-                                             control["program"]);
+                                            program);
                         }
                     }
                 }
@@ -654,7 +694,7 @@ void sta_handle_configure(void)
 
 
 // Function: start_wifi_sta_mode
-// Configures the device as a WiFI client
+// Configures the device as a WiFi client
 void start_wifi_sta_mode(void)
 {
     wifi_init();
@@ -700,7 +740,7 @@ void start_mdns(void)
 
 
 // Function: start_sta_mode_services
-// Run after we confirm WiFI up
+// Run after we confirm WiFi up
 // records IP and starts MDNS & DNS-SD
 // This provides a safe reassertion of these services
 // in case the IP address changed
@@ -763,7 +803,7 @@ void loop_task_mdns(void)
 }
 
 // Function loop_task_wifi_down
-// Checks is WiFI is down and acts accordingly
+// Checks is WiFi is down and acts accordingly
 // by restarting STA mode
 // Also changes state to indicate Wifi down
 // We are also tracking the count of times we detect this down
@@ -772,10 +812,15 @@ void loop_task_check_wifi_down(void)
 {
     log_message("loop_task_check_wifi_down()");
     if (WiFi.status() != WL_CONNECTED) {
-        log_message("WiFI is down");
+        log_message("WiFi is down");
         signal_wifi_restart_count++;
         TaskMan.set_run_state(RUN_STATE_WIFI_STA_DOWN);
         start_wifi_sta_mode();
+    }
+    else {
+        // Continually stamp the last known 
+        // uptime for WiFi
+        last_wifi_up = millis();
     }
 }
 
@@ -787,62 +832,46 @@ void loop_task_check_wifi_down(void)
 // (1 hour), it will reboot
 void loop_task_check_wifi_up(void)
 {
-    uint8_t i;
-    uint8_t status;
-    static uint16_t check_count = 0;
+    static uint32_t now = millis();
 
-    // This function gets called every 10 secs
-    // So 360 calls is about 1 hour
-    uint16_t max_checks_before_reboot = 360; 
-
-    // Restart WiFI every 60 seconds if we continue
-    // to remain disconnected
-    // that equates to 6 calls
-    uint16_t max_checks_before_wifi_restart = 6; 
+    // wifi restart and reboot intervals
+    // Used to force stack restarts or a 
+    // full reboot if WiFi connection is down 
+    // for threshold periods
+    uint32_t downtime_before_wifi_restart = 5 * 60 * 1000; // 5 mins
+    uint32_t downtime_before_reboot = 24 * 60 * 60 * 1000; // 24 hours
 
     log_message("loop_task_check_wifi_up()");
 
-    check_count++;
+    log_message("WiFi Status: %d", 
+                WiFi.status());
 
-    status = WiFi.status();
-    log_message("WiFI Status: %d", status);
-
-    if (status == WL_CONNECTED) {
-        log_message("WiFI is up");
+    if (WiFi.status() == WL_CONNECTED) {
+        log_message("WiFi is up");
         TaskMan.set_run_state(RUN_STATE_WIFI_STA_UP);
-
-        // quick LED burst
-        for (i = 1; i <= 50; i++) {
-            toggle_status_led(50);
-        }
+        last_wifi_up = now;
 
         // status LED back to correct state
         restore_status_led_state();
-
-        // reset connect count so that
-        // we give a reconnect scenario the same max attempts
-        // before reboot
-        check_count = 0;
 
         // start additional services for sta
         // mode
         start_sta_mode_services();
     }
     else {
-        log_message("WiFI is down");
+        log_message("WiFi is down");
 
-        // check for max checks and restart
-        if (check_count > max_checks_before_reboot) {
-            log_message("Exceeded max checks of %d.. rebooting",
-                        max_checks_before_reboot);
+        // reboot tolerance
+        if (now - last_wifi_up > downtime_before_reboot) {
+            log_message("Exceeded max WiFi downtime of %d msecs.. rebooting",
+                        downtime_before_reboot);
             gv_reboot_requested = 1;
         }
         else {
             // if not rebooting, then go for simple Wifi Restarts
-            // every N calls
-            if (check_count % max_checks_before_wifi_restart == 0) {
-                log_message("Exceeded %d check interval.. restarting WiFI",
-                            max_checks_before_wifi_restart);
+            if (now - last_wifi_up > downtime_before_wifi_restart) {
+                log_message("Exceeded max WiFi downtime of %d msecs.. restarting WiFi",
+                            downtime_before_wifi_restart);
                 start_wifi_sta_mode();
             }
         }

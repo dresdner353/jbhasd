@@ -8,6 +8,12 @@ struct gpio_rgb* gpio_rgb_alloc(void)
     struct gpio_rgb *gpio_rgb;
 
     gpio_rgb = (struct gpio_rgb*) malloc(sizeof(struct gpio_rgb));
+    memset(gpio_rgb, 0, sizeof(struct gpio_rgb));
+
+    gpio_rgb->program = NULL;
+    gpio_rgb->program_len = 0;
+    gpio_rgb->enabled = 0;
+    gpio_rgb->single_step = 0;
 
     return gpio_rgb;
 }
@@ -49,7 +55,7 @@ void parse_rgb_colour(uint32_t colour,
     green = green * MAX_PWM_VALUE / 255;
     blue = blue * MAX_PWM_VALUE / 255;
 
-    log_message("Applied PWM.. Red:%d Green:%d Blue:%d",
+    log_message("Applied PWM.. Red:%u Green:%u Blue:%u",
                 red,
                 green,
                 blue);
@@ -66,7 +72,7 @@ void parse_rgb_colour(uint32_t colour,
         green = float(green) * brightness_factor;
         blue = float(blue) * brightness_factor;
 
-        log_message("Applied Brightness.. Red:%d Green:%d Blue:%d",
+        log_message("Applied Brightness.. Red:%u Green:%u Blue:%u",
                     red,
                     green,
                     blue);
@@ -115,7 +121,7 @@ void fade_rgb(struct gpio_rgb *gpio_rgb)
 {
     uint32_t now;
 
-    if (gpio_rgb->fade_delay <= 0) {
+    if (gpio_rgb->program[gpio_rgb->index].fade_delay <= 0) {
         // instant switch to new setting
         log_message("Instant change to.. Red:%d Green:%d Blue:%d",
                     gpio_rgb->desired_states[0],
@@ -146,8 +152,8 @@ void fade_rgb(struct gpio_rgb *gpio_rgb)
         // require elapsed msecs to match configured 
         // fade delay
         now = millis();
-        if (gpio_rgb->fade_delay > 0 &&
-            now - gpio_rgb->timestamp < gpio_rgb->fade_delay) {
+        if (gpio_rgb->program[gpio_rgb->index].fade_delay > 0 &&
+            now - gpio_rgb->timestamp < gpio_rgb->program[gpio_rgb->index].fade_delay) {
             return;
         }
 
@@ -163,9 +169,9 @@ void fade_rgb(struct gpio_rgb *gpio_rgb)
                   gpio_rgb->desired_states[1],
                   gpio_rgb->desired_states[2]);
 
-        log_message("RGB Step.. Timestamp:%lu Delay:%d R:%d G:%d B:%d -> R:%d G:%d B:%d",
+        log_message("RGB Step.. Timestamp:%lu Delay:%d R:%u G:%u B:%u -> R:%u G:%u B:%u",
                     gpio_rgb->timestamp,
-                    gpio_rgb->fade_delay,
+                    gpio_rgb->program[gpio_rgb->index].fade_delay,
                     gpio_rgb->current_states[0],
                     gpio_rgb->current_states[1],
                     gpio_rgb->current_states[2],
@@ -206,7 +212,12 @@ void loop_task_transition_rgb(void)
     for (gpio_rgb = HTM_LIST_NEXT(gv_device.rgb_list);
          gpio_rgb != gv_device.rgb_list;
          gpio_rgb = HTM_LIST_NEXT(gpio_rgb)) {
-        if (strlen(gpio_rgb->program) > 0) {
+        if (gpio_rgb->enabled && 
+            gpio_rgb->index  == -1) {
+            // initial kich
+            set_rgb_state(gpio_rgb);
+        }
+        else if (gpio_rgb->index >= 0) {
             // Fade color if the current and desired states 
             // are not yet aligned
             if ((gpio_rgb->desired_states[0] !=
@@ -234,23 +245,31 @@ void loop_task_transition_rgb(void)
 // Steps are then comma-separated.
 // The fade and pause args can be omitted
 void set_rgb_program(struct gpio_rgb *gpio_rgb,
-                     const char *program)
+                     JsonObject program)
 {
-    char step_buffer[50];
+    char colour_buffer[50];
+    int i;
 
     if (!gpio_rgb) {
         log_message("No led specified");
         return;
     }
+    
+    if (program.isNull()) {
+        log_message("No program present");
+        return;
+    }
 
-    log_message("set_rgb_program(name=%s, program=%s)",
-                gpio_rgb->name,
-                program);
+    log_message("set_rgb_program(name=%s)",
+                gpio_rgb->name);
 
     // init interval protection
     // if set, the millis() miust match or exceed the interval 
     // before we allow a program to be set
-    if (gpio_rgb->init_interval > 0 &&
+    // but we hinge on the enabled property which will not be set initially 
+    // until the first program set... allowing that initial call to go through
+    if (gpio_rgb->enabled && 
+        gpio_rgb->init_interval > 0 &&
         millis() < gpio_rgb->init_interval * 1000) {
         log_message("ignoring network program event.. init interval in play (%d secs)",
                     gpio_rgb->init_interval);
@@ -259,14 +278,69 @@ void set_rgb_program(struct gpio_rgb *gpio_rgb,
 
     gpio_rgb->timestamp = 0;
 
-    // copy in program string
-    // if its not a pointer to itself
-    if (gpio_rgb->program != program) {
-        strcpy(gpio_rgb->program, program);
-    }
-    gpio_rgb->program_ptr = NULL;
-    gpio_rgb->step = -1;
+    // wipe any existing program
+    gpio_rgb->program_len = 0;
     gpio_rgb->single_step = 0;
+    gpio_rgb->index = -1;
+    if (gpio_rgb->program) {
+        free(gpio_rgb->program);
+        gpio_rgb->program = NULL;
+    }
+
+    JsonArray steps = program["steps"];
+    if (steps.isNull()) {
+        log_message("No steps array present");
+        return;
+    }
+
+    gpio_rgb->program_len = steps.size();
+    log_message("Detected %d steps in program", 
+                gpio_rgb->program_len);
+    gpio_rgb->program = new led_program_step[gpio_rgb->program_len];
+
+    i = 0;
+    for (JsonObject step : steps) {
+        if (step.isNull()) {
+            log_message("step parse failed");
+            continue;
+        }
+
+        // parse colour, pause and fade_delay
+        gpio_rgb->program[i].random = 0;
+        strcpy(colour_buffer, 
+               json_get_sval(step["colour"], "random"));
+        gpio_rgb->program[i].pause = json_get_ival(step["pause"], 0);
+        gpio_rgb->program[i].fade_delay = json_get_ival(step["fade_delay"], 0);
+
+        if (!strcmp(colour_buffer, "random")) {
+            gpio_rgb->program[i].colour = 0;
+            gpio_rgb->program[i].random = 1;
+        }
+        else if (strlen(colour_buffer) > 2 &&
+                 colour_buffer[0] == '0' &&
+                 (colour_buffer[1] == 'x' || colour_buffer[1] == 'X')) {
+            gpio_rgb->program[i].colour = 
+                strtoul(&colour_buffer[2], NULL, 16);
+        }
+        else {
+            gpio_rgb->program[i].colour = 
+                strtoul(colour_buffer, NULL, 10);
+        }
+
+        log_message("Colour[%d] %s -> 0x%08X",
+                    i,
+                    colour_buffer,
+                    gpio_rgb->program[i].colour);
+
+        i++;
+    }
+
+    // single step check
+    if (gpio_rgb->program_len == 1 &&
+        !gpio_rgb->program[0].random) {
+        log_message("Single Step program detected");
+        gpio_rgb->single_step = 1;
+    }
 
     // nudge into motion
     set_rgb_state(gpio_rgb);
@@ -341,7 +415,8 @@ void set_rgb_random_program(struct gpio_rgb *gpio_rgb)
         // Off
     }
 
-    set_rgb_program(gpio_rgb, program);
+    //set_rgb_program(gpio_rgb, program);
+    // FIXME
 
     // rotate between 10 variants
     variant = (variant + 1) % 10;
@@ -362,8 +437,9 @@ void set_rgb_state(struct gpio_rgb *gpio_rgb)
     log_message("set_rgb_state(name=%s)",
                 gpio_rgb->name);
 
-    if (strlen(gpio_rgb->program) == 0) {
-        log_message("program is empty.. nothing to do");
+    if (!gpio_rgb->enabled || 
+        gpio_rgb->program_len == 0) {
+        log_message("program is empty/disabled.. nothing to do");
         return;
     }
 
@@ -375,181 +451,90 @@ void set_rgb_state(struct gpio_rgb *gpio_rgb)
     // timestamp msec motion before allowing us move to the next
     // step
     now = millis();
-    if (gpio_rgb->step >= 0 &&
-        gpio_rgb->pause > 0 &&
-        now - gpio_rgb->timestamp < gpio_rgb->pause) {
+    if (gpio_rgb->index >= 0 &&
+        gpio_rgb->program[gpio_rgb->index].pause > 0 &&
+        now - gpio_rgb->timestamp < gpio_rgb->program[gpio_rgb->index].pause) {
         return;
-    }
-
-    // Program pointer and step init/reset
-    // This is performed after the above pause check so 
-    // that we gonour the pause behaviour of the last step
-    // before program reset
-    if (gpio_rgb->program_ptr == NULL) {
-        gpio_rgb->program_ptr = gpio_rgb->program;
-        gpio_rgb->step = -1;
     }
 
     // timestamp activity
     gpio_rgb->timestamp = now;
 
-    // Extract next full step in program
-    // colour;fade_delay;pause,colour;fade_delay;pause ... 
-    // comma is separator between steps
-    p = strchr(gpio_rgb->program_ptr, ',');
-    if (p) {
-        // extract characters from this step
-        strncpy(step_buffer, 
-                gpio_rgb->program_ptr, 
-                p - gpio_rgb->program_ptr);
-        step_buffer[p - gpio_rgb->program_ptr] = '\0';
+    // next step in program
+    // includes initial transition from -1
+    gpio_rgb->index = (gpio_rgb->index + 1) % gpio_rgb->program_len;
+    log_message("index set to %d", gpio_rgb->index);
 
-        // skip to next field
-        gpio_rgb->program_ptr = p + 1;
-    }
-    else {
-        // no more steps
-        // copy what is there 
-        // return pointer to start of program
-        strcpy(step_buffer, gpio_rgb->program_ptr);
-
-        // Detect single-step programs
-        // we found no step separator in the above check
-        // So if the program pointer is pointing
-        // to the start, then the entire program is  
-        // then a single step.
-        // But if that single step uses the random keyword
-        // we dont treat it as a single step 
-        // because it changes each time its run
-        if (gpio_rgb->program_ptr == gpio_rgb->program &&
-            strncmp(step_buffer, "random", 5) != 0) {
-            gpio_rgb->single_step = 1;
-        }
-
-        gpio_rgb->program_ptr = NULL; // will trigger reset
-    }
-
-    gpio_rgb->step++;
-
-    // search for ; terminator between colour 
-    // and fade delay
-    p = strchr(step_buffer, ';');
-    if (p) {
-        // NULL terminator and move p on 1 char
-        // gives us two strings
-        *p = '\0';
-        p++;
-
-        gpio_rgb->fade_delay = atoi(p);
-
-        // Next separator is for pause
-        // same NULL trick
-        q = strchr(p, ';');
-        if (q) {
-            *q = '\0';
-            q++;
-            gpio_rgb->pause = atoi(q);
-        }
-        else {
-            // no separator, value taken as 0
-            gpio_rgb->pause = 0;
-        }
-    }
-    else {
-        // no separator, value taken as 0
-        gpio_rgb->fade_delay = 0;
-    }
-
-    // Extract colour value
-    // sensitive to hex and decimal
-    // and also keyword random
-    if (!strncmp(step_buffer, "random", 5)) {
-        gpio_rgb->current_colour = random(0, 0xFFFFFF);
-    }
-    else if (strlen(step_buffer) > 2 &&
-        step_buffer[0] == '0' &&
-        (step_buffer[1] == 'x' || step_buffer[1] == 'X')) {
-        // hex decode
-        gpio_rgb->current_colour = 
-            strtoul(&step_buffer[2], NULL, 16);
-    }
-    else {
-        // decimal unsigned int
-        gpio_rgb->current_colour = 
-            strtoul(step_buffer, NULL, 10);
-    }
-
-    log_message("Decoded step[%d] colour:0x%08X fade delay:%d pause:%d",
-                gpio_rgb->step,
-                gpio_rgb->current_colour,
-                gpio_rgb->fade_delay,
-                gpio_rgb->pause);
+    log_message("Step[%d] colour:0x%08X fade delay:%d pause:%d",
+                gpio_rgb->index,
+                gpio_rgb->program[gpio_rgb->index].colour,
+                gpio_rgb->program[gpio_rgb->index].fade_delay,
+                gpio_rgb->program[gpio_rgb->index].pause);
 
 
     // parse the desired state into PWM
-    // values
-    parse_rgb_colour(gpio_rgb->current_colour,
-                     end_red,
-                     end_green,
-                     end_blue);
+    // values or generate random colour
+    if (gpio_rgb->program[gpio_rgb->index].random) {
+        // random
+        gpio_rgb->desired_states[0] = random(0, MAX_PWM_VALUE);
+        gpio_rgb->desired_states[1] = random(0, MAX_PWM_VALUE);
+        gpio_rgb->desired_states[2] = random(0, MAX_PWM_VALUE);
 
-    // populate into desired state array
-    gpio_rgb->desired_states[0] = end_red;
-    gpio_rgb->desired_states[1] = end_green;
-    gpio_rgb->desired_states[2] = end_blue;
+        log_message("Generated random PWM values.. Red:%u Green:%u Blue:%u",
+                    gpio_rgb->desired_states[0],
+                    gpio_rgb->desired_states[1],
+                    gpio_rgb->desired_states[2]);
+    }
+    else {
+        parse_rgb_colour(gpio_rgb->program[gpio_rgb->index].colour,
+                         end_red,
+                         end_green,
+                         end_blue);
+
+        // populate into desired state array
+        gpio_rgb->desired_states[0] = end_red;
+        gpio_rgb->desired_states[1] = end_green;
+        gpio_rgb->desired_states[2] = end_blue;
+    }
 }
 
-// Function: setup_rgbs
-// Scans the configured RGB controls and configures the defined led
-// pins including initial values
-void setup_rgbs(void)
+void setup_rgb(struct gpio_rgb *gpio_rgb)
 {
-    struct gpio_rgb *gpio_rgb;
-    uint16_t rgb_count = 0;
+    int i;
 
-    log_message("setup_rgbs()");
+    log_message("setup_rgb(name:%s)", gpio_rgb->name);
 
-    for (gpio_rgb = HTM_LIST_NEXT(gv_device.rgb_list);
-         gpio_rgb != gv_device.rgb_list;
-         gpio_rgb = HTM_LIST_NEXT(gpio_rgb)) {
+    gpio_rgb->enabled = 1;
+    gpio_rgb->index = -1;
 
-        rgb_count++;
-
-        gpio_rgb->current_colour = 0;
-
-        set_rgb_program(gpio_rgb,
-                        gpio_rgb->program);
-
-        log_message("Setting up RGB:%s, initial value:%d",
-                    gpio_rgb->name,
-                    gpio_rgb->current_colour);
-
-        if (gpio_rgb->red_pin != NO_PIN) {
-            log_message("    LED Red pin:%d",
-                        gpio_rgb->red_pin);
-            pinMode(gpio_rgb->red_pin, OUTPUT);
-            analogWrite(gpio_rgb->red_pin, 0);
-        }
-        if (gpio_rgb->green_pin != NO_PIN) {
-            log_message("    LED Green pin:%d",
-                        gpio_rgb->green_pin);
-            pinMode(gpio_rgb->green_pin, OUTPUT);
-            analogWrite(gpio_rgb->green_pin, 0);
-        }
-        if (gpio_rgb->blue_pin != NO_PIN) {
-            log_message("    LED Blue pin:%d",
-                        gpio_rgb->blue_pin);
-            pinMode(gpio_rgb->blue_pin, OUTPUT);
-            analogWrite(gpio_rgb->blue_pin, 0);
-        }
-        if (gpio_rgb->manual_pin != NO_PIN) {
-            log_message("    Manual pin:%d",
-                        gpio_rgb->manual_pin);
-            pinMode(gpio_rgb->manual_pin, INPUT_PULLUP);
-        }
+    if (gpio_rgb->red_pin != NO_PIN) {
+        log_message("    LED Red pin:%d",
+                    gpio_rgb->red_pin);
+        pinMode(gpio_rgb->red_pin, OUTPUT);
+        analogWrite(gpio_rgb->red_pin, 0);
     }
+    if (gpio_rgb->green_pin != NO_PIN) {
+        log_message("    LED Green pin:%d",
+                    gpio_rgb->green_pin);
+        pinMode(gpio_rgb->green_pin, OUTPUT);
+        analogWrite(gpio_rgb->green_pin, 0);
+    }
+    if (gpio_rgb->blue_pin != NO_PIN) {
+        log_message("    LED Blue pin:%d",
+                    gpio_rgb->blue_pin);
+        pinMode(gpio_rgb->blue_pin, OUTPUT);
+        analogWrite(gpio_rgb->blue_pin, 0);
+    }
+    if (gpio_rgb->manual_pin != NO_PIN) {
+        log_message("    Manual pin:%d",
+                    gpio_rgb->manual_pin);
+        pinMode(gpio_rgb->manual_pin, INPUT_PULLUP);
+    }
+}
 
-    if (rgb_count > 0) {
+void rgb_init()
+{
+    if (!HTM_LIST_EMPTY(gv_device.rgb_list)) {
         // LED Transtions
         // Uses 1msec delay and actual longer transitions
         // are handled internally. 

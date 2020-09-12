@@ -602,7 +602,7 @@ def check_rgb(zone_name,
     global gv_sunset_time
     global gv_sunrise_time
 
-    desired_program = ""
+    desired_program = None
 
     for timer in gv_json_config['rgb_timers']:
         #log_message(timer)
@@ -774,8 +774,8 @@ def format_control_request(
     control = {}
     control['name'] = control_name
 
-    # Set value and this will auti-type to 
-    # string or int
+    # Set value and this will auto-type to 
+    # string, number, array or object
     control[property] = value
 
     json_req['controls'].append(control)
@@ -871,18 +871,30 @@ def check_automated_devices():
                         track_device_status(device_name, url, json_data)
 
             if control_type in ['rgb', 'argb']:
+                # program object
                 control_program = control['program']
+
+                # as sorted JSON string
+                control_program_str = json.dumps(
+                        control_program,
+                        sort_keys = True)
 
                 desired_program = check_rgb(
                         zone_name, 
                         control_name,
                         current_time,
                         control_program)
+
+                if desired_program:
+                    # sorted JSON string
+                    desired_program_str = json.dumps(
+                            desired_program,
+                            sort_keys = True)
  
                 # If switch state not in desired state
                 # update and recache the status
-                if (desired_program != "" and 
-                    control_program != desired_program):
+                if (desired_program and 
+                    control_program_str != desired_program_str):
                     log_message("Automatically setting %s/%s to program:%s" % (
                         zone_name,
                         control_name,
@@ -1258,13 +1270,13 @@ def build_zone_web_page(num_cols):
 
             if (zone == zone_name):
                 # Sensors
-                for sensor in json_data['controls']:
-                    sensor_name = sensor['name']
-                    sensor_type = sensor['type']
+                for control in json_data['controls']:
+                    control_name = control['name']
+                    control_type = control['type']
 
-                    if (sensor_type == 'temp/humidity'):
-                        temp = sensor['temp']
-                        humidity = sensor['humidity']
+                    if (control_type == 'temp/humidity'):
+                        temp = control['temp']
+                        humidity = control['humidity']
 
                         # &#x1f321 thermometer temp
                         # &#x1f322 droplet humidity
@@ -1278,15 +1290,15 @@ def build_zone_web_page(num_cols):
                                 '<tr><td class="dash-icon" align="center">&#x1F4A7;</td>'
                                 '<td class="dash-value" align="left">%s %%</td></tr>'
                                 '</table></td>'
-                                '</tr>') % (sensor_name,
+                                '</tr>') % (control_name,
                                             temp,
                                             humidity)
 
                         dashboard_col_list[col_index] += '<tr><td></td></tr>'
                         dashboard_col_list[col_index] += '<tr><td></td></tr>'
 
-                    if (sensor_type == 'rgb'):
-                        current_colour = sensor['current_colour']
+                    if (control_type == 'rgb'):
+                        current_colour = control['current_colour']
 
                         dashboard_col_list[col_index] += (
                                 '<tr>'
@@ -1296,27 +1308,26 @@ def build_zone_web_page(num_cols):
                                 '&#x2B24;&#x2B24;&#x2B24;&#x2B24;&#x2B24;'
                                 '</span>'
                                 '</td>'
-                                '</tr>') % (sensor_name,
+                                '</tr>') % (control_name,
                                             current_colour[4:],
                                             current_colour)
 
                         dashboard_col_list[col_index] += '<tr><td></td></tr>'
                         dashboard_col_list[col_index] += '<tr><td></td></tr>'
 
-                    if (sensor_type == 'argb'):
+                    if (control_type == 'argb'):
                         # parse program, isolating 4th semi-colon 
                         # section and spliting it by comma
                         colour_list = []
-                        program_parts = sensor['program'].split(';')
-                        if (len(program_parts) == 4):
-                            colour_list = program_parts[3].split(',')
+                        if 'colours' in control['program']:
+                            colour_list = control['program']['colours']
 
                         # start row, format label and start of 
                         # colour cell
                         dashboard_col_list[col_index] += (
                                 '<tr>'
                                 '<td class="dash-label">%s</td>'
-                                '<td>') % (sensor_name)
+                                '<td>') % (control_name)
 
                         # Iterate colours and format in stack of
                         # 5 dots
@@ -1697,14 +1708,14 @@ def build_device_web_page(num_cols):
         dashboard_col_list[col_index] += '<tr><td></td></tr>'
         dashboard_col_list[col_index] += '<tr><td></td></tr>'
 
-        # Sensors
-        for sensor in json_data['controls']:
-            sensor_name = sensor['name']
-            sensor_type = sensor['type']
+        # Read-only controls (sensors, RGB etc)
+        for control in json_data['controls']:
+            control_name = control['name']
+            control_type = control['type']
 
-            if (sensor_type == 'temp/humidity'):
-                temp = sensor['temp']
-                humidity = sensor['humidity']
+            if (control_type == 'temp/humidity'):
+                temp = control['temp']
+                humidity = control['humidity']
 
                 # &#x1f321 thermometer temp
                 # &#x1f322 droplet humidity
@@ -1718,15 +1729,15 @@ def build_device_web_page(num_cols):
                         '<tr><td class="dash-icon" align="center">&#x1F4A7;</td>'
                         '<td class="dash-value" align="left">%s %%</td></tr>'
                         '</table></td>'
-                        '</tr>') % (sensor_name,
+                        '</tr>') % (control_name,
                                     temp,
                                     humidity)
 
                 dashboard_col_list[col_index] += '<tr><td></td></tr>'
                 dashboard_col_list[col_index] += '<tr><td></td></tr>'
 
-            if (sensor_type == 'rgb'):
-                current_colour = sensor['current_colour']
+            if (control_type == 'rgb'):
+                current_colour = control['current_colour']
 
                 dashboard_col_list[col_index] += (
                         '<tr>'
@@ -1736,27 +1747,26 @@ def build_device_web_page(num_cols):
                         '&#x2B24;&#x2B24;&#x2B24;&#x2B24;&#x2B24;'
                         '</span>'
                         '</td>'
-                        '</tr>') % (sensor_name,
+                        '</tr>') % (control_name,
                                     current_colour[4:],
                                     current_colour)
 
                 dashboard_col_list[col_index] += '<tr><td></td></tr>'
                 dashboard_col_list[col_index] += '<tr><td></td></tr>'
 
-            if (sensor_type == 'argb'):
+            if (control_type == 'argb'):
                 # parse program, isolating 4th semi-colon 
                 # section and spliting it by comma
                 colour_list = []
-                program_parts = sensor['program'].split(';')
-                if (len(program_parts) == 4):
-                    colour_list = program_parts[3].split(',')
+                if 'colours' in control['program']:
+                    colour_list = control['program']['colours']
 
                 # start row, format label and start of 
                 # colour cell
                 dashboard_col_list[col_index] += (
                         '<tr>'
                         '<td class="dash-label">%s</td>'
-                        '<td>') % (sensor_name)
+                        '<td>') % (control_name)
 
                 # Iterate colours and format in stack of
                 # 5 dots
