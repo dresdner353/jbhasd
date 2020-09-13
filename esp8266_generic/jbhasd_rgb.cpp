@@ -342,6 +342,9 @@ void set_rgb_program(struct gpio_rgb *gpio_rgb,
         gpio_rgb->single_step = 1;
     }
 
+    // mark as enabled
+    gpio_rgb->enabled = 1;
+
     // nudge into motion
     set_rgb_state(gpio_rgb);
 }
@@ -504,7 +507,7 @@ void setup_rgb(struct gpio_rgb *gpio_rgb)
 
     log_message("setup_rgb(name:%s)", gpio_rgb->name);
 
-    gpio_rgb->enabled = 1;
+    gpio_rgb->enabled = 0;
     gpio_rgb->index = -1;
 
     if (gpio_rgb->red_pin != NO_PIN) {
