@@ -10,11 +10,6 @@ struct gpio_rgb* gpio_rgb_alloc(void)
     gpio_rgb = (struct gpio_rgb*) malloc(sizeof(struct gpio_rgb));
     memset(gpio_rgb, 0, sizeof(struct gpio_rgb));
 
-    gpio_rgb->program = NULL;
-    gpio_rgb->program_len = 0;
-    gpio_rgb->enabled = 0;
-    gpio_rgb->single_step = 0;
-
     return gpio_rgb;
 }
 
@@ -214,7 +209,7 @@ void loop_task_transition_rgb(void)
          gpio_rgb = HTM_LIST_NEXT(gpio_rgb)) {
         if (gpio_rgb->enabled && 
             gpio_rgb->index  == -1) {
-            // initial kich
+            // initial kick
             set_rgb_state(gpio_rgb);
         }
         else if (gpio_rgb->index >= 0) {
@@ -228,7 +223,8 @@ void loop_task_transition_rgb(void)
                  gpio_rgb->current_states[2])) {
                 fade_rgb(gpio_rgb);
             }
-            else if (!gpio_rgb->single_step) {
+            else if (!gpio_rgb->single_step && 
+                     gpio_rgb->enabled) {
                 // Only transition to next colour if 
                 // we have not determined the program is 
                 // a single step
@@ -269,11 +265,17 @@ void set_rgb_program(struct gpio_rgb *gpio_rgb,
     // but we hinge on the enabled property which will not be set initially 
     // until the first program set... allowing that initial call to go through
     if (gpio_rgb->enabled && 
-        gpio_rgb->init_interval > 0 &&
-        millis() < gpio_rgb->init_interval * 1000) {
-        log_message("ignoring network program event.. init interval in play (%d secs)",
-                    gpio_rgb->init_interval);
-        return;
+        gpio_rgb->init_interval) {
+
+        if (millis() < gpio_rgb->init_interval * 1000) {
+            log_message("ignoring network program event.. init interval in play (%d secs)",
+                        gpio_rgb->init_interval);
+            return;
+        }
+        else {
+            gpio_rgb->init_interval = 0;
+            log_message("init interval now expired and disabled");
+        }
     }
 
     gpio_rgb->timestamp = 0;
@@ -290,6 +292,7 @@ void set_rgb_program(struct gpio_rgb *gpio_rgb,
     JsonArray steps = program["steps"];
     if (steps.isNull()) {
         log_message("No steps array present");
+        gpio_rgb->enabled = 0;
         return;
     }
 

@@ -6,6 +6,7 @@ struct gpio_argb* gpio_argb_alloc(void)
     struct gpio_argb *gpio_argb;
 
     gpio_argb = (struct gpio_argb*) malloc(sizeof(struct gpio_argb));
+    memset(gpio_argb, 0, sizeof(struct gpio_argb));
 
     return gpio_argb;
 }
@@ -180,6 +181,11 @@ void set_argb_program(struct gpio_argb *gpio_argb,
         return;
     }
 
+    if (program.isNull()) {
+        log_message("No program present");
+        return;
+    }
+
     log_message("set_argb_program(name=%s)",
                 gpio_argb->name);
 
@@ -196,6 +202,7 @@ void set_argb_program(struct gpio_argb *gpio_argb,
     // wipe any existing program
     gpio_argb->program_len = 0;
     gpio_argb->index = 0;
+    gpio_argb->enabled = 0;
     if (gpio_argb->program) {
         free(gpio_argb->program);
         gpio_argb->program = NULL;
@@ -203,10 +210,18 @@ void set_argb_program(struct gpio_argb *gpio_argb,
 
     // parse details from JSON program object
     strcpy(gpio_argb->mode, json_get_sval(program["mode"], "off"));
-    gpio_argb->wipe = json_get_ival(program["wipe"], 1);
-    gpio_argb->fill = json_get_ival(program["fill"], 1);
-    gpio_argb->offset = json_get_ival(program["offset"], 1);
-    gpio_argb->delay = json_get_ival(program["delay"], 5000);
+    gpio_argb->wipe = json_get_ival(program["wipe"], 0);
+    gpio_argb->fill = json_get_ival(program["fill"], 0);
+    gpio_argb->offset = json_get_ival(program["offset"], 0);
+    gpio_argb->delay = json_get_ival(program["delay"], 0);
+
+    if (!strcmp(gpio_argb->mode, "off")) {
+        log_message("program mode set to off");
+        gpio_argb->enabled = 0;
+    }
+    else {
+        gpio_argb->enabled = 1;
+    }
 
     log_message("Program: mode:%s offset:%d delay:%d",
                 gpio_argb->mode,
@@ -263,7 +278,9 @@ void loop_task_transition_argb(void)
     for (gpio_argb = HTM_LIST_NEXT(gv_device.argb_list);
          gpio_argb != gv_device.argb_list;
          gpio_argb = HTM_LIST_NEXT(gpio_argb)) {
-        set_argb_state(gpio_argb);
+        if (gpio_argb->enabled) {
+            set_argb_state(gpio_argb);
+        }
     }
 }
 
