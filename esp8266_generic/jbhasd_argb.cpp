@@ -13,11 +13,12 @@ struct gpio_argb* gpio_argb_alloc(void)
 
 // rainbow effect adapted from Neopixel examples
 // modified here to atore the firstPixelHue value statically
-void rainbow(Adafruit_NeoPixel *neopixel) {
+void rainbow(struct gpio_argb *gpio_argb) {
     static long firstPixelHue = 0; 
-    for(int i = 0; i < neopixel->numPixels(); i++) { 
-        int pixelHue = firstPixelHue + (i * 65536L / neopixel->numPixels());
-        neopixel->setPixelColor(i, neopixel->gamma32(neopixel->ColorHSV(pixelHue)));
+    for(int i = 0; i < gpio_argb->neopixel->numPixels(); i++) { 
+        int pixelHue = firstPixelHue + (i * 65536L / gpio_argb->neopixel->numPixels());
+        gpio_argb->neopixel->setPixelColor(i, 
+                                           gpio_argb->neopixel->gamma32(gpio_argb->neopixel->ColorHSV(pixelHue)));
     }
     firstPixelHue = (firstPixelHue + 256) % 65536;
 }
@@ -25,33 +26,168 @@ void rainbow(Adafruit_NeoPixel *neopixel) {
 // chasing rainbow effect adapted from Neopixel 
 // examples. Some variabls made static to hold state 
 // between calls
-void chase_rainbow(Adafruit_NeoPixel *neopixel) {
+void chase_rainbow(struct gpio_argb *gpio_argb) {
     static int firstPixelHue = 0;
     static int b = 0; 
-    neopixel->clear(); 
-    for(int c = b; c < neopixel->numPixels(); c += 3) {
-        int hue = firstPixelHue + c * 65536L / neopixel->numPixels();
-        uint32_t color = neopixel->gamma32(neopixel->ColorHSV(hue)); 
-        neopixel->setPixelColor(c, color); 
+    gpio_argb->neopixel->clear(); 
+    for(int c = b; c < gpio_argb->neopixel->numPixels(); c += 3) {
+        int hue = firstPixelHue + c * 65536L / gpio_argb->neopixel->numPixels();
+        uint32_t color = gpio_argb->neopixel->gamma32(gpio_argb->neopixel->ColorHSV(hue)); 
+        gpio_argb->neopixel->setPixelColor(c, color); 
     }
     firstPixelHue += 65536 / 90; 
     b = (b + 1) % 3;
 }
 
-void random_leds(Adafruit_NeoPixel *neopixel) {
+void random_leds(struct gpio_argb *gpio_argb) {
     static uint8_t first_run = 1;
     uint16_t index, i;
     uint32_t colour;
 
     if (first_run) {
-        neopixel->clear(); 
+        gpio_argb->neopixel->clear(); 
         first_run = 0;
     }
 
     // Set random colour on random pixel
-    index = random(0, neopixel->numPixels());
-    colour = neopixel->gamma32(random(0, 0xFFFFFF)); 
-    neopixel->setPixelColor(index, colour);
+    index = random(0, 
+                   gpio_argb->neopixel->numPixels());
+    colour = gpio_argb->neopixel->gamma32(random(0, 0xFFFFFF)); 
+    gpio_argb->neopixel->setPixelColor(index, colour);
+}
+
+void shift_primary(uint8_t &current_primary, 
+                  uint8_t final_primary,
+                  uint8_t interval) {
+
+    if (current_primary < final_primary) {
+        if (final_primary - current_primary >= interval) {
+            current_primary += interval;
+        }
+        else {
+            current_primary = final_primary;
+        }
+    }
+    if (current_primary > final_primary) {
+        if (current_primary - final_primary >= interval) {
+            current_primary -= interval;
+        }
+        else {
+            current_primary = final_primary;
+        }
+    }
+}
+
+void shift_colour(uint32_t &current_colour, 
+                  uint32_t final_colour,
+                  uint8_t interval) {
+    uint8_t curr_red, curr_green, curr_blue;
+    uint8_t final_red, final_green, final_blue;
+
+    log_message("shift.. current:0x%08X final:0x%08X", current_colour, final_colour);
+    curr_red = current_colour >> 16 & 0xFF;
+    curr_green = current_colour >> 8 & 0xFF;
+    curr_blue = current_colour & 0xFF;
+
+    final_red = final_colour >> 16 & 0xFF;
+    final_green = final_colour >> 8 & 0xFF;
+    final_blue = final_colour & 0xFF;
+
+    shift_primary(curr_red, final_red, interval);
+    shift_primary(curr_green, final_green, interval);
+    shift_primary(curr_blue, final_blue, interval);
+
+    current_colour = 
+        (curr_red << 16) & 0xFF0000 |
+        (curr_green << 8) & 0x00FF00 | 
+        curr_blue;
+    log_message("done.. current:0x%08X", current_colour);
+}
+
+void reveal(struct gpio_argb *gpio_argb,
+            uint8_t left,
+            uint8_t right,
+            uint8_t fade) {
+    uint16_t prog_index, limit, led;
+    uint32_t colour;
+    uint8_t left_done, right_done;
+    static uint32_t current_left = 0;
+    static uint32_t current_right = 0;
+
+    if (left && right) {
+        limit = gpio_argb->num_leds / 2;
+    }
+    else {
+        limit = gpio_argb->num_leds - 1;
+    }
+
+    if (gpio_argb->index > limit) {
+        gpio_argb->index = 0;
+    }
+
+    if (gpio_argb->index == 0 && gpio_argb->wipe) {
+        gpio_argb->neopixel->clear();
+    }
+
+    if (left) {
+        prog_index = gpio_argb->index % gpio_argb->program_len;
+        colour = gpio_argb->neopixel->gamma32(gpio_argb->program[prog_index]); 
+        led = gpio_argb->index;
+
+        if (fade == 0) {
+            gpio_argb->neopixel->setPixelColor(led, colour);
+        }
+        else {
+            left_done = 0;
+            shift_colour(current_left, colour, fade);
+            log_message("set.. led:%d colour:0x%08X (0x%08X)", led, current_left, colour);
+            gpio_argb->neopixel->setPixelColor(led, current_left);
+
+            if (current_left == colour) {
+                left_done = 1;
+            }
+        }
+    }
+    else {
+        left_done = 1;
+    }
+
+    if (right) {
+        prog_index = (gpio_argb->program_len - 1) - (gpio_argb->index % gpio_argb->program_len);
+        colour = gpio_argb->neopixel->gamma32(gpio_argb->program[prog_index]); 
+        led = gpio_argb->num_leds - 1 - gpio_argb->index;
+
+        if (fade == 0) {
+            gpio_argb->neopixel->setPixelColor(led, colour);
+        }
+        else {
+            right_done = 0;
+            shift_colour(current_right, colour, fade);
+            log_message("set.. led:%d colour:0x%08X (0x%08X)", led, current_right, colour);
+            gpio_argb->neopixel->setPixelColor(led, current_right);
+
+            if (current_right == colour) {
+                right_done = 1;
+            }
+        }
+    }
+    else {
+        right_done = 1;
+    }
+
+    // advance to next
+    if (fade) {
+        if (left_done && right_done) {
+            gpio_argb->index = 
+                (gpio_argb->index + gpio_argb->offset) % gpio_argb->num_leds;
+            current_left = 0;
+            current_right = 0;
+        }
+    }
+    else {
+        gpio_argb->index = 
+            (gpio_argb->index + gpio_argb->offset) % gpio_argb->num_leds;
+    }
 }
 
 // Function set_argb_state
@@ -90,13 +226,31 @@ void set_argb_state(struct gpio_argb *gpio_argb)
         return;
     }
     else if (!strcmp(gpio_argb->mode, "rainbow")) {
-        rainbow(gpio_argb->neopixel);
+        rainbow(gpio_argb);
     }
     else if (!strcmp(gpio_argb->mode, "chase_rainbow")) {
-        chase_rainbow(gpio_argb->neopixel);
+        chase_rainbow(gpio_argb);
     }
     else if (!strcmp(gpio_argb->mode, "random")) {
-        random_leds(gpio_argb->neopixel);
+        random_leds(gpio_argb);
+    }
+    else if (!strcmp(gpio_argb->mode, "reveal")) {
+        reveal(gpio_argb, 1, 1, 0);
+    }
+    else if (!strcmp(gpio_argb->mode, "reveal_left")) {
+        reveal(gpio_argb, 1, 0, 0);
+    }
+    else if (!strcmp(gpio_argb->mode, "reveal_right")) {
+        reveal(gpio_argb, 0, 1, 0);
+    }
+    else if (!strcmp(gpio_argb->mode, "reveal_fade")) {
+        reveal(gpio_argb, 1, 1, gpio_argb->fade);
+    }
+    else if (!strcmp(gpio_argb->mode, "reveal_left_fade")) {
+        reveal(gpio_argb, 1, 0, gpio_argb->fade);
+    }
+    else if (!strcmp(gpio_argb->mode, "reveal_right_fade")) {
+        reveal(gpio_argb, 0, 1, gpio_argb->fade);
     }
     else {
         // optional wipe on each draw
@@ -211,6 +365,7 @@ void set_argb_program(struct gpio_argb *gpio_argb,
     // parse details from JSON program object
     strcpy(gpio_argb->mode, json_get_sval(program["mode"], "off"));
     gpio_argb->wipe = json_get_ival(program["wipe"], 0);
+    gpio_argb->fade = json_get_ival(program["fade"], 0);
     gpio_argb->fill = json_get_ival(program["fill"], 0);
     gpio_argb->offset = json_get_ival(program["offset"], 0);
     gpio_argb->delay = json_get_ival(program["delay"], 0);
