@@ -715,7 +715,7 @@ void start_wifi_sta_mode(void)
     WiFi.disconnect();
     WiFi.mode(WIFI_STA);
     WiFi.hostname(gv_device.hostname);
-    WiFi.setAutoReconnect(false);
+    WiFi.setAutoReconnect(true);
     WiFi.begin(gv_device.wifi_ssid,
                gv_device.wifi_password);
 }
@@ -832,7 +832,7 @@ void loop_task_check_wifi_down(void)
 // (1 hour), it will reboot
 void loop_task_check_wifi_up(void)
 {
-    static uint32_t now = millis();
+    uint32_t now = millis();
 
     // wifi restart and reboot intervals
     // Used to force stack restarts or a 
@@ -873,6 +873,15 @@ void loop_task_check_wifi_up(void)
                 log_message("Exceeded max WiFi downtime of %d msecs.. restarting WiFi",
                             downtime_before_wifi_restart);
                 start_wifi_sta_mode();
+
+                // set last wifi up time to now 
+                // even though its not yet up
+                // This is needed to allow the logic to give another 
+                // downtime_before_wifi_restart msecs before the next wifi 
+                // restart
+                // Otherwise, the next call to this function would restart it 
+                // again if its still not up
+                last_wifi_up = now;
             }
         }
     }
