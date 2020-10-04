@@ -17,6 +17,10 @@ mkdir -p "${LOG_DIR}"
 LOG_PREFIX="jbhasd_web_server"
 LOG_FILE="${LOG_DIR}/${LOG_PREFIX}_`date +%Y%m%d%H%M%S`.log"
 
+# Disable logging
+# comment out to enable
+LOG_FILE=/dev/null
+
 # Check for jbhasd_web_server.py running
 pgrep -f "${JBHASD_WEB_SVR}" >/dev/null
 if [ $? -ne 0 ]
