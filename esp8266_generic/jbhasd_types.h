@@ -153,6 +153,7 @@ struct gpio_argb {
     char mode[MAX_FIELD_LEN];
     uint8_t enabled;
     uint8_t wipe;
+    uint8_t fade;
     uint8_t fill;
     int16_t offset;
     uint16_t delay;
