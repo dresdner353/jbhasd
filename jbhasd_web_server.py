@@ -572,7 +572,15 @@ def check_control(
                     last_program_epoch = gv_jbhasd_control_program_dict[device_name][control_name]
                 last_program_interval = int(time.time()) - last_program_epoch
 
-                if ((current_time - event_time) % 86400 < 300):
+                program_threshold = (current_time_rel_secs - event_time_rel_secs) % 86400 
+                log_message('Event:%s ev_rel:%d now_rel:%d threshold:%d last_programmed_interval:%d' % (
+                    event_time,
+                    event_time_rel_secs,
+                    current_time_rel_secs,
+                    program_threshold,
+                    last_program_interval))
+
+                if (program_threshold < 300):
                     if (last_program_interval > 300):
                         control_data = copy.deepcopy(event['params'])
                         control_data['name'] = control_name
@@ -672,7 +680,7 @@ class ZeroConfListener(object):
         global gv_jbhasd_zconf_url_set
 
         info = zeroconf.get_service_info(type, name)
-        if info is not None:
+        if info:
             address = socket.inet_ntoa(info.address)
             port = info.port
             url = "http://%s:%d" % (address, port)
@@ -736,7 +744,7 @@ def get_url(url, url_timeout, parse_json):
             url_name, 
             url))
 
-    if response is not None:
+    if response:
         response_str = response.text
 
         if parse_json:
@@ -768,7 +776,7 @@ def post_url(url, json_data, url_timeout):
     except:
         log_message("Error in POST URL:%s" % (url))
 
-    if response is not None:
+    if response:
         try:
             json_data = response.json()
         except:
@@ -824,6 +832,10 @@ def check_automated_devices():
             control_name = control['name']
             control_type = control['type']
 
+            # ignore controls that cannot be programmed
+            if not control_type in ['switch', 'rgb', 'argb']:
+                continue
+
             control_data = check_control(
                     device_name,
                     zone_name, 
@@ -842,7 +854,7 @@ def check_automated_devices():
                 json_data = post_url(url + '/control', 
                                      json_req,
                                      gv_http_timeout_secs)
-                if (json_data is not None):
+                if (json_data):
                     track_device_status(device_name, url, json_data)
                     track_control_program(device_name, control_name)
 
@@ -959,7 +971,7 @@ def probe_devices():
             log_message("Refreshing Sunset times (every %d seconds).." % (
                 gv_json_config['sunset']['refresh']))
             json_data = get_url(gv_json_config['sunset']['url'], 20, 1)
-            if json_data is not None:
+            if json_data:
                 # Sunset
                 sunset_str = json_data['results']['sunset']
                 sunset_ts = sunset_api_time_to_epoch(
@@ -1005,7 +1017,7 @@ def probe_devices():
         control_changes = 0
         for url in device_url_list:
             json_data = get_url(url, gv_http_timeout_secs, 1)
-            if (json_data is not None and 'name' in json_data):
+            if (json_data and 'name' in json_data):
                 device_name = json_data['name']
                 if ('configured' in json_data and
                         json_data['configured'] == 0):
@@ -1912,13 +1924,15 @@ def build_status_web_page():
 def process_console_action(
         device, 
         zone, 
-        control, 
+        control_name, 
         reboot, 
         reconfig, 
         apmode, 
         state, 
         program):
 
+    global gv_jbhasd_device_url_dict
+    global gv_jbhasd_device_status_dict
 
     # list used to buok handle
     # simple URL API calls for GET
@@ -1927,8 +1941,7 @@ def process_console_action(
     reboot_all = 0
     reconfig_all = 0
 
-    if (device is not None and
-        reboot is not None):
+    if (device and reboot):
 
         if device == 'all':
             log_message("Rebooting all devices")
@@ -1949,8 +1962,7 @@ def process_console_action(
             command_url_list.append('%s/reboot' % (url))
             purge_device(device, "Rebooting")
             
-    if (device is not None and
-        reconfig is not None):
+    elif (device and reconfig):
 
         if device == 'all':
             log_message("Reconfiguring all devices")
@@ -1975,8 +1987,7 @@ def process_console_action(
             # Dont purge device here as the probe stage will
             # invoke the reconfigure
 
-    if (device is not None and
-        apmode is not None):
+    elif (device and apmode):
 
         if device in gv_jbhasd_device_url_dict:
             url = gv_jbhasd_device_url_dict[device]
@@ -1985,21 +1996,19 @@ def process_console_action(
 
             command_url_list.append('%s/apmode' % (url))
 
-    if (device is not None and
-        zone is not None and
-        control is not None and
-        state is not None):
+    elif (device and zone and control_name and state):
 
         if device in gv_jbhasd_device_url_dict:
             url = gv_jbhasd_device_url_dict[device]
 
-            log_message("Manually setting %s/%s to state:%s" % (
+            log_message("Manually setting %s/%s/%s to state:%s" % (
+                device,
                 zone,
-                control,
+                control_name,
                 state))
 
             control_data = {}
-            control_data['name'] = control
+            control_data['name'] = control_name
             control_data['state'] = state
             json_req = {}
             json_req['controls'] = []
@@ -2007,34 +2016,95 @@ def process_console_action(
             json_data = post_url(url + '/control', 
                                  json_req,
                                  gv_http_timeout_secs)
-            if (json_data is not None):
+            if (json_data):
                 track_device_status(device, url, json_data)
 
-    if (device is not None and
-        zone is not None and
-        control is not None and
-        program is not None):
+    elif (zone and control_name and state):
+
+        # Check all devices
+        for device in gv_jbhasd_device_status_dict:
+            json_data = gv_jbhasd_device_status_dict[device]
+
+            if ('zone' in json_data and 
+                    json_data['zone'] == zone and
+                    'controls' in json_data):
+                for control in json_data['controls']:
+                    if control['name'] == control_name:
+                        url = gv_jbhasd_device_url_dict[device]
+
+                        log_message("Manually setting (%s) %s/%s/%s to state:%s" % (
+                            url,
+                            device,
+                            zone,
+                            control_name,
+                            state))
+
+                        control_data = {}
+                        control_data['name'] = control_name
+                        control_data['state'] = state
+                        json_req = {}
+                        json_req['controls'] = []
+                        json_req['controls'].append(control_data)
+                        json_data = post_url(url + '/control', 
+                                             json_req,
+                                             gv_http_timeout_secs)
+                        if (json_data):
+                            track_device_status(device, url, json_data)
+
+    elif (device and zone and control_name and program):
 
         if device in gv_jbhasd_device_url_dict:
             url = gv_jbhasd_device_url_dict[device]
 
-            log_message("Manually setting %s/%s to program:%s" % (
+            log_message("Manually setting %s/%s/%s to program:%s" % (
+                device,
                 zone,
-                control,
+                control_name,
                 program))
 
             control_data = {}
-            control_data['name'] = control
-            control_data['program'] = program
+            control_data['name'] = control_name
+            control_data['program'] = json.loads(program)
             json_req = {}
             json_req['controls'] = []
             json_req['controls'].append(control_data)
             json_data = post_url(url + '/control', 
                                  json_req,
                                  gv_http_timeout_secs)
-            if (json_data is not None):
+            if (json_data):
                 track_device_status(device, url, json_data)
 
+    elif (zone and control_name and program):
+
+        # Check all devices
+        for device in gv_jbhasd_device_status_dict:
+            json_data = gv_jbhasd_device_status_dict[device]
+
+            if ('zone' in json_data and 
+                    json_data['zone'] == zone and
+                    'controls' in json_data):
+                for control in json_data['controls']:
+                    if control['name'] == control_name:
+                        url = gv_jbhasd_device_url_dict[device]
+
+                        log_message("Manually setting (%s) %s/%s/%s to program:%s" % (
+                            url,
+                            device,
+                            zone,
+                            control_name,
+                            program))
+
+                        control_data = {}
+                        control_data['name'] = control_name
+                        control_data['program'] = json.loads(program)
+                        json_req = {}
+                        json_req['controls'] = []
+                        json_req['controls'].append(control_data)
+                        json_data = post_url(url + '/control', 
+                                             json_req,
+                                             gv_http_timeout_secs)
+                        if (json_data):
+                            track_device_status(device, url, json_data)
 
     # Bulk stuff
     for url in command_url_list:
@@ -2071,7 +2141,7 @@ class web_console_zone_handler(object):
         # supplied window width divided by dashbox width
         # plus an offset for padding consideration
         num_cols = gv_json_config['dashboard']['initial_num_columns']
-        if width is not None:
+        if width:
             num_cols = int(int(width) / (gv_json_config['dashboard']['box_width'] + 
                                          gv_json_config['dashboard']['col_division_offset']))
 
@@ -2104,7 +2174,7 @@ class web_console_device_handler(object):
         # supplied window width divided by dashbox width
         # plus an offset for padding consideration
         num_cols = gv_json_config['dashboard']['initial_num_columns']
-        if width is not None:
+        if width:
             num_cols = int(int(width) / (gv_json_config['dashboard']['box_width'] + 
                                          gv_json_config['dashboard']['col_division_offset']))
 
@@ -2136,6 +2206,8 @@ class web_console_status_handler(object):
 
     # Force trailling slash off on called URL
     index._cp_config = {'tools.trailing_slash.on': False}
+
+
 class web_console_device_handler(object):
     @cherrypy.expose()
 
@@ -2157,7 +2229,7 @@ class web_console_device_handler(object):
         # supplied window width divided by dashbox width
         # plus an offset for padding consideration
         num_cols = gv_json_config['dashboard']['initial_num_columns']
-        if width is not None:
+        if width:
             num_cols = int(int(width) / (gv_json_config['dashboard']['box_width'] + 
                                          gv_json_config['dashboard']['col_division_offset']))
 
