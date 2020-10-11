@@ -321,8 +321,7 @@ def set_default_config():
     json_config['sunset']['refresh'] = 3600
 
     # Timed & paired controls
-    json_config['switch_timers'] = []
-    json_config['rgb_timers'] = []
+    json_config['device_programs'] = []
     json_config['paired_switches'] = []
 
     # Device config
@@ -380,7 +379,7 @@ def manage_config():
         time.sleep(5)
 
 
-def get_timer_time(timer_time):
+def get_event_time(timer_time):
 
     global gv_sunset_time
     global gv_sunrise_time
@@ -399,8 +398,8 @@ def get_timer_time(timer_time):
 gv_last_sunset_check = -1
 gv_actual_sunset_time = "20:00"
 gv_actual_sunrise_time = "05:00"
-gv_sunset_time = get_timer_time(gv_actual_sunset_time)
-gv_sunrise_time = get_timer_time(gv_actual_sunrise_time)
+gv_sunset_time = get_event_time(gv_actual_sunset_time)
+gv_sunrise_time = get_event_time(gv_actual_sunrise_time)
 
 # device global dictionaries
 
@@ -419,6 +418,9 @@ gv_jbhasd_device_status_dict = {}
 # timestamp of last stored status
 # keyed on name
 gv_jbhasd_device_ts_dict = {}
+
+# timestamp of last control program
+gv_jbhasd_control_program_dict = {}
 
 # timeout for all fetch calls
 gv_http_timeout_secs = 10
@@ -447,6 +449,7 @@ def purge_all_devices():
     global gv_jbhasd_device_url_dict
     global gv_jbhasd_device_status_dict
     global gv_jbhasd_device_ts_dict
+    global gv_jbhasd_control_program_dict
     global gv_jbhasd_zconf_url_set
 
     log_message("Resetting all device dictionaries")
@@ -454,6 +457,7 @@ def purge_all_devices():
     gv_jbhasd_device_url_dict = {}
     gv_jbhasd_device_status_dict = {}
     gv_jbhasd_device_ts_dict = {}
+    gv_jbhasd_control_program_dict = {}
     gv_jbhasd_zconf_url_set = set()
 
 
@@ -462,6 +466,7 @@ def purge_device(device_name, reason):
     global gv_jbhasd_device_url_dict
     global gv_jbhasd_device_status_dict
     global gv_jbhasd_device_ts_dict
+    global gv_jbhasd_control_program_dict
     global gv_jbhasd_zconf_url_set
 
     log_message("Purging Device:%s reason:%s" % (
@@ -481,6 +486,9 @@ def purge_device(device_name, reason):
     if (device_name in gv_jbhasd_device_status_dict):
         del gv_jbhasd_device_status_dict[device_name]
 
+    if (device_name in gv_jbhasd_control_program_dict):
+        del gv_jbhasd_control_program_dict[device_name]
+
     # Take out the device URL now from discovery set
     if (not url is None and url in gv_jbhasd_zconf_url_set):
         gv_jbhasd_zconf_url_set.remove(url)
@@ -495,6 +503,16 @@ def track_device_status(device_name, url, json_data):
     gv_jbhasd_device_url_dict[device_name] = url
     gv_jbhasd_device_status_dict[device_name] = json_data
     gv_jbhasd_device_ts_dict[device_name] = int(time.time())
+
+
+def track_control_program(device_name, control_name):
+    global gv_jbhasd_control_program_dict
+
+    if (not device_name in gv_jbhasd_control_program_dict):
+        gv_jbhasd_control_program_dict[device_name] = {}
+
+    # Track the time we programmed the given control
+    gv_jbhasd_control_program_dict[device_name][control_name] = int(time.time())
 
 
 def sunset_api_time_to_epoch(time_str, local_timezone):
@@ -517,68 +535,57 @@ def sunset_api_time_to_epoch(time_str, local_timezone):
     return epoch_time
 
 
-def check_switch(zone_name, 
-                 control_name, 
-                 current_time):
+def check_control(
+        device_name,
+        zone_name, 
+        control_name):
 
     global gv_sunset_time
     global gv_sunrise_time
     global gv_json_config
+    global gv_jbhasd_control_program_dict
 
-    desired_state = -1 # implies no desired state
-    desired_motion_interval = -1 # no implied motion
+    log_message('check_control(device=%s, zone=%s, control=%s' % (
+        device_name,
+        zone_name,
+        control_name))
 
-    for timer in gv_json_config['switch_timers']:
-        if timer['zone'] == zone_name and timer['control'] == control_name:
-            # Motion interval (optional)
-            if ('motion_interval' in timer):
-                motion_on_time = get_timer_time(timer['motion_on'])
-                motion_off_time = get_timer_time(timer['motion_off'])
+    # device programs
+    for device_program in gv_json_config['device_programs']:
+        if (device_program['zone'] == zone_name and 
+                device_program['control'] == control_name):
+            for event in device_program['events']:
+                # Event time
+                event_time = get_event_time(event['time'])
+                current_time = int(time.strftime("%H%M", time.localtime()))
 
-                # Assume no motion interval to start
-                desired_motion_interval = 0
+                # Convert HHMM int values into relative seconds for day
+                event_time_rel_secs = (((event_time / 100) * 60 * 60) + 
+                        ((event_time % 100) * 60))
 
-                if (motion_on_time <= motion_off_time):
-                    if (current_time >= motion_on_time and 
-                        current_time < motion_off_time):
-                        desired_motion_interval = timer['motion_interval']
-                else:
-                    if (current_time > motion_on_time):
-                        desired_motion_interval = timer['motion_interval']
+                current_time_rel_secs = (((current_time / 100) * 60 * 60) + 
+                        ((current_time % 100) * 60))
+
+                last_program_epoch = 0
+                if (device_name in gv_jbhasd_control_program_dict and
+                        control_name in gv_jbhasd_control_program_dict[device_name]):
+                    last_program_epoch = gv_jbhasd_control_program_dict[device_name][control_name]
+                last_program_interval = int(time.time()) - last_program_epoch
+
+                if ((current_time - event_time) % 86400 < 300):
+                    if (last_program_interval > 300):
+                        control_data = copy.deepcopy(event['params'])
+                        control_data['name'] = control_name
+                        log_message('Returning control data.. %s' % (control_data))
+                        return control_data
                     else:
-                        if (current_time < motion_on_time and
-                            current_time < motion_off_time):
-                            desired_motion_interval = timer['motion_interval']
-
-            # timer on/off optional
-            if ('on' in timer and 
-                'off' in timer):
-
-                # On/Off Start assuming its off
-                desired_state = 0
-
-                # parse times from fields 
-                # this also substitutes keywords
-                # like sunset and sunrise
-                on_time = get_timer_time(timer['on'])
-                off_time = get_timer_time(timer['off'])
-
-                # Test time ranges and break out on 
-                # first hit for the on state
-                if (on_time <= off_time):
-                    if (current_time >= on_time and 
-                        current_time < off_time):
-                        desired_state = 1
-                        break
+                        log_message('Already programmed %d seconds ago' % (
+                            last_program_interval))
                 else:
-                    if (current_time > on_time):
-                        desired_state = 1
-                        break
-                    else:
-                        if (current_time < on_time and
-                            current_time < off_time):
-                            desired_state = 1
-                            break
+                    log_message('Event time %s is outside of 5 min interval' % (
+                        event['time']))
+
+
 
     # paired switches
     # anything found on the b-side of the
@@ -590,8 +597,20 @@ def check_switch(zone_name,
             desired_state = get_control_state(
                     paired_switch['a_zone'], 
                     paired_switch['a_control'])
+            control_data = {}
+            control_data['name'] = control_name
+            control_data['state'] = desired_state
+            log_message('Returning paired switch control data.. %s:%s -> %s:%s .. %s' % (
+                paired_switch['a_zone'], 
+                paired_switch['a_control'],
+                paired_switch['b_zone'], 
+                paired_switch['b_control'],
+                control_data))
+            return control_data
 
-    return desired_state, desired_motion_interval
+    # fall-through nothing to do
+    log_message('No timer or paired data found')
+    return None
 
 
 def check_rgb(zone_name, 
@@ -614,8 +633,8 @@ def check_rgb(zone_name,
             # parse times from fields 
             # this also substitutes keywords
             # like sunset and sunrise
-            on_time = get_timer_time(timer['on'])
-            off_time = get_timer_time(timer['off'])
+            on_time = get_event_time(timer['on'])
+            off_time = get_event_time(timer['off'])
 
             if (on_time <= off_time):
                 if (current_time >= on_time and 
@@ -763,27 +782,8 @@ def post_url(url, json_data, url_timeout):
     return response
 
 
-def format_control_request(
-        control_name,
-        property,
-        value):
-
-    json_req = {}
-    json_req['controls'] = []
-
-    control = {}
-    control['name'] = control_name
-
-    # Set value and this will auto-type to 
-    # string, number, array or object
-    control[property] = value
-
-    json_req['controls'].append(control)
-
-    return json_req
-
-
 def get_control_state(zone_name, control_name):
+    global gv_jbhasd_device_status_dict
     # Get state of specified control
     # return 0 or 1 or -1 (not found)
 
@@ -814,7 +814,6 @@ def check_automated_devices():
     # safe snapshot of dict keys into list
     device_list = list(gv_jbhasd_device_status_dict)
     # get time in hhmm format
-    current_time = int(time.strftime("%H%M", time.localtime()))
     for device_name in device_list:
         json_data = gv_jbhasd_device_status_dict[device_name]
         zone_name = json_data['zone']
@@ -825,88 +824,27 @@ def check_automated_devices():
             control_name = control['name']
             control_type = control['type']
 
-            if control_type == 'switch':
-                control_state = int(control['state'])
-
-                # optional motion interval
-                if 'motion_interval' in control:
-                    motion_interval = int(control['motion_interval'])
-                else:
-                    motion_interval = 0
-
-                desired_state, desired_motion_interval = check_switch(zone_name, 
-                                                                      control_name,
-                                                                      current_time)
+            control_data = check_control(
+                    device_name,
+                    zone_name, 
+                    control_name)
  
-                # If switch state not in desired state
-                # update and recache the status
-                if (desired_state != -1 and control_state != desired_state):
-                    log_message("Automatically setting %s/%s to state:%s" % (
-                        zone_name,
-                        control_name,
-                        desired_state))
+            if (control_data):
+                log_message("Automatically setting %s/%s to %s" % (
+                    zone_name,
+                    control_name,
+                    control_data))
 
-                    json_req = format_control_request(control_name, 
-                                                      'state',                          
-                                                      desired_state)
-                    json_data = post_url(url + '/control', 
-                                         json_req,
-                                         gv_http_timeout_secs)
-                    if (json_data is not None):
-                        track_device_status(device_name, url, json_data)
-
-                if (desired_motion_interval != -1 and 
-                        motion_interval != desired_motion_interval):
-                    log_message("Automatically setting %s/%s motion_interval:%d" % (
-                        zone_name,
-                        control_name,
-                        desired_motion_interval))
-                    json_req = format_control_request(control_name, 
-                                                      'motion_interval',                          
-                                                      desired_motion_interval)
-                    json_data = post_url(url + '/control', 
-                                         json_req,
-                                         gv_http_timeout_secs)
-                    if (json_data is not None):
-                        track_device_status(device_name, url, json_data)
-
-            if control_type in ['rgb', 'argb']:
-                # program object
-                control_program = control['program']
-
-                # as sorted JSON string
-                control_program_str = json.dumps(
-                        control_program,
-                        sort_keys = True)
-
-                desired_program = check_rgb(
-                        zone_name, 
-                        control_name,
-                        current_time,
-                        control_program)
-
-                if desired_program:
-                    # sorted JSON string
-                    desired_program_str = json.dumps(
-                            desired_program,
-                            sort_keys = True)
- 
-                # If switch state not in desired state
-                # update and recache the status
-                if (desired_program and 
-                    control_program_str != desired_program_str):
-                    log_message("Automatically setting %s/%s to program:%s" % (
-                        zone_name,
-                        control_name,
-                        desired_program))
-                    json_req = format_control_request(control_name, 
-                                                      'program',                          
-                                                      desired_program)
-                    json_data = post_url(url + '/control', 
-                                         json_req,
-                                         gv_http_timeout_secs)
-                    if (json_data is not None):
-                        track_device_status(device_name, url, json_data)
+                # Build controls request
+                json_req = {}
+                json_req['controls'] = []
+                json_req['controls'].append(control_data)
+                json_data = post_url(url + '/control', 
+                                     json_req,
+                                     gv_http_timeout_secs)
+                if (json_data is not None):
+                    track_device_status(device_name, url, json_data)
+                    track_control_program(device_name, control_name)
 
     return
 
@@ -2060,10 +1998,12 @@ def process_console_action(
                 control,
                 state))
 
-            # Construct JSON POST body to set control state
-            json_req = format_control_request(control, 
-                                              'state',                          
-                                              state)
+            control_data = {}
+            control_data['name'] = control
+            control_data['state'] = state
+            json_req = {}
+            json_req['controls'] = []
+            json_req['controls'].append(control_data)
             json_data = post_url(url + '/control', 
                                  json_req,
                                  gv_http_timeout_secs)
@@ -2083,10 +2023,12 @@ def process_console_action(
                 control,
                 program))
 
-            # Construct JSON POST body to set program 
-            json_req = format_control_request(control, 
-                                              'program',                          
-                                              program)
+            control_data = {}
+            control_data['name'] = control
+            control_data['program'] = program
+            json_req = {}
+            json_req['controls'] = []
+            json_req['controls'].append(control_data)
             json_data = post_url(url + '/control', 
                                  json_req,
                                  gv_http_timeout_secs)
