@@ -505,14 +505,17 @@ def track_device_status(device_name, url, json_data):
     gv_jbhasd_device_ts_dict[device_name] = int(time.time())
 
 
-def track_control_program(device_name, control_name):
+def track_control_program(device_name, control_name, event):
     global gv_jbhasd_control_program_dict
 
     if (not device_name in gv_jbhasd_control_program_dict):
         gv_jbhasd_control_program_dict[device_name] = {}
 
+    if (not control_name in gv_jbhasd_control_program_dict[device_name]):
+        gv_jbhasd_control_program_dict[device_name][control_name] = {}
+
     # Track the time we programmed the given control
-    gv_jbhasd_control_program_dict[device_name][control_name] = int(time.time())
+    gv_jbhasd_control_program_dict[device_name][control_name][event] = int(time.time())
 
 
 def sunset_api_time_to_epoch(time_str, local_timezone):
@@ -568,8 +571,9 @@ def check_control(
 
                 last_program_epoch = 0
                 if (device_name in gv_jbhasd_control_program_dict and
-                        control_name in gv_jbhasd_control_program_dict[device_name]):
-                    last_program_epoch = gv_jbhasd_control_program_dict[device_name][control_name]
+                        control_name in gv_jbhasd_control_program_dict[device_name] and
+                        event_time in gv_jbhasd_control_program_dict[device_name][control_name]):
+                    last_program_epoch = gv_jbhasd_control_program_dict[device_name][control_name][event_time]
                 last_program_interval = int(time.time()) - last_program_epoch
 
                 program_threshold = (current_time_rel_secs - event_time_rel_secs) % 86400 
@@ -585,7 +589,7 @@ def check_control(
                         control_data = copy.deepcopy(event['params'])
                         control_data['name'] = control_name
                         log_message('Returning control data.. %s' % (control_data))
-                        return control_data
+                        return control_data, event_time
                     else:
                         log_message('Already programmed %d seconds ago' % (
                             last_program_interval))
@@ -621,11 +625,11 @@ def check_control(
                     paired_switch['b_zone'], 
                     paired_switch['b_control'],
                     control_data))
-                return control_data
+                return control_data, None
 
     # fall-through nothing to do
     log_message('No timer or paired data found')
-    return None
+    return None, None
 
 
 def check_rgb(zone_name, 
@@ -843,7 +847,7 @@ def check_automated_devices():
             if not control_type in ['switch', 'rgb', 'argb']:
                 continue
 
-            control_data = check_control(
+            control_data, event_time = check_control(
                     device_name,
                     zone_name, 
                     control_name)
@@ -863,7 +867,8 @@ def check_automated_devices():
                                      gv_http_timeout_secs)
                 if (json_data):
                     track_device_status(device_name, url, json_data)
-                    track_control_program(device_name, control_name)
+                    if event_time:
+                        track_control_program(device_name, control_name, event_time)
 
     return
 
