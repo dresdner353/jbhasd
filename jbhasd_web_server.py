@@ -560,10 +560,10 @@ def check_control(
                 current_time = int(time.strftime("%H%M", time.localtime()))
 
                 # Convert HHMM int values into relative seconds for day
-                event_time_rel_secs = (((event_time / 100) * 60 * 60) + 
+                event_time_rel_secs = ((int(event_time / 100) * 60 * 60) + 
                         ((event_time % 100) * 60))
 
-                current_time_rel_secs = (((current_time / 100) * 60 * 60) + 
+                current_time_rel_secs = ((int(current_time / 100) * 60 * 60) + 
                         ((current_time % 100) * 60))
 
                 last_program_epoch = 0
@@ -602,19 +602,26 @@ def check_control(
     for paired_switch in gv_json_config['paired_switches']:
         if (paired_switch['b_zone'] == zone_name and 
                 paired_switch['b_control'] == control_name):
-            desired_state = get_control_state(
+            a_state = get_control_state(
                     paired_switch['a_zone'], 
                     paired_switch['a_control'])
-            control_data = {}
-            control_data['name'] = control_name
-            control_data['state'] = desired_state
-            log_message('Returning paired switch control data.. %s:%s -> %s:%s .. %s' % (
-                paired_switch['a_zone'], 
-                paired_switch['a_control'],
-                paired_switch['b_zone'], 
-                paired_switch['b_control'],
-                control_data))
-            return control_data
+            b_state = get_control_state(
+                    paired_switch['b_zone'], 
+                    paired_switch['b_control'])
+
+            if (a_state != -1 and 
+                    b_state != -1 and 
+                    a_state != b_state):
+                control_data = {}
+                control_data['name'] = control_name
+                control_data['state'] = a_state
+                log_message('Returning paired switch control data.. %s:%s -> %s:%s .. %s' % (
+                    paired_switch['a_zone'], 
+                    paired_switch['a_control'],
+                    paired_switch['b_zone'], 
+                    paired_switch['b_control'],
+                    control_data))
+                return control_data
 
     # fall-through nothing to do
     log_message('No timer or paired data found')
