@@ -553,21 +553,34 @@ def check_control(
         zone_name,
         control_name))
 
+    current_time = int(time.strftime("%H%M", time.localtime()))
+    current_time_rel_secs = ((int(current_time / 100) * 60 * 60) + 
+            ((current_time % 100) * 60))
+
     # device programs
     for device_program in gv_json_config['device_programs']:
-        if (device_program['zone'] == zone_name and 
-                device_program['control'] == control_name):
-            for event in device_program['events']:
-                # Event time
-                event_time = get_event_time(event['time'])
-                current_time = int(time.strftime("%H%M", time.localtime()))
+
+        # skip other devices
+        if (device_program['zone'] != zone_name or 
+                device_program['control'] != control_name):
+            continue
+
+        for event in device_program['events']:
+
+            # Event times
+            # either a 'times' list or a single 'time'
+            if 'times' in event:
+                times_list = event['times']
+            else:
+                times_list = []
+                times_list.append(event['time'])
+
+            for event_time_str in times_list:
+                event_time = get_event_time(event_time_str)
 
                 # Convert HHMM int values into relative seconds for day
                 event_time_rel_secs = ((int(event_time / 100) * 60 * 60) + 
                         ((event_time % 100) * 60))
-
-                current_time_rel_secs = ((int(current_time / 100) * 60 * 60) + 
-                        ((current_time % 100) * 60))
 
                 last_program_epoch = 0
                 if (device_name in gv_jbhasd_control_program_dict and
@@ -584,8 +597,8 @@ def check_control(
                     program_threshold,
                     last_program_interval))
 
-                if (program_threshold < 300):
-                    if (last_program_interval > 300):
+                if (program_threshold < 60):
+                    if (last_program_interval > 60):
                         control_data = copy.deepcopy(event['params'])
                         control_data['name'] = control_name
                         log_message('Returning control data.. %s' % (control_data))
@@ -594,8 +607,8 @@ def check_control(
                         log_message('Already programmed %d seconds ago' % (
                             last_program_interval))
                 else:
-                    log_message('Event time %s is outside of 5 min interval' % (
-                        event['time']))
+                    log_message('Event time %s is outside of 1 min interval' % (
+                        event_time_str))
 
 
 
