@@ -12,7 +12,7 @@
 // Software Version
 // Crude compile-time grab of date and time
 // into string
-const char *gv_sw_compile_date = "JBHASD-VERSION " __DATE__ " " __TIME__;
+const char *gv_sw_compile_date = "JBHASD-VERSION " __DATE__ ;
 
 // Global device provile constructed from config
 struct device_profile gv_device;
