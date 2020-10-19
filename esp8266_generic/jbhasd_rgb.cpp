@@ -1,6 +1,38 @@
 #include "HandyTaskMan.h"
 #include "jbhasd_types.h"
 
+// RGB (0-255) -> ESP8266 10-bit PWM (0-1023)
+// Applies CIE1931 gamma correction on the perceived
+// RGB colour
+const uint16_t PROGMEM gamma10[] = {
+    0, 0, 1, 1, 2, 2, 3, 3, 4, 4,
+    4, 5, 5, 6, 6, 7, 7, 8, 8, 8,
+    9, 9, 10, 10, 11, 11, 12, 12, 13, 13,
+    14, 15, 15, 16, 17, 17, 18, 19, 19, 20,
+    21, 22, 22, 23, 24, 25, 26, 27, 28, 29,
+    30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+    40, 42, 43, 44, 45, 47, 48, 50, 51, 52,
+    54, 55, 57, 58, 60, 61, 63, 65, 66, 68,
+    70, 71, 73, 75, 77, 79, 81, 83, 84, 86,
+    88, 90, 93, 95, 97, 99, 101, 103, 106, 108,
+    110, 113, 115, 118, 120, 123, 125, 128, 130, 133,
+    136, 138, 141, 144, 147, 149, 152, 155, 158, 161,
+    164, 167, 171, 174, 177, 180, 183, 187, 190, 194,
+    197, 200, 204, 208, 211, 215, 218, 222, 226, 230,
+    234, 237, 241, 245, 249, 254, 258, 262, 266, 270,
+    275, 279, 283, 288, 292, 297, 301, 306, 311, 315,
+    320, 325, 330, 335, 340, 345, 350, 355, 360, 365,
+    370, 376, 381, 386, 392, 397, 403, 408, 414, 420,
+    425, 431, 437, 443, 449, 455, 461, 467, 473, 480,
+    486, 492, 499, 505, 512, 518, 525, 532, 538, 545,
+    552, 559, 566, 573, 580, 587, 594, 601, 609, 616,
+    624, 631, 639, 646, 654, 662, 669, 677, 685, 693,
+    701, 709, 717, 726, 734, 742, 751, 759, 768, 776,
+    785, 794, 802, 811, 820, 829, 838, 847, 857, 866,
+    875, 885, 894, 903, 913, 923, 932, 942, 952, 962,
+    972, 982, 992, 1002, 1013, 1023
+};
+
 // Function gpio_tgb_alloc
 // allocated RGB controller struct
 struct gpio_rgb* gpio_rgb_alloc(void)
@@ -45,16 +77,6 @@ void parse_rgb_colour(uint32_t colour,
                 green,
                 blue);
 
-    // apply PWM.. scales from 0..255 to 0..1023
-    red = red * MAX_PWM_VALUE / 255;
-    green = green * MAX_PWM_VALUE / 255;
-    blue = blue * MAX_PWM_VALUE / 255;
-
-    log_message("Applied PWM.. Red:%u Green:%u Blue:%u",
-                red,
-                green,
-                blue);
-
     // Apply optional brightness modification
     // value 1-255 is rendered into
     // a fraction of 255 and multiplied against the
@@ -67,11 +89,21 @@ void parse_rgb_colour(uint32_t colour,
         green = float(green) * brightness_factor;
         blue = float(blue) * brightness_factor;
 
-        log_message("Applied Brightness.. Red:%u Green:%u Blue:%u",
+        log_message("Applied Brightness adjustment.. Red:0x%02X Green:0x%02X Blue:0x%02X",
                     red,
                     green,
                     blue);
     }
+
+    // apply mapping to 10-bit (0-1023) PWM via CIE1931 table
+    red = pgm_read_word(&gamma10[red]);
+    green = pgm_read_word(&gamma10[green]);
+    blue = pgm_read_word(&gamma10[blue]);
+
+    log_message("Applied PWM mapping (10-bit CIE1931).. Red:%u Green:%u Blue:%u",
+                red,
+                green,
+                blue);
 }
 
 // Function shift_rgb
@@ -478,30 +510,23 @@ void set_rgb_state(struct gpio_rgb *gpio_rgb)
                 gpio_rgb->program[gpio_rgb->index].pause);
 
 
-    // parse the desired state into PWM
-    // values or generate random colour
+    // generate random colour if applicable
     if (gpio_rgb->program[gpio_rgb->index].random) {
-        // random
-        gpio_rgb->desired_states[0] = random(0, MAX_PWM_VALUE);
-        gpio_rgb->desired_states[1] = random(0, MAX_PWM_VALUE);
-        gpio_rgb->desired_states[2] = random(0, MAX_PWM_VALUE);
-
-        log_message("Generated random PWM values.. Red:%u Green:%u Blue:%u",
-                    gpio_rgb->desired_states[0],
-                    gpio_rgb->desired_states[1],
-                    gpio_rgb->desired_states[2]);
+        gpio_rgb->program[gpio_rgb->index].colour = random(0, 0xFFFFFF);
+        log_message("Generated random colour.. 0x%06X",
+                    gpio_rgb->program[gpio_rgb->index].colour);
     }
-    else {
-        parse_rgb_colour(gpio_rgb->program[gpio_rgb->index].colour,
-                         end_red,
-                         end_green,
-                         end_blue);
 
-        // populate into desired state array
-        gpio_rgb->desired_states[0] = end_red;
-        gpio_rgb->desired_states[1] = end_green;
-        gpio_rgb->desired_states[2] = end_blue;
-    }
+    // Parse colour into PWM gamma-mapped values
+    parse_rgb_colour(gpio_rgb->program[gpio_rgb->index].colour,
+                     end_red,
+                     end_green,
+                     end_blue);
+
+    // populate into desired state array
+    gpio_rgb->desired_states[0] = end_red;
+    gpio_rgb->desired_states[1] = end_green;
+    gpio_rgb->desired_states[2] = end_blue;
 }
 
 void setup_rgb(struct gpio_rgb *gpio_rgb)
