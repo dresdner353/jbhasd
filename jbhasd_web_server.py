@@ -560,9 +560,11 @@ def check_control(
     # device programs
     for device_program in gv_json_config['device_programs']:
 
-        # skip other devices
+        # skip programs based on non-match of zone/control 
+        # and if they are disabled
         if (device_program['zone'] != zone_name or 
-                device_program['control'] != control_name):
+                device_program['control'] != control_name or
+                not device_program['enabled']):
             continue
 
         for event in device_program['events']:
