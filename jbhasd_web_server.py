@@ -28,17 +28,20 @@ from zeroconf import ServiceBrowser, Zeroconf
 import requests
 import cherrypy
 
-### Begin Web page template
-# Templated web page as the header section with CSS and jquery generated
-# code
-# The body section is a single div with the generated dashboard HTML
 web_page_template = """
 <head>
     <title>__TITLE__</title>
     <meta id="META" name="viewport" content="width=device-width, initial-scale=1.0" >
-    <style type="text/css">__CSS__</style>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-giJF6kkoqNQ00vy+HMDP7azOuL0xtbfIcaT9wjKHr8RbDVddVHyTfAAsrekwKmP1" crossorigin="anonymous">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/js/bootstrap.bundle.min.js" integrity="sha384-ygbV9kiqUc6oa4msXn9868pTtWMgiQaeYH7/t7LECLbyPA2x65Kgf80OJFdroafW" crossorigin="anonymous"></script>
+
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+    <style type="text/css">__CSS__</style>
+
     <script>
+
 
     $(document).ready(function(){
         __SWITCH_FUNCTIONS__
@@ -64,11 +67,9 @@ web_page_template = """
     // causing major issues
     var refresh_timer = setInterval(refreshPage, __RELOAD__);
     
-    var window_width;
-
     function refreshPage() {
         if (window_focus == true) {
-            $.get("__REFRESH_URL__?width=" + window.innerWidth, function(data, status){
+            $.get("__REFRESH_URL__", function(data, status){
                 clearInterval(refresh_timer);
                 $("#dashboard").html(data);
             });
@@ -81,7 +82,15 @@ web_page_template = """
     <div id="dashboard">__DASHBOARD__</div>
 </body>
 """
-### End Web page template
+
+web_page_css = """
+
+.material-icons.md-18 { font-size: 18px; }
+.material-icons.md-24 { font-size: 24px; }
+.material-icons.md-36 { font-size: 36px; }
+.material-icons.md-48 { font-size: 48px; }
+
+"""
 
 # Begin switch on click function
 # The switch click template is the jquery code
@@ -93,7 +102,7 @@ web_page_template = """
 click_get_reload_template = """
         $("#__ID__").click(function(){
             $.get("__ACTION_URL__", function(){
-                $.get("__REFRESH_URL__?width=" + window.innerWidth, function(data, status){
+                $.get("__REFRESH_URL__", function(data, status){
                     // clear refresh timer before reload
                     clearInterval(refresh_timer);
                     $("#dashboard").html(data);
@@ -111,11 +120,11 @@ web_page_reload_template = """
     <script>
 
     $(document).ready(function(){
-        reload_w_width();
+        reload();
     });
 
-    function reload_w_width() {
-        $.get("__REFRESH_URL__?width=" + window.innerWidth, function(data, status){
+    function reload() {
+        $.get("__REFRESH_URL__", function(data, status){
             $("#dashboard").html(data);
         });
     }
@@ -128,158 +137,6 @@ web_page_reload_template = """
 """
 ### End Web page template
 
-
-
-# Begin CSS ##################
-# Used checkbox example from 
-# https://www.w3schools.com/howto/tryit.asp?filename=tryhow_css_switch
-web_page_css = """
-
-* {font-family: verdana}
-
-body {
-    background: -webkit-linear-gradient(-225deg, rgba(165,164,164,1) 0, rgba(53,53,53,1) 100%);
-    background: -moz-linear-gradient(315deg, rgba(165,164,164,1) 0, rgba(53,53,53,1) 100%);
-    background: linear-gradient(315deg, rgba(165,164,164,1) 0, rgba(53,53,53,1) 100%);
-    background-position: 50% 50%;
-}
-
-.timestamp {
-    font: normal 16px/1 Verdana, Geneva, sans-serif;
-    font-size: 15px;
-    color: rgba(255,255,255,1);
-}
-
-.switch {
-    position: relative;
-    display: inline-block;
-    width: 60px;
-    height: 34px;
-}
-
-.switch input {display:none;}
-
-.slider {
-    position: absolute;
-    cursor: pointer;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: #ccc;
-    -webkit-transition: .4s;
-    transition: .4s;
-}
-
-.slider:before {
-    position: absolute;
-    content: "";
-    height: 26px;
-    width: 26px;
-    left: 4px;
-    bottom: 4px;
-    background-color: white;
-    -webkit-transition: .4s;
-    transition: .4s;
-}
-
-input:checked + .slider {
-    background-color: #40bc34;
-}
-
-input:focus + .slider {
-    box-shadow: 0 0 1px #40bc34;
-}
-
-input:checked + .slider:before {
-    -webkit-transform: translateX(26px);
-    -ms-transform: translateX(26px);
-    transform: translateX(26px);
-}
-
-/* Rounded sliders */
-.slider.round {
-    border-radius: 34px;
-}
-
-.slider.round:before {
-    border-radius: 50%;
-}
-
-.dash-title {
-    font: normal 20px/1 Verdana, Geneva, sans-serif;
-    font-size: 20px;
-    color: rgba(255,255,255,1);
-}
-
-.dash-icon {
-    font-size: 20px;
-}
-
-.dash-label {
-    font: normal 16px/1 Verdana, Geneva, sans-serif;
-    font-size: 16px;
-    color: rgba(255,255,255,1);
-}
-
-.dash-value {
-    font: normal 16px/1 Verdana, Geneva, sans-serif;
-    font-size: 16px;
-    color: rgba(255,255,255,1);
-}
-
-.dash-url {
-    font: normal 14px/1 Verdana, Geneva, sans-serif;
-    font-size: 14px;
-    color: rgba(255,255,255,1);
-}
-
-.status-text {
-    font: normal 14px/1 Courier;
-    font-size: 14px;
-    color: rgba(255,255,255,1);
-}
-
-a {
-    color: rgba(255,255,255,1);
-    text-decoration: none;
-}
-
-.dash-box {
-    display: inline;
-    -webkit-box-sizing: content-box;
-    -moz-box-sizing: content-box;
-    box-sizing: content-box;
-    float: left;
-    margin: 5px 5px 5px;
-    padding: 5px 5px 5px;
-    border: none;
-    width: __DASHBOX_WIDTH__px;
-    -webkit-border-radius: 3px;
-    border-radius: 3px;
-    font: normal 16px/1 Verdana, Geneva, sans-serif;
-    color: rgba(255,255,255,1);
-    -o-text-overflow: ellipsis;
-    text-overflow: ellipsis;
-    background: -webkit-linear-gradient(0deg, rgba(64,150,238,1) 0, rgba(8,51,142,1) 100%);
-    background: -moz-linear-gradient(90deg, rgba(64,150,238,1) 0, rgba(8,51,142,1) 100%);
-    background: linear-gradient(90deg, rgba(64,150,238,1) 0, rgba(8,51,142,1) 100%);
-    background-position: 50% 50%;
-    -webkit-background-origin: padding-box;
-    background-origin: padding-box;
-    -webkit-background-clip: border-box;
-    background-clip: border-box;
-    -webkit-background-size: auto auto;
-    background-size: auto auto;
-    -webkit-box-shadow: 3px 3px 4px 0 rgba(0,0,0,0.4) ;
-    box-shadow: 3px 3px 4px 0 rgba(0,0,0,0.4) ;
-    -webkit-transition: all 200ms cubic-bezier(0.42, 0, 0.58, 1) 10ms;
-    -moz-transition: all 200ms cubic-bezier(0.42, 0, 0.58, 1) 10ms;
-    -o-transition: all 200ms cubic-bezier(0.42, 0, 0.58, 1) 10ms;
-    transition: all 200ms cubic-bezier(0.42, 0, 0.58, 1) 10ms;
-}
-"""
-# END CSS ##################
 
 # Config
 gv_home_dir = os.path.expanduser('~')
@@ -311,7 +168,6 @@ def set_default_config():
     # dashboard
     json_config['dashboard'] = {}
     json_config['dashboard']['initial_num_columns'] = 1
-    json_config['dashboard']['box_width'] = 250
     json_config['dashboard']['col_division_offset'] = 20
 
     # sunset
@@ -428,10 +284,10 @@ gv_http_timeout_secs = 10
 # Dict to map switch context to Unicode
 # symbol
 gv_context_symbol_dict = {
-        'network' : '&#x1F551;',
-        'manual' : '&#x1F447',
-        'init' : ' ',
-        'motion' : '&#x1F3C3;',
+        'network' : 'settings_remote',
+        'manual' : 'touch_app',
+        'init' : '',
+        'motion' : 'directions_walk',
         }
 
 # Maps switch context to title
@@ -1090,7 +946,117 @@ def probe_devices():
     return
 
 
-def build_zone_web_page(num_cols):
+def get_google_icon(control_name):
+    icon_register = [
+            {
+                'google_icon' : 'wb_incandescent',
+                'keywords' : [
+                    'light',
+                    'lamp',
+                    ]
+            },
+            {
+                'google_icon' : 'wb_iridescent',
+                'keywords' : [
+                    'rgb',
+                    'argb',
+                    'strip',
+                    'white',
+                    ]
+            },
+            {
+                'google_icon' : 'speaker',
+                'keywords' : [
+                    'stereo',
+                    'music',
+                    'subwoofer',
+                    'monitor',
+                    ]
+            },
+            {
+                'google_icon' : 'tv',
+                'keywords' : [
+                    'tv',
+                    'cinema',
+                    'avr',
+                    ]
+            },
+            {
+                'google_icon' : 'ac_unit',
+                'keywords' : [
+                    'fan',
+                    'cooler',
+                    'hvac',
+                    'temp',
+                    ]
+            },
+            {
+                'google_icon' : 'nature_people',
+                'keywords' : [
+                    'tree',
+                    'bush',
+                    'hedge',
+                    ]
+            },
+            {
+                'google_icon' : 'pets',
+                'keywords' : [
+                    'dog',
+                    'cat',
+                    'deer',
+                    ]
+            },
+            {
+                'google_icon' : 'sensor_door',
+                'keywords' : [
+                    'door',
+                    ]
+            },
+            {
+                'google_icon' : 'videogame_asset',
+                'keywords' : [
+                    'xbox',
+                    'playstation',
+                    'nintendo',
+                    ]
+            },
+            {
+                'google_icon' : 'outlet',
+                'keywords' : [
+                    'socket',
+                    'outlet',
+                    'power',
+                    ]
+            },
+            {
+                'google_icon' : 'roofing',
+                'keywords' : [
+                    'roof',
+                    'fascia',
+                    'gutter',
+                    ]
+            },
+            {
+                'google_icon' : 'desktop_mac',
+                'keywords' : [
+                    'desk',
+                    'computer',
+                    'pc',
+                    'mac',
+                    ]
+            },
+    ]
+
+    control_name_lcase = control_name.lower()
+    for icon_obj in icon_register:
+        for keyword in icon_obj['keywords']:
+            if keyword in control_name_lcase:
+                return icon_obj['google_icon']
+
+    return 'outlet'
+
+
+def build_zone_web_page():
     global gv_jbhasd_zconf_url_set
     global gv_jbhasd_device_status_dict
     global gv_jbhasd_device_url_dict
@@ -1099,522 +1065,27 @@ def build_zone_web_page(num_cols):
     device_list = list(gv_jbhasd_device_status_dict)
     url_dict_copy = copy.deepcopy(gv_jbhasd_device_url_dict)
 
-    # We'll build one string of data
-    # for the jquery code defining
-    # the clicking and load actions
-    # The switch_id number will be incremented
-    # as we define switches and matched between the 
-    # generated HTML for the switch and jquery
-    # code for the click action
     jquery_str = ""
-
-    # For HTML content, its a list of columns
-    # initialised to blank strings
-    # also init size dict to 0 for each column
-    dashboard_col_list = []
-    dashboard_col_size_dict = {}
-    for i in range(0, num_cols):
-        dashboard_col_list.append("")
-        dashboard_col_size_dict[i] = 0
-
     switch_id = 0
 
-    # Track the size of each zone in terms of number
-    # of controls and sensors
-    # will use this to then to control a balanced 
-    # distribution of widgets into vertical columns
-    zone_size_dict = {}
+    switch_card_dict = {}
+    other_card_dict = {}
+
+    # collect zones in a set
+    zone_set = set()
+
+    # Controls population
     for device_name in device_list:
         json_data = gv_jbhasd_device_status_dict[device_name]
-        device_name = json_data['name']
         zone_name = json_data['zone']
-        device_size = (len(json_data['controls']) + 1)
-
-        if (zone_name in zone_size_dict):
-            zone_size_dict[zone_name] += device_size
-        else:
-            zone_size_dict[zone_name] = device_size
-
-    # Alphabetic name sort to begin
-    sorted_zone_list = sorted(zone_size_dict.keys())
-
-    for zone in sorted_zone_list:
-        # determine col_index
-        # based on smallest accumulated size of 
-        # existing columns
-        col_index = 0
-        smallest_col_size = 0
-        for i in range (0, num_cols):
-            # find smallest column
-            # defaulting with first
-            if i == 0 or dashboard_col_size_dict[i] < smallest_col_size:
-                col_index = i
-                smallest_col_size = dashboard_col_size_dict[i]
-
-        # add zize of selected zone to tracked size per column
-        dashboard_col_size_dict[col_index] += zone_size_dict[zone]
-        
-        #log_message("Putting zone:%s in col:%d" % (zone, col_index))
-
-        # start the dash-box widget
-        dashboard_col_list[col_index] += ('<div class="dash-box">'
-                                          '<p class="dash-title">%s</p>'
-                                          '<table border="0" padding="3" '
-                                          'width="100%%">') % (zone)
-
-        # Controls in this zone
-        for device_name in device_list:
-            json_data = gv_jbhasd_device_status_dict[device_name]
-            zone_name = json_data['zone']
-            url = url_dict_copy[device_name]
-
-            if (zone == zone_name):
-                # Controls
-                for control in json_data['controls']:
-                    control_name = control['name']
-                    control_type = control['type']
-
-                    if control_type == 'switch':
-                        control_state = int(control['state'])
-                        control_context = control['context']
-                        alternate_state = (control_state + 1) % 2
-
-                        # prep args for transport
-                        url_safe_device = urllib.parse.quote_plus(device_name)
-                        url_safe_zone = urllib.parse.quote_plus(zone_name)
-                        url_safe_control = urllib.parse.quote_plus(control_name)
-
-                        # href URL for generated html
-                        # This is a URL to the webserver
-                        # carrying the device URL and directives
-                        # to change the desired switch state
-                        href_url = ('/api?device=%s'
-                                    '&zone=%s'
-                                    '&control=%s'
-                                    '&state=%d') % (url_safe_device,
-                                                    url_safe_zone,
-                                                    url_safe_control,
-                                                    alternate_state)
-
-                        if (alternate_state == 1):
-                            checked_str = ""
-                        else:
-                            checked_str = "checked"
-
-                        # format checkbox css slider in table cell
-                        # with id set to the desired switch_id string
-                        # the checked_str also ensures the checkbox is 
-                        # rendered in the current state
-                        dashboard_col_list[col_index] += ('<tr>'
-                                                          '<td class="dash-label">%s</td>'
-                                                          '<td align="center">'
-                                                          '<label class="switch">'
-                                                          '<input type="checkbox" '
-                                                          'id="switch%d" %s>'
-                                                          '<div class="slider round"></div>'
-                                                          '</label>'
-                                                          '</td>'
-                                                          '<td class="dash-icon" title="%s">%s</td>'
-                                                          '</tr>') % (control_name,
-                                                                      switch_id,
-                                                                      checked_str,
-                                                                      gv_context_title_dict[control_context],
-                                                                      gv_context_symbol_dict[control_context])
-
-                        # Jquery code for the click state
-                        # Generated with the same switch id
-                        # to match the ckick action to the related
-                        # url and checkbox switch
-                        switch_str = click_get_reload_template
-                        jquery_click_id = 'switch%d' % (switch_id)
-                        switch_str = switch_str.replace("__ID__", jquery_click_id)
-                        switch_str = switch_str.replace("__ACTION_URL__", href_url)
-                        jquery_str += switch_str
-
-                        # increment for next switch         
-                        switch_id += 1
-
-        # Spacing between controls and sensors
-        dashboard_col_list[col_index] += '<tr><td></td></tr>'
-        dashboard_col_list[col_index] += '<tr><td></td></tr>'
-        dashboard_col_list[col_index] += '<tr><td></td></tr>'
-
-        # sensors in this zone
-        for device_name in device_list:
-            json_data = gv_jbhasd_device_status_dict[device_name]
-            zone_name = json_data['zone']
-            url = url_dict_copy[device_name]
-
-            if (zone == zone_name):
-                # Sensors
-                for control in json_data['controls']:
-                    control_name = control['name']
-                    control_type = control['type']
-
-                    if (control_type == 'temp/humidity'):
-                        temp = control['temp']
-                        humidity = control['humidity']
-
-                        # &#x1f321 thermometer temp
-                        # &#x1f322 droplet humidity
-                        dashboard_col_list[col_index] += (
-                                '<tr>'
-                                '<td class="dash-label" width="50%%">%s</td>'
-                                '<td class="dash-value" colspan="2">'
-                                '<table border="0" width="100%%">'
-                                '<tr><td class="dash-icon" align="center">&#x1F321;</td>'
-                                '<td class="dash-value" align="left">%s C</td></tr>'
-                                '<tr><td class="dash-icon" align="center">&#x1F4A7;</td>'
-                                '<td class="dash-value" align="left">%s %%</td></tr>'
-                                '</table></td>'
-                                '</tr>') % (control_name,
-                                            temp,
-                                            humidity)
-
-                        dashboard_col_list[col_index] += '<tr><td></td></tr>'
-                        dashboard_col_list[col_index] += '<tr><td></td></tr>'
-
-                    if (control_type == 'rgb'):
-                        current_colour = control['current_colour']
-
-                        dashboard_col_list[col_index] += (
-                                '<tr>'
-                                '<td class="dash-label">%s</td>'
-                                '<td style="color:#%s" align="center">'
-                                '<span title="%s">'
-                                '&#x2B24;&#x2B24;&#x2B24;&#x2B24;&#x2B24;'
-                                '</span>'
-                                '</td>'
-                                '</tr>') % (control_name,
-                                            current_colour[4:],
-                                            current_colour)
-
-                        dashboard_col_list[col_index] += '<tr><td></td></tr>'
-                        dashboard_col_list[col_index] += '<tr><td></td></tr>'
-
-                    if (control_type == 'argb'):
-                        # parse program, isolating 4th semi-colon 
-                        # section and spliting it by comma
-                        colour_list = []
-                        if 'colours' in control['program']:
-                            colour_list = control['program']['colours']
-
-                        # start row, format label and start of 
-                        # colour cell
-                        dashboard_col_list[col_index] += (
-                                '<tr>'
-                                '<td class="dash-label">%s</td>'
-                                '<td>') % (control_name)
-
-                        # Iterate colours and format in stack of
-                        # 5 dots
-                        i = 0
-                        for colour in colour_list:
-                            colour_int = int(colour, 0)
-                            dashboard_col_list[col_index] += (
-                                    '<span style="color:#%06X">'
-                                    '&#x2B24;'
-                                    '</span>') % (colour_int)
-                            i += 1
-                            if (i % 5 == 0):
-                                dashboard_col_list[col_index] += '<br>'
-
-                        # terminate the colour cell and row
-                        dashboard_col_list[col_index] += '</td></tr>'
-
-                        dashboard_col_list[col_index] += '<tr><td></td></tr>'
-                        dashboard_col_list[col_index] += '<tr><td></td></tr>'
-
-        # terminate the zone table and container div
-        dashboard_col_list[col_index] += '</table></div>'
-
-    # Build the dashboard portion
-    # It's the timestamp and then a single row table, 
-    # one cell per vertical column.
-    # Table width is set to 50% force it compress
-    # more. Otherwise it will tend to go for a 100% fill
-    # and the odd column will be given more width.
-    # Cells are vertically aligned to top to keep widgets 
-    # top-down in layout and not vertically-centred
-    dashboard_str = ('<div class="timestamp" align="right">'
-                     'Updated %s <a title="Switch to Device View" href="/device" class="dash-icon">&#x2699;</a></div>') % (time.asctime())
-
-    dashboard_str += '<table border="0" width="50%%"><tr>'
-    for col_str in dashboard_col_list:
-        dashboard_str += '<td valign="top">'
-        dashboard_str += col_str
-        dashboard_str += '</td>'
-    dashboard_str += '</tr></table>'
-
-    # Build and return the web page
-    # dropping in CSS, generated jquery code
-    # and dashboard.
-    web_page_str = web_page_template
-    web_page_str = web_page_str.replace("__TITLE__", "JBHASD Zone Console")
-    web_page_str = web_page_str.replace("__CSS__", web_page_css)
-    web_page_str = web_page_str.replace("__DASHBOX_WIDTH__", str(gv_json_config['dashboard']['box_width']))
-    web_page_str = web_page_str.replace("__SWITCH_FUNCTIONS__", jquery_str)
-    web_page_str = web_page_str.replace("__DASHBOARD__", dashboard_str)
-    web_page_str = web_page_str.replace("__REFRESH_URL__", "/zone")
-    web_page_str = web_page_str.replace("__RELOAD__", str(gv_json_config['discovery']['device_probe_interval'] * 1000))
-
-    return web_page_str
-
-
-def build_device_web_page(num_cols):
-    global gv_sunset_time
-    global gv_actual_sunset_time
-    global gv_sunrise_time
-    global gv_actual_sunrise_time
-    global gv_json_config
-    global gv_jbhasd_zconf_url_set
-    global gv_jbhasd_device_status_dict
-    global gv_jbhasd_device_url_dict
-
-    # safe snapshot of dict keys into list
-    device_list = list(gv_jbhasd_device_status_dict)
-    url_dict_copy = copy.deepcopy(gv_jbhasd_device_url_dict)
-
-    # We'll build one string of data
-    # for the jquery code defining
-    # the clicking and load actions
-    # The switch_id number will be incremented
-    # as we define switches and matched between the 
-    # generated HTML for the switch and jquery
-    # code for the click action
-    jquery_str = ""
-
-    # For HTML content, its a list of columns
-    # initialised to blank strings
-    # also init size dict to 0 for each column
-    dashboard_col_list = []
-    dashboard_col_size_dict = {}
-    for i in range(0, num_cols):
-        dashboard_col_list.append("")
-        dashboard_col_size_dict[i] = 0
-
-    device_id = 0
-    switch_id = 0
-
-    # Track the size of each device in terms of number
-    # of controls and sensors
-    # will use this to then to control a balanced 
-    # distribution of widgets into vertical columns
-    device_size_dict = {}
-    for device_name in device_list:
-        json_data = gv_jbhasd_device_status_dict[device_name]
-        device_name = json_data['name']
-        device_size = (len(json_data['controls']) + 2)
-        device_size_dict[device_name] = device_size
-
-    # start the dash-box widget
-    dashboard_col_list[0] += (
-            '<div class="dash-box">'
-            '<p class="dash-title">Control Panel</p>'
-            '<table border="0" padding="3" width="100%%">') 
-
-    dashboard_col_list[0] += (
-            '<tr>'
-            '<td class="dash-label">Discovered Devices</td>'
-            '<td align="center" class="dash-value">'
-            '%s'
-            '</td>'
-            '</tr>') % (len(gv_jbhasd_zconf_url_set))
-
-    dashboard_col_list[0] += (
-            '<tr>'
-            '<td class="dash-label">Probed Devices</td>'
-            '<td align="center" class="dash-value">'
-            '%s'
-            '</td>'
-            '</tr>') % (len(device_list))
-
-    dashboard_col_list[0] += (
-            '<tr>'
-            '<td class="dash-label">Sunset</td>'
-            '<td align="center" class="dash-value">'
-            '%s'
-            '</td>'
-            '</tr>') % (gv_actual_sunset_time)
-
-    dashboard_col_list[0] += (
-            '<tr>'
-            '<td class="dash-label">Sunrise</td>'
-            '<td align="center" class="dash-value">'
-            '%s'
-            '</td>'
-            '</tr>') % (gv_actual_sunrise_time)
-
-    dashboard_col_list[0] += (
-            '<tr>'
-            '<td class="dash-label">Offset (secs)</td>'
-            '<td align="center" class="dash-value">'
-            '%s'
-            '</td>'
-            '</tr>') % (gv_json_config['sunset']['offset'])
-
-    # reboot URL for all devices
-    href_url = ('/api?device=all&reboot=1')
-
-    # jquery code for click
-    reboot_str = click_get_reload_template
-    jquery_click_id = 'reboot_all'
-    reboot_str = reboot_str.replace("__ID__", jquery_click_id)
-    reboot_str = reboot_str.replace("__ACTION_URL__", href_url)
-    jquery_str += reboot_str
-
-    dashboard_col_list[0] += (
-            '<tr>'
-            '<td class="dash-label">Reboot All</td>'
-            '<td align="center">'
-            '<label class="switch">'
-            '<input type="checkbox" id="%s">'
-            '<div class="slider round"></div>'
-            '</label>'
-            '</td>'
-            '</tr>') % (jquery_click_id)
-
-    # reconfig URL for all devices
-    href_url = ('/api?device=all&reconfig=1')
-
-    # jquery code for click
-    reconfig_str = click_get_reload_template
-    jquery_click_id = 'reconfig_all'
-    reconfig_str = reconfig_str.replace("__ID__", jquery_click_id)
-    reconfig_str = reconfig_str.replace("__ACTION_URL__", href_url)
-    jquery_str += reconfig_str
-
-    dashboard_col_list[0] += (
-            '<tr>'
-            '<td class="dash-label">Reconfigure All</td>'
-            '<td align="center">'
-            '<label class="switch">'
-            '<input type="checkbox" id="%s">'
-            '<div class="slider round"></div>'
-            '</label>'
-            '</td>'
-            '</tr>') % (jquery_click_id)
-
-    dashboard_col_list[0] += '</table></div>'
-
-    # account for size of master dash box
-    dashboard_col_size_dict[0] += 6 
-
-    # Alphabetic name sort to begin
-    sorted_device_list = sorted(device_list)
-
-    for device_name in sorted_device_list:
-        json_data = gv_jbhasd_device_status_dict[device_name]
-        device_name = json_data['name']
-        zone_name = json_data['zone']
+        zone_set.add(zone_name)
         url = url_dict_copy[device_name]
 
-        # determine col_index
-        # based on smallest accumulated size of 
-        # existing columns
-        col_index = 0
-        smallest_col_size = 0
-        for i in range (0, num_cols):
-            # find smallest column
-            # defaulting with first
-            if i == 0 or dashboard_col_size_dict[i] < smallest_col_size:
-                col_index = i
-                smallest_col_size = dashboard_col_size_dict[i]
+        # init card lists for zone
+        if not zone_name in switch_card_dict:
+            switch_card_dict[zone_name] = []
+            other_card_dict[zone_name] = []
 
-        # add zize of selected zone to tracked size per column
-        dashboard_col_size_dict[col_index] += device_size_dict[device_name]
-        
-        # start the dash-box widget
-        dashboard_col_list[col_index] += (
-                '<div class="dash-box">'
-                '<p class="dash-title">%s<br>%s</p>'
-                '<a href="%s" target="json-window" title="View JSON Status">'
-                '<p class="dash-url">[%s]</p></a>') % (
-                        device_name,
-                        zone_name,
-                        url,
-                        url)
-
-        # table for widget controls/sensors
-        dashboard_col_list[col_index] += (
-                '<table border="0" padding="3" width="100%%">') 
-
-        # reboot URL
-        # carries device name and reboot=1
-        # directive
-        url_safe_device = urllib.parse.quote_plus(device_name)
-        href_url = ('/api?device=%s'
-                    '&reboot=1') % (url_safe_device)
-
-        # jquery code for reboot click
-        reboot_str = click_get_reload_template
-        jquery_click_id = 'reboot_device%d' % (device_id)
-        reboot_str = reboot_str.replace("__ID__", jquery_click_id)
-        reboot_str = reboot_str.replace("__ACTION_URL__", href_url)
-        jquery_str += reboot_str
-
-        dashboard_col_list[col_index] += (
-                '<tr>'
-                '<td class="dash-label">Reboot</td>'
-                '<td align="center">'
-                '<label class="switch">'
-                '<input type="checkbox" id="%s">'
-                '<div class="slider round"></div>'
-                '</label>'
-                '</td>'
-                '</tr>') % (jquery_click_id)
-
-        # reconfig URL
-        # carries device name and reconfig=1
-        # directive
-        url_safe_device = urllib.parse.quote_plus(device_name)
-        href_url = ('/api?device=%s'
-                    '&reconfig=1') % (url_safe_device)
-
-        # jquery code for reboot click
-        reconfig_str = click_get_reload_template
-        jquery_click_id = 'reconfig_device%d' % (device_id)
-        reconfig_str = reconfig_str.replace("__ID__", jquery_click_id)
-        reconfig_str = reconfig_str.replace("__ACTION_URL__", href_url)
-        jquery_str += reconfig_str
-
-        dashboard_col_list[col_index] += (
-                '<tr>'
-                '<td class="dash-label">Reconfigure</td>'
-                '<td align="center">'
-                '<label class="switch">'
-                '<input type="checkbox" id="%s">'
-                '<div class="slider round"></div>'
-                '</label>'
-                '</td>'
-                '</tr>') % (jquery_click_id)
-
-        # apmode URL
-        # carries device name and apmode=1
-        # directive
-        url_safe_device = urllib.parse.quote_plus(device_name)
-        href_url = ('/api?device=%s'
-                    '&apmode=1') % (url_safe_device)
-
-        # jquery code for apmode click
-        apmode_str = click_get_reload_template
-        jquery_click_id = 'apmode_device%d' % (device_id)
-        apmode_str = apmode_str.replace("__ID__", jquery_click_id)
-        apmode_str = apmode_str.replace("__ACTION_URL__", href_url)
-        jquery_str += apmode_str
-
-        dashboard_col_list[col_index] += (
-                '<tr>'
-                '<td class="dash-label">AP Mode</td>'
-                '<td align="center">'
-                '<label class="switch">'
-                '<input type="checkbox" id="%s">'
-                '<div class="slider round"></div>'
-                '</label>'
-                '</td>'
-                '</tr>') % (jquery_click_id)
-
-        # Controls in this zone
         # Controls
         for control in json_data['controls']:
             control_name = control['name']
@@ -1630,184 +1101,213 @@ def build_device_web_page(num_cols):
                 url_safe_zone = urllib.parse.quote_plus(zone_name)
                 url_safe_control = urllib.parse.quote_plus(control_name)
 
-                # href URL for generated html
-                # This is a URL to the webserver
-                # carrying the device URL and directives
-                # to change the desired switch state
-                href_url = ('/api?device=%s'
-                            '&zone=%s'
-                            '&control=%s'
-                            '&state=%d') % (url_safe_device,
-                                            url_safe_zone,
-                                            url_safe_control,
-                                            alternate_state)
+                href_url_off = (
+                        '/api?device=%s'
+                        '&zone=%s'
+                        '&control=%s'
+                        '&state=%d') % (
+                                url_safe_device,
+                                url_safe_zone,
+                                url_safe_control,
+                                0)
 
-                if (alternate_state == 1):
-                    checked_str = ""
-                else:
-                    checked_str = "checked"
+                href_url_on = (
+                        '/api?device=%s'
+                        '&zone=%s'
+                        '&control=%s'
+                        '&state=%d') % (
+                                url_safe_device,
+                                url_safe_zone,
+                                url_safe_control,
+                                1)
 
-                # Jquery code for the click state
-                # Generated with the same switch id
-                # to match the ckick action to the related
-                # url and checkbox switch
+
+                card = (
+                    '<div class="card text-center border-0">'
+                    '<div class="card-body">'
+                    '<i class="material-icons md-48">%s</i>'
+                    '<i class="material-icons md-18">%s</i>'
+                    '<p class="card-title">%s</p>'
+                    '<button type="button" id="switch%d" class="btn %s">Off</button>'
+                    '&nbsp;'
+                    '<button type="button" id="switch%d" class="btn %s">On</button>'
+                    '&nbsp;'
+                    '</div>'
+                    '</div>'
+                    ) % (
+                            get_google_icon(control_name),
+                            gv_context_symbol_dict[control_context],
+                            control_name,
+                            switch_id,
+                            'btn-primary' if control_state == 0 else 'btn-secondary',
+                            switch_id + 1,
+                            'btn-primary' if control_state == 1 else 'btn-secondary',
+                            )
+
+                switch_card_dict[zone_name].append(card)
+
                 switch_str = click_get_reload_template
                 jquery_click_id = 'switch%d' % (switch_id)
                 switch_str = switch_str.replace("__ID__", jquery_click_id)
-                switch_str = switch_str.replace("__ACTION_URL__", href_url)
+                switch_str = switch_str.replace("__ACTION_URL__", href_url_off)
                 jquery_str += switch_str
 
-                # format checkbox css slider in table cell
-                # with id set to the desired switch_id string
-                # the checked_str also ensures the checkbox is 
-                # rendered in the current state
-                dashboard_col_list[col_index] += (
-                        '<tr>'
-                        '<td class="dash-label">%s</td>'
-                        '<td align="center">'
-                        '<label class="switch">'
-                        '<input type="checkbox" id="%s" %s>'
-                        '<div class="slider round"></div>'
-                        '</label>'
-                        '</td>'
-                        '<td class="dash-icon" title="%s">%s</td>'
-                        '</tr>') % (control_name,
-                                    jquery_click_id,
-                                    checked_str,
-                                    gv_context_title_dict[control_context],
-                                    gv_context_symbol_dict[control_context])
+                switch_str = click_get_reload_template
+                jquery_click_id = 'switch%d' % (switch_id + 1)
+                switch_str = switch_str.replace("__ID__", jquery_click_id)
+                switch_str = switch_str.replace("__ACTION_URL__", href_url_on)
+                jquery_str += switch_str
 
-                # increment for next switch
-                switch_id += 1
+                # increment for next switch         
+                switch_id += 2
 
-        # Spacing between controls and sensors
-        dashboard_col_list[col_index] += '<tr><td></td></tr>'
-        dashboard_col_list[col_index] += '<tr><td></td></tr>'
-        dashboard_col_list[col_index] += '<tr><td></td></tr>'
-
-        # Read-only controls (sensors, RGB etc)
-        for control in json_data['controls']:
-            control_name = control['name']
-            control_type = control['type']
-
-            if (control_type == 'temp/humidity'):
+            if control_type == 'temp/humidity':
                 temp = control['temp']
                 humidity = control['humidity']
 
-                # &#x1f321 thermometer temp
-                # &#x1f322 droplet humidity
-                dashboard_col_list[col_index] += (
-                        '<tr>'
-                        '<td class="dash-label" width="50%%">%s</td>'
-                        '<td class="dash-value" colspan="2">'
-                        '<table border="0" width="100%%">'
-                        '<tr><td class="dash-icon" align="center">&#x1F321;</td>'
-                        '<td class="dash-value" align="left">%s C</td></tr>'
-                        '<tr><td class="dash-icon" align="center">&#x1F4A7;</td>'
-                        '<td class="dash-value" align="left">%s %%</td></tr>'
-                        '</table></td>'
-                        '</tr>') % (control_name,
-                                    temp,
-                                    humidity)
+                card = (
+                    '<div class="card text-center border-0">'
+                    '<div class="card-body">'
+                    '<i class="material-icons md-48">%s</i>'
+                    '<p class="card-title">%s</p>'
+                    '<p class="card-title">&#x1F321; %s C</p>'
+                    '<p class="card-title">&#x1F4A7; %s %%</p>'
+                    '</div>'
+                    '</div>'
+                    ) % (
+                            get_google_icon(control_name),
+                            control_name,
+                            temp,
+                            humidity
+                            )
 
-                dashboard_col_list[col_index] += '<tr><td></td></tr>'
-                dashboard_col_list[col_index] += '<tr><td></td></tr>'
+                other_card_dict[zone_name].append(card)
 
-            if (control_type == 'rgb'):
+            if control_type == 'rgb':
                 current_colour = control['current_colour']
 
-                dashboard_col_list[col_index] += (
-                        '<tr>'
-                        '<td class="dash-label">%s</td>'
-                        '<td style="color:#%s" align="center">'
-                        '<span title="%s">'
-                        '&#x2B24;&#x2B24;&#x2B24;&#x2B24;&#x2B24;'
-                        '</span>'
-                        '</td>'
-                        '</tr>') % (control_name,
-                                    current_colour[4:],
-                                    current_colour)
+                card = (
+                    '<div class="card text-center border-0">'
+                    '<div class="card-body">'
+                    '<i class="material-icons md-48">%s</i>'
+                    '<p class="card-title">%s</p>'
+                    '<small><p style="color:#%s">'
+                    '&#x2B24;&#x2B24;&#x2B24;&#x2B24;&#x2B24;</p></small>'
+                    '</div>'
+                    '</div>'
+                    ) % (
+                            get_google_icon(control_name),
+                            control_name,
+                            current_colour[4:]
+                            )
 
-                dashboard_col_list[col_index] += '<tr><td></td></tr>'
-                dashboard_col_list[col_index] += '<tr><td></td></tr>'
+                other_card_dict[zone_name].append(card)
 
-            if (control_type == 'argb'):
-                # parse program, isolating 4th semi-colon 
-                # section and spliting it by comma
+            if control_type == 'argb':
                 colour_list = []
                 if 'colours' in control['program']:
-                    colour_list = control['program']['colours']
-
-                # start row, format label and start of 
-                # colour cell
-                dashboard_col_list[col_index] += (
-                        '<tr>'
-                        '<td class="dash-label">%s</td>'
-                        '<td>') % (control_name)
+                    # limit to first 25 LEDs
+                    colour_list = control['program']['colours'][:50]
 
                 # Iterate colours and format in stack of
                 # 5 dots
                 i = 0
+                colour_str = ''
                 for colour in colour_list:
                     colour_int = int(colour, 0)
-                    dashboard_col_list[col_index] += (
+                    colour_str += (
                             '<span style="color:#%06X">'
                             '&#x2B24;'
                             '</span>') % (colour_int)
                     i += 1
-                    if (i % 5 == 0):
-                        dashboard_col_list[col_index] += '<br>'
+                    if (i % 6 == 0):
+                        colour_str += '<br>'
 
-                # terminate the colour cell and row
-                dashboard_col_list[col_index] += '</td></tr>'
+                card = (
+                    '<div class="card text-center border-0">'
+                    '<div class="card-body">'
+                    '<i class="material-icons md-48">%s</i>'
+                    '<p class="card-title">%s</p>'
+                    '<small><p>%s</p></small>'
+                    '</div>'
+                    '</div>'
+                    ) % (
+                            get_google_icon(control_name),
+                            control_name,
+                            colour_str
+                            )
 
-                dashboard_col_list[col_index] += '<tr><td></td></tr>'
-                dashboard_col_list[col_index] += '<tr><td></td></tr>'
+                other_card_dict[zone_name].append(card)
 
-        # terminate the device table and container div
-        dashboard_col_list[col_index] += '</table></div>'
-        device_id += 1
+    dashboard_str = (
+            '<ul class="nav nav-tabs">'
+            '  <li class="nav-item">'
+            '    <a class="nav-link active" aria-current="page" href="/zone">Zones</a>'
+            '  </li>'
+            '  <li class="nav-item">'
+            '    <a class="nav-link" href="/device">Devices</a>'
+            '</ul>'
+            )
 
-    # Build the dashboard portion
-    # It's the timestamp and then a single row table, 
-    # one cell per vertical column.
-    # Table width is set to 50% force it compress
-    # more. Otherwise it will tend to go for a 100% fill
-    # and the odd column will be given more width.
-    # Cells are vertically aligned to top to keep widgets 
-    # top-down in layout and not vertically-centred
-    dashboard_str = ('<div class="timestamp" align="right">'
-                     'Updated %s <a title="Switch to Zone View" href="/zone" class="dash-icon">&#x1F441;</a></div>') % (time.asctime())
+    dashboard_str += '<div class="container">'
+    zone_list = list(zone_set)
+    zone_list.sort()
+    for zone_name in zone_list:
+        num_controls = len(switch_card_dict[zone_name]) + len(other_card_dict[zone_name])
+        dashboard_str += (
+                '<div class="card border-start-0 border-end-0 border-bottom-0">'
+                '<div class="card-body">'
+                '<h6 class="card-title text-center">%s</h6>'
+                '<center><p><small>%d %s</small></p></center>'
+                '<div class="container">'
+                '<div class="row row-cols-2">'
+                ) % (
+                        zone_name,
+                        num_controls,
+                        'device' if num_controls == 1 else 'devices'
+                        )
 
-    dashboard_str += '<table border="0" width="50%%"><tr>'
-    for col_str in dashboard_col_list:
-        dashboard_str += '<td valign="top">'
-        dashboard_str += col_str
-        dashboard_str += '</td>'
-    dashboard_str += '</tr></table>'
+        for card in switch_card_dict[zone_name]:
+            dashboard_str += (
+                    '<div class="col">%s</div>'
+                    ) % (card)
+
+        for card in other_card_dict[zone_name]:
+            dashboard_str += (
+                    '<div class="col">%s</div>'
+                    ) % (card)
+
+
+        dashboard_str += (
+                '</div>'
+                '</div>'
+                '</div>'
+                '</div>'
+                ) 
+
+    dashboard_str += '</div>'
 
     # Build and return the web page
     # dropping in CSS, generated jquery code
     # and dashboard.
     web_page_str = web_page_template
-    web_page_str = web_page_str.replace("__TITLE__", "JBHASD Device Console")
+    web_page_str = web_page_str.replace("__TITLE__", "JBHASD Zone Console")
     web_page_str = web_page_str.replace("__CSS__", web_page_css)
-    web_page_str = web_page_str.replace("__DASHBOX_WIDTH__", str(gv_json_config['dashboard']['box_width']))
     web_page_str = web_page_str.replace("__SWITCH_FUNCTIONS__", jquery_str)
     web_page_str = web_page_str.replace("__DASHBOARD__", dashboard_str)
-    web_page_str = web_page_str.replace("__REFRESH_URL__", "/device")
+    web_page_str = web_page_str.replace("__REFRESH_URL__", "/zone")
     web_page_str = web_page_str.replace("__RELOAD__", str(gv_json_config['discovery']['device_probe_interval'] * 1000))
+
+    #print(dashboard_str)
 
     return web_page_str
 
 
-def build_status_web_page():
-    # Very plain web page to show internal 
-    # stats from web server
-    # Intended for trouble-shooting more 
-    # than normal use.
-    # No clickable actions in play here or style
-    # sheets
+def build_device_web_page():
+    global gv_sunset_time
+    global gv_actual_sunset_time
+    global gv_sunrise_time
+    global gv_actual_sunrise_time
     global gv_json_config
     global gv_jbhasd_zconf_url_set
     global gv_jbhasd_device_status_dict
@@ -1820,43 +1320,86 @@ def build_status_web_page():
     url_dict_copy = copy.deepcopy(gv_jbhasd_device_url_dict)
     ts_dict_copy = copy.deepcopy(gv_jbhasd_device_ts_dict)
 
-    # Alphabetic name sort to begin
-    sorted_device_list = sorted(device_list)
-
+    device_list = sorted(device_list)
     now = int(time.time())
 
-    # Top-right status
-    dashboard_str = ('<div id="top" align="right">'
-                     'Updated %s </div>') % (time.asctime())
+    jquery_str = ""
+    device_id = 0
 
-    # Initial details on uptime of server
-    # and totals in terms of discovered and probed
-    # devices
-    dashboard_str += ('<div align="left">'
-            'Started: %s </div>') % (gv_startup_time)
-    dashboard_str += ('<div align="left">'
-            'Discovered URLs: %d </div>') % (len(gv_jbhasd_zconf_url_set))
-    dashboard_str += ('<div align="left">'
-            'Probed Devices: %d </div>') % (len(sorted_device_list))
+    dashboard_str = (
+            '<ul class="nav nav-tabs">'
+            '  <li class="nav-item">'
+            '    <a class="nav-link " href="/zone">Zones</a>'
+            '  </li>'
+            '  <li class="nav-item">'
+            '    <a class="nav-link active" aria-current="page" href="/device">Devices</a>'
+            '</ul>'
+            )
 
-    # Separator
-    dashboard_str += '<br>'
+    # reboot URL for all devices
+    href_url = ('/api?device=all&reboot=1')
 
-    # Table of each Device summary
-    dashboard_str += '<table border="0" width="90%%">'
-    dashboard_str += '<tr>'
-    dashboard_str += '<td>Device Name</td>'
-    dashboard_str += '<td>Zone</td>'
-    dashboard_str += '<td>URL</td>'
-    dashboard_str += '<td>Updated</td>'
-    dashboard_str += '<td>Version</td>'
-    dashboard_str += '<td>Uptime</td>'
-    dashboard_str += '<td>Status<br>Restarts</td>'
-    dashboard_str += '<td>Signal<br>Restarts</td>'
-    dashboard_str += '<td>Free Memory</td>'
-    dashboard_str += '</tr>'
+    # jquery code for click
+    reboot_str = click_get_reload_template
+    jquery_reboot_all_click_id = 'reboot_all'
+    reboot_str = reboot_str.replace("__ID__", jquery_reboot_all_click_id)
+    reboot_str = reboot_str.replace("__ACTION_URL__", href_url)
+    jquery_str += reboot_str
 
-    for device_name in sorted_device_list:
+    # reconfig URL for all devices
+    href_url = ('/api?device=all&reconfig=1')
+
+    # jquery code for click
+    reconfig_str = click_get_reload_template
+    jquery_reconfig_all_click_id = 'reconfig_all'
+    reconfig_str = reconfig_str.replace("__ID__", jquery_reconfig_all_click_id)
+    reconfig_str = reconfig_str.replace("__ACTION_URL__", href_url)
+    jquery_str += reconfig_str
+
+    dashboard_str += (
+            '<div class="card">'
+            '<div class="card-body">'
+            '<table border="0" padding="5">'
+            '<tr><td>Started:</td><td>%s</td></tr>'
+            '<tr><td>Discovered Devices:</td><td>%s</td></tr>'
+            '<tr><td>Probed Devices:</td><td>%s</td></tr>'
+            '</table>'
+            '<br>'
+            '<button type="button" id="%s" class="btn btn-primary">'
+            'Reboot All Devices</button>&nbsp;'
+            '<button type="button" id="%s" class="btn btn-primary">'
+            'Reconfigure All Devices</button>&nbsp;'
+            '  </div>'
+            '</div>'
+            ) % (
+                    gv_startup_time,
+                    len(gv_jbhasd_zconf_url_set),
+                    len(device_list),
+                    jquery_reboot_all_click_id,
+                    jquery_reconfig_all_click_id 
+                    )
+
+    dashboard_str += (
+            '<table class="table">'
+            '  <thead>'
+            '    <tr>'
+            '      <th scope="col">Device Name</th>'
+            '      <th scope="col">Zone</th>'
+            '      <th scope="col">Admin</th>'
+            '      <th scope="col">URL</th>'
+            '      <th scope="col">Updated</th>'
+            '      <th scope="col">Version</th>'
+            '      <th scope="col">Uptime</th>'
+            '      <th scope="col">Status Restarts</th>'
+            '      <th scope="col">Signal Restarts</th>'
+            '      <th scope="col">Free Memory</th>'
+            '    </tr>'
+            '  </thead>'
+            '  <tbody>'
+            )
+
+    for device_name in device_list:
+        device_id += 1
         json_data = gv_jbhasd_device_status_dict[device_name]
         device_name = json_data['name']
         zone_name = json_data['zone']
@@ -1878,72 +1421,112 @@ def build_status_web_page():
         url = url_dict_copy[device_name]
         last_update_ts = ts_dict_copy[device_name]
 
-        dashboard_str += '<tr>'
-        dashboard_str += '<td valign="top"><a href="#%s">&#x2913;</a>&nbsp;%s</td>' % (
-                device_name,
-                device_name)
-        dashboard_str += '<td valign="top">%s</td>' % (
-                zone_name)
-        dashboard_str += '<td valign="top">%s</td>' % (
-                url)
-        dashboard_str += '<td valign="top">%02d secs</td>' % (
-                now - last_update_ts)
-        dashboard_str += '<td valign="top">%s</td>' % (
-                version)
-        dashboard_str += '<td valign="top">%s</td>' % (
-                uptime)
-        dashboard_str += '<td valign="top">%s</td>' % (
-                status_restarts)
-        dashboard_str += '<td valign="top">%s</td>' % (
-                signal_restarts)
-        dashboard_str += '<td valign="top">%.1f Kb</td>' % (
-                memory / 1024)
-        dashboard_str += '</tr>'
+        # device reboot URL
+        # carries device name and reboot=1
+        # directive
+        url_safe_device = urllib.parse.quote_plus(device_name)
+        href_url = ('/api?device=%s'
+                    '&reboot=1') % (url_safe_device)
 
-    dashboard_str += '</table>'
+        # jquery code for reboot click
+        reboot_str = click_get_reload_template
+        jquery_reboot_click_id = 'reboot_device%d' % (device_id)
+        reboot_str = reboot_str.replace("__ID__", jquery_reboot_click_id)
+        reboot_str = reboot_str.replace("__ACTION_URL__", href_url)
+        jquery_str += reboot_str
+        reboot_button_str = (
+                '<button type="button" id="%s" class="btn btn-primary btn-sm">'
+                '<i class="material-icons md-18">power_settings_new</i>'
+                '</button>&nbsp;'
+                ) % (
+                        jquery_reboot_click_id
+                        )
 
-    # Separator
-    dashboard_str += '<br>'
+        # device reconfig URL
+        # carries device name and reconfig=1
+        # directive
+        href_url = ('/api?device=%s'
+                    '&reconfig=1') % (url_safe_device)
 
-    # JSON Status for each Device
-    dashboard_str += '<table border="0" width="90%%">'
-    for device_name in sorted_device_list:
-        json_data = gv_jbhasd_device_status_dict[device_name]
-        device_name = json_data['name']
-        zone_name = json_data['zone']
-        url = url_dict_copy[device_name]
-        last_update_ts = ts_dict_copy[device_name]
+        # jquery code for reconfigure click
+        reconfig_str = click_get_reload_template
+        jquery_reconfig_click_id = 'reconfig_device%d' % (device_id)
+        reconfig_str = reconfig_str.replace("__ID__", jquery_reconfig_click_id)
+        reconfig_str = reconfig_str.replace("__ACTION_URL__", href_url)
+        jquery_str += reconfig_str
+        reconfig_button_str = (
+                '<button type="button" id="%s" class="btn btn-primary btn-sm">'
+                '<i class="material-icons md-18">autorenew</i>'
+                '</button>&nbsp;'
+                ) % (
+                        jquery_reconfig_click_id
+                        )
 
-        json_str = json.dumps(
-                json_data, 
-                indent=4, 
-                sort_keys=True)
+        # device apmode URL
+        # carries device name and apmode=1
+        # directive
+        href_url = ('/api?device=%s'
+                    '&apmode=1') % (url_safe_device)
 
-        dashboard_str += '<tr>'
-        dashboard_str += '<td id="%s" valign="top"><a href="#top">&#x2912;</a>&nbsp;%s<br>%s</td>' % (
-                device_name,
-                device_name,
-                url)
-        dashboard_str += '<td valign="top"><pre>%s</pre></td>' % (
-                json_str)
-        dashboard_str += '</tr>'
+        # jquery code for reconfigure click
+        apmode_str = click_get_reload_template
+        jquery_apmode_click_id = 'apmode_device%d' % (device_id)
+        apmode_str = apmode_str.replace("__ID__", jquery_apmode_click_id)
+        apmode_str = apmode_str.replace("__ACTION_URL__", href_url)
+        jquery_str += apmode_str
+        apmode_button_str = (
+                '<button type="button" id="%s" class="btn btn-primary btn-sm">'
+                '<i class="material-icons md-18">settings_input_antenna</i>'
+                '</button>&nbsp;'
+                ) % (
+                        jquery_apmode_click_id
+                        )
+        dashboard_str += (
+                '    <tr>'
+                '      <td>%s</td>'
+                '      <td>%s</td>'
+                '      <td>%s</td>'
+                '      <td><a href="%s" target="json">%s</a></td>'
+                '      <td>%02d secs</td>'
+                '      <td>%s</td>'
+                '      <td>%s</td>'
+                '      <td>%s</td>'
+                '      <td>%s</td>'
+                '      <td>%.1f Kb</td>'
+                '    </tr>'
+                ) % (
+                    device_name,
+                    zone_name,
+                    reboot_button_str + reconfig_button_str + apmode_button_str,
+                    url,
+                    url,
+                    now - last_update_ts,
+                    version,
+                    uptime,
+                    status_restarts,
+                    signal_restarts,
+                    memory / 1024
+                    )
 
-        # separator row
-        dashboard_str += '<tr><td><br></td></tr>'
-
-    dashboard_str += '</table>'
+    dashboard_str += (
+            '  </tbody>'
+            '</table>'
+            )
 
     # Build and return the web page
     # dropping in CSS, generated jquery code
     # and dashboard.
     web_page_str = web_page_template
-    web_page_str = web_page_str.replace("__TITLE__", "JBHASD Status Console")
-    web_page_str = web_page_str.replace("__CSS__", "") # N/A
-    web_page_str = web_page_str.replace("__DASHBOX_WIDTH__", str(gv_json_config['dashboard']['box_width']))
-    web_page_str = web_page_str.replace("__SWITCH_FUNCTIONS__", "") # N/A
+    web_page_str = web_page_str.replace("__TITLE__", "JBHASD Zone Console")
+    web_page_str = web_page_str.replace("__CSS__", web_page_css)
+    web_page_str = web_page_str.replace("__SWITCH_FUNCTIONS__", jquery_str)
     web_page_str = web_page_str.replace("__DASHBOARD__", dashboard_str)
-    web_page_str = web_page_str.replace("__REFRESH_URL__", "/status")
+    web_page_str = web_page_str.replace("__REFRESH_URL__", "/device")
     web_page_str = web_page_str.replace("__RELOAD__", str(gv_json_config['discovery']['device_probe_interval'] * 1000))
+
+    #print(dashboard_str)
+
+
 
     return web_page_str
 
@@ -2150,31 +1733,14 @@ def process_console_action(
 class web_console_zone_handler(object):
     @cherrypy.expose()
 
-    def index(self, width=None):
+    def index(self):
 
         log_message("client:%s:%d params:%s" % (
             cherrypy.request.remote.ip,
             cherrypy.request.remote.port,
             cherrypy.request.params))
-        # Normal client without width
-        if width is None:
-            log_message("forcing reload to get width")
-            reload_str = web_page_reload_template
-            reload_str = reload_str.replace("__REFRESH_URL__", "/zone")
-            return reload_str
 
-        # set default cols
-        # Then calculate more accurate version based on 
-        # supplied window width divided by dashbox width
-        # plus an offset for padding consideration
-        num_cols = gv_json_config['dashboard']['initial_num_columns']
-        if width:
-            num_cols = int(int(width) / (gv_json_config['dashboard']['box_width'] + 
-                                         gv_json_config['dashboard']['col_division_offset']))
-
-        # return dashboard in specified number of 
-        # columns
-        return build_zone_web_page(num_cols)
+        return build_zone_web_page()
 
     # Force trailling slash off on called URL
     index._cp_config = {'tools.trailing_slash.on': False}
@@ -2183,53 +1749,14 @@ class web_console_zone_handler(object):
 class web_console_device_handler(object):
     @cherrypy.expose()
 
-    def index(self, width=None):
+    def index(self):
 
         log_message("device client:%s:%d params:%s" % (
             cherrypy.request.remote.ip,
             cherrypy.request.remote.port,
             cherrypy.request.params))
-        # Normal client without width
-        if width is None:
-            log_message("forcing reload to get width")
-            reload_str = web_page_reload_template
-            reload_str = reload_str.replace("__REFRESH_URL__", "/device")
-            return reload_str
 
-        # set defautl cols
-        # Then calculate more accurate version based on 
-        # supplied window width divided by dashbox width
-        # plus an offset for padding consideration
-        num_cols = gv_json_config['dashboard']['initial_num_columns']
-        if width:
-            num_cols = int(int(width) / (gv_json_config['dashboard']['box_width'] + 
-                                         gv_json_config['dashboard']['col_division_offset']))
-
-        # return dashboard in specified number of 
-        # columns
-        return build_device_web_page(num_cols)
-
-    # Force trailling slash off on called URL
-    index._cp_config = {'tools.trailing_slash.on': False}
-
-
-class web_console_status_handler(object):
-    @cherrypy.expose()
-
-    def index(self, width=None):
-
-        log_message("device client:%s:%d params:%s" % (
-            cherrypy.request.remote.ip,
-            cherrypy.request.remote.port,
-            cherrypy.request.params))
-        # Normal client without width
-        if width is None:
-            log_message("forcing reload to get width")
-            reload_str = web_page_reload_template
-            reload_str = reload_str.replace("__REFRESH_URL__", "/status")
-            return reload_str
-
-        return build_status_web_page()
+        return build_device_web_page()
 
     # Force trailling slash off on called URL
     index._cp_config = {'tools.trailing_slash.on': False}
@@ -2238,31 +1765,14 @@ class web_console_status_handler(object):
 class web_console_device_handler(object):
     @cherrypy.expose()
 
-    def index(self, width=None):
+    def index(self):
 
         log_message("device client:%s:%d params:%s" % (
             cherrypy.request.remote.ip,
             cherrypy.request.remote.port,
             cherrypy.request.params))
-        # Normal client without width
-        if width is None:
-            log_message("forcing reload to get width")
-            reload_str = web_page_reload_template
-            reload_str = reload_str.replace("__REFRESH_URL__", "/device")
-            return reload_str
 
-        # set defautl cols
-        # Then calculate more accurate version based on 
-        # supplied window width divided by dashbox width
-        # plus an offset for padding consideration
-        num_cols = gv_json_config['dashboard']['initial_num_columns']
-        if width:
-            num_cols = int(int(width) / (gv_json_config['dashboard']['box_width'] + 
-                                         gv_json_config['dashboard']['col_division_offset']))
-
-        # return dashboard in specified number of 
-        # columns
-        return build_device_web_page(num_cols)
+        return build_device_web_page()
 
     # Force trailling slash off on called URL
     index._cp_config = {'tools.trailing_slash.on': False}
@@ -2350,7 +1860,6 @@ def web_server():
     cherrypy.tree.mount(web_console_zone_handler(), '/', conf)
     cherrypy.tree.mount(web_console_zone_handler(), '/zone', conf)
     cherrypy.tree.mount(web_console_device_handler(), '/device', conf)
-    cherrypy.tree.mount(web_console_status_handler(), '/status', conf)
 
     # webhook for API
     cherrypy.tree.mount(web_console_api_handler(), '/api')
@@ -2394,7 +1903,7 @@ thread_list.append(web_server_t)
 while (1):
     dead_threads = 0
     for thread in thread_list:
-         if (not thread.isAlive()):
+         if (not thread.is_alive()):
              dead_threads += 1
 
     if (dead_threads > 0):
