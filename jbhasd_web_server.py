@@ -1192,8 +1192,8 @@ def build_zone_web_page():
                     '<div class="card-body">'
                     '<i class="material-icons md-48">%s</i>'
                     '<p>%s</p>'
-                    '<small><p style="color:#%s">'
-                    '&#x25cf;&#x25cf;&#x25cf;&#x25cf;&#x25cf;</p></small>'
+                    '<span style="color:#%s">'
+                    '&#x25cf;&#x25cf;&#x25cf;&#x25cf;&#x25cf;</span>'
                     '</div>'
                     '</div>'
                     ) % (
@@ -1208,7 +1208,7 @@ def build_zone_web_page():
                 colour_list = []
                 if 'colours' in control['program']:
                     # limit to first 25 LEDs
-                    colour_list = control['program']['colours'][:50]
+                    colour_list = control['program']['colours'][:25]
 
                 # Iterate colours and format in stack of
                 # 5 dots
@@ -1221,7 +1221,7 @@ def build_zone_web_page():
                             '&#x25cf;'
                             '</span>') % (colour_int)
                     i += 1
-                    if (i % 6 == 0):
+                    if (i % 5 == 0):
                         colour_str += '<br>'
 
                 card = (
@@ -1229,7 +1229,7 @@ def build_zone_web_page():
                     '<div class="card-body">'
                     '<i class="material-icons md-48">%s</i>'
                     '<p>%s</p>'
-                    '<small><p>%s</p></small>'
+                    '%s'
                     '</div>'
                     '</div>'
                     ) % (
