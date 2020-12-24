@@ -1193,7 +1193,7 @@ def build_zone_web_page():
                     '<i class="material-icons md-48">%s</i>'
                     '<p>%s</p>'
                     '<small><p style="color:#%s">'
-                    '&#x2B24;&#x2B24;&#x2B24;&#x2B24;&#x2B24;</p></small>'
+                    '&#x25cf;&#x25cf;&#x25cf;&#x25cf;&#x25cf;</p></small>'
                     '</div>'
                     '</div>'
                     ) % (
@@ -1218,7 +1218,7 @@ def build_zone_web_page():
                     colour_int = int(colour, 0)
                     colour_str += (
                             '<span style="color:#%06X">'
-                            '&#x2B24;'
+                            '&#x25cf;'
                             '</span>') % (colour_int)
                     i += 1
                     if (i % 6 == 0):
