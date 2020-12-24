@@ -1128,9 +1128,10 @@ def build_zone_web_page():
                     '<i class="material-icons md-48">%s</i>'
                     '<i class="material-icons md-18">%s</i>'
                     '<p class="card-title">%s</p>'
+                    '<div class="btn-group">'
                     '<button type="button" id="switch%d" class="btn %s">Off</button>'
-                    '&nbsp;'
                     '<button type="button" id="switch%d" class="btn %s">On</button>'
+                    '</div>'
                     '&nbsp;'
                     '</div>'
                     '</div>'
@@ -1260,7 +1261,7 @@ def build_zone_web_page():
                 '<h6 class="card-title text-center">%s</h6>'
                 '<center><p><small>%d %s</small></p></center>'
                 '<div class="container">'
-                '<div class="row row-cols-2">'
+                '<div class="row">'
                 ) % (
                         zone_name,
                         num_controls,
