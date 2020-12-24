@@ -1286,7 +1286,11 @@ def build_zone_web_page():
                 '</div>'
                 ) 
 
-    dashboard_str += '</div>'
+    dashboard_str += (
+            '</div>'
+            '<br>'
+            '<center><i><small><p class="fw-lighter">Last updated: %s</p></small></i><center>'
+            ) % (time.asctime())
 
     # Build and return the web page
     # dropping in CSS, generated jquery code
