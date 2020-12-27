@@ -206,6 +206,8 @@ def set_default_config():
     # Device config
     json_config['device_profiles'] = []
     json_config['devices'] = []
+    json_config['rgb_programs'] = {}
+    json_config['argb_programs'] = {}
 
     # Timezone
     json_config['timezone'] = 'Europe/Dublin'
