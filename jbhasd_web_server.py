@@ -110,6 +110,29 @@ click_get_reload_template = """
             });
         });
 """
+
+# action code for combos
+# click function resets refresh timer to 
+# 2 minutes
+change_get_reload_template = """
+        $('#__ID__').on('change', function() {
+            $.get('__ACTION_URL__&__ARG__=' + this.value, function(data, status) {
+                $.get("__REFRESH_URL__", function(data, status){
+                    // clear refresh timer before reload
+                    clearInterval(refresh_timer);
+                    $("#dashboard").html(data);
+                });
+            });
+        });
+
+        $('#__ID__').on('click', function() {
+          // opened combo.. set refresh to a longer interval
+          clearInterval(refresh_timer);
+          refresh_timer = setInterval(refreshPage, 120000);
+        })
+"""
+
+
 ### End switch on click template
 
 ### Begin Web page reload template
@@ -459,6 +482,18 @@ def check_control(
                     if (last_program_interval > 60):
                         control_data = copy.deepcopy(event['params'])
                         control_data['name'] = control_name
+
+                        # rgb/argb references
+                        if ('program' in control_data and 
+                                type(control_data['program']) == str):
+                            program_name = control_data['program']
+                            if program_name in gv_json_config['rgb_programs']:
+                                control_data['program'] = gv_json_config['rgb_programs'][program_name]
+                                log_message('Substituted referenced RGB program %s' % (program_name))
+                            elif program_name in gv_json_config['argb_programs']:
+                                control_data['program'] = gv_json_config['argb_programs'][program_name]
+                                log_message('Substituted referenced ARGB program %s' % (program_name))
+
                         log_message('Returning control data.. %s' % (control_data))
                         return control_data, event_time
                     else:
@@ -648,7 +683,7 @@ def post_url(url, json_data, url_timeout):
     # for JSON payloads
     # return contents parsed as json
 
-    #log_message("POST %s \n%s\n" % (url, json_data))
+    log_message("POST %s \n%s\n" % (url, json_data))
 
     response = None
     try:
@@ -1060,6 +1095,7 @@ def build_zone_web_page():
     global gv_jbhasd_zconf_url_set
     global gv_jbhasd_device_status_dict
     global gv_jbhasd_device_url_dict
+    global gv_json_config
 
     # safe snapshot of dict keys into list
     device_list = list(gv_jbhasd_device_status_dict)
@@ -1091,15 +1127,15 @@ def build_zone_web_page():
             control_name = control['name']
             control_type = control['type']
 
+            # prep args for transport
+            url_safe_device = urllib.parse.quote_plus(device_name)
+            url_safe_zone = urllib.parse.quote_plus(zone_name)
+            url_safe_control = urllib.parse.quote_plus(control_name)
+
             if control_type == 'switch':
                 control_state = int(control['state'])
                 control_context = control['context']
                 alternate_state = (control_state + 1) % 2
-
-                # prep args for transport
-                url_safe_device = urllib.parse.quote_plus(device_name)
-                url_safe_zone = urllib.parse.quote_plus(zone_name)
-                url_safe_control = urllib.parse.quote_plus(control_name)
 
                 href_url_off = (
                         '/api?device=%s'
@@ -1153,6 +1189,7 @@ def build_zone_web_page():
                 switch_str = switch_str.replace("__ACTION_URL__", href_url_off)
                 jquery_str += switch_str
 
+
                 switch_str = click_get_reload_template
                 jquery_click_id = 'switch%d' % (switch_id + 1)
                 switch_str = switch_str.replace("__ID__", jquery_click_id)
@@ -1187,6 +1224,45 @@ def build_zone_web_page():
             if control_type == 'rgb':
                 current_colour = control['current_colour']
 
+                prog_combo = None
+                if 'rgb_programs' in gv_json_config:
+                    prog_combo = (
+                            '<center><select class="form-select form-select-sm" style="width:auto;"'
+                            'aria-label=".form-select-sm example" '
+                            'id="combo%d">'
+                            '<option value="">Program</option>'
+                            ) % (
+                                    switch_id
+                                    )
+
+                    for program in gv_json_config['rgb_programs']:
+                        prog_combo += (
+                                '<option value="%s">%s</option>'
+                                ) % (
+                                        program,
+                                        program)
+
+                    prog_combo += (
+                            '</select></center>'
+                            )
+
+                    href_url_program = (
+                            '/api?device=%s'
+                            '&zone=%s'
+                            '&control=%s') % (
+                                url_safe_device,
+                                url_safe_zone,
+                                url_safe_control)
+
+                    combo_str = change_get_reload_template 
+                    jquery_click_id = 'combo%d' % (switch_id)
+                    combo_str = combo_str.replace("__ID__", jquery_click_id)
+                    combo_str = combo_str.replace("__ACTION_URL__", href_url_program)
+                    combo_str = combo_str.replace("__ARG__", 'rgb_program')
+                    jquery_str += combo_str
+
+                    switch_id += 1
+
                 card = (
                     '<div class="card text-center border-0">'
                     '<div class="card-body">'
@@ -1194,17 +1270,59 @@ def build_zone_web_page():
                     '<p>%s</p>'
                     '<span style="color:#%s">'
                     '&#x25cf;&#x25cf;&#x25cf;&#x25cf;&#x25cf;</span>'
+                    '%s'
                     '</div>'
                     '</div>'
                     ) % (
                             get_google_icon(control_name),
                             control_name,
-                            current_colour[4:]
+                            current_colour[4:],
+                            prog_combo if prog_combo else ''
                             )
 
                 other_card_dict[zone_name].append(card)
 
             if control_type == 'argb':
+
+                prog_combo = None
+                if 'argb_programs' in gv_json_config:
+                    prog_combo = (
+                            '<center><select class="form-select form-select-sm" style="width:auto;"'
+                            'aria-label=".form-select-sm example" '
+                            'id="combo%d">'
+                            '<option value="">Program</option>'
+                            ) % (
+                                    switch_id
+                                    )
+
+                    for program in gv_json_config['argb_programs']:
+                        prog_combo += (
+                                '<option value="%s">%s</option>'
+                                ) % (
+                                        program,
+                                        program)
+
+                    prog_combo += (
+                            '</select></center>'
+                            )
+
+                    href_url_program = (
+                            '/api?device=%s'
+                            '&zone=%s'
+                            '&control=%s') % (
+                                url_safe_device,
+                                url_safe_zone,
+                                url_safe_control)
+
+                    combo_str = change_get_reload_template 
+                    jquery_click_id = 'combo%d' % (switch_id)
+                    combo_str = combo_str.replace("__ID__", jquery_click_id)
+                    combo_str = combo_str.replace("__ACTION_URL__", href_url_program)
+                    combo_str = combo_str.replace("__ARG__", 'argb_program')
+                    jquery_str += combo_str
+
+                    switch_id += 1
+
                 colour_list = []
                 if 'colours' in control['program']:
                     # limit to first 25 LEDs
@@ -1230,12 +1348,14 @@ def build_zone_web_page():
                     '<i class="material-icons md-48">%s</i>'
                     '<p>%s</p>'
                     '%s'
+                    '%s'
                     '</div>'
                     '</div>'
                     ) % (
                             get_google_icon(control_name),
                             control_name,
-                            colour_str
+                            colour_str,
+                            prog_combo if prog_combo else ''
                             )
 
                 other_card_dict[zone_name].append(card)
@@ -1544,10 +1664,12 @@ def process_console_action(
         reconfig, 
         apmode, 
         state, 
-        program):
+        rgb_program,
+        argb_program):
 
     global gv_jbhasd_device_url_dict
     global gv_jbhasd_device_status_dict
+    global gv_json_config
 
     # list used to buok handle
     # simple URL API calls for GET
@@ -1666,60 +1788,137 @@ def process_console_action(
                         if (json_data):
                             track_device_status(device, url, json_data)
 
-    elif (device and zone and control_name and program):
+    elif (device and zone and control_name and rgb_program):
 
         if device in gv_jbhasd_device_url_dict:
             url = gv_jbhasd_device_url_dict[device]
 
-            log_message("Manually setting %s/%s/%s to program:%s" % (
+            log_message("Manually setting %s/%s/%s to rgb_program:%s" % (
                 device,
                 zone,
                 control_name,
-                program))
+                rgb_program))
 
-            control_data = {}
-            control_data['name'] = control_name
-            control_data['program'] = json.loads(program)
-            json_req = {}
-            json_req['controls'] = []
-            json_req['controls'].append(control_data)
-            json_data = post_url(url + '/control', 
-                                 json_req,
-                                 gv_http_timeout_secs)
-            if (json_data):
-                track_device_status(device, url, json_data)
+            if ('rgb_programs' in gv_json_config and 
+                    rgb_program in gv_json_config['rgb_programs']):
 
-    elif (zone and control_name and program):
+                control_data = {}
+                control_data['name'] = control_name
+                control_data['program'] = gv_json_config['rgb_programs'][rgb_program]
+                json_req = {}
+                json_req['controls'] = []
+                json_req['controls'].append(control_data)
+                json_data = post_url(url + '/control', 
+                                     json_req,
+                                     gv_http_timeout_secs)
+                if (json_data):
+                    track_device_status(device, url, json_data)
 
-        # Check all devices
-        for device in gv_jbhasd_device_status_dict:
-            json_data = gv_jbhasd_device_status_dict[device]
+            else:
+                log_message("program not found")
 
-            if ('zone' in json_data and 
-                    json_data['zone'] == zone and
-                    'controls' in json_data):
-                for control in json_data['controls']:
-                    if control['name'] == control_name:
-                        url = gv_jbhasd_device_url_dict[device]
+    elif (zone and control_name and rgb_program):
+        if ('rgb_programs' in gv_json_config and 
+            rgb_program in gv_json_config['rgb_programs']):
 
-                        log_message("Manually setting (%s) %s/%s/%s to program:%s" % (
-                            url,
-                            device,
-                            zone,
-                            control_name,
-                            program))
+            # Check all devices
+            for device in gv_jbhasd_device_status_dict:
+                json_data = gv_jbhasd_device_status_dict[device]
 
-                        control_data = {}
-                        control_data['name'] = control_name
-                        control_data['program'] = json.loads(program)
-                        json_req = {}
-                        json_req['controls'] = []
-                        json_req['controls'].append(control_data)
-                        json_data = post_url(url + '/control', 
-                                             json_req,
-                                             gv_http_timeout_secs)
-                        if (json_data):
-                            track_device_status(device, url, json_data)
+                if ('zone' in json_data and 
+                        json_data['zone'] == zone and
+                        'controls' in json_data):
+                    for control in json_data['controls']:
+                        if control['name'] == control_name:
+                            url = gv_jbhasd_device_url_dict[device]
+
+                            log_message("Manually setting (%s) %s/%s/%s to rgb_program:%s" % (
+                                url,
+                                device,
+                                zone,
+                                control_name,
+                                rgb_program))
+
+                            control_data = {}
+                            control_data['name'] = control_name
+                            control_data['program'] = gv_json_config['rgb_programs'][rgb_program]
+                            json_req = {}
+                            json_req['controls'] = []
+                            json_req['controls'].append(control_data)
+                            json_data = post_url(url + '/control', 
+                                                 json_req,
+                                                 gv_http_timeout_secs)
+                            if (json_data):
+                                track_device_status(device, url, json_data)
+
+        else:
+            log_message("program not found")
+
+    elif (device and zone and control_name and argb_program):
+
+        if device in gv_jbhasd_device_url_dict:
+            url = gv_jbhasd_device_url_dict[device]
+
+            log_message("Manually setting %s/%s/%s to argb_program:%s" % (
+                device,
+                zone,
+                control_name,
+                argb_program))
+
+            if ('argb_programs' in gv_json_config and 
+                    argb_program in gv_json_config['argb_programs']):
+
+                control_data = {}
+                control_data['name'] = control_name
+                control_data['program'] = gv_json_config['argb_programs'][argb_program]
+                json_req = {}
+                json_req['controls'] = []
+                json_req['controls'].append(control_data)
+                json_data = post_url(url + '/control', 
+                                     json_req,
+                                     gv_http_timeout_secs)
+                if (json_data):
+                    track_device_status(device, url, json_data)
+
+            else:
+                log_message("program not found")
+
+    elif (zone and control_name and argb_program):
+        if ('argb_programs' in gv_json_config and 
+            argb_program in gv_json_config['argb_programs']):
+
+            # Check all devices
+            for device in gv_jbhasd_device_status_dict:
+                json_data = gv_jbhasd_device_status_dict[device]
+
+                if ('zone' in json_data and 
+                        json_data['zone'] == zone and
+                        'controls' in json_data):
+                    for control in json_data['controls']:
+                        if control['name'] == control_name:
+                            url = gv_jbhasd_device_url_dict[device]
+
+                            log_message("Manually setting (%s) %s/%s/%s to argb_program:%s" % (
+                                url,
+                                device,
+                                zone,
+                                control_name,
+                                argb_program))
+
+                            control_data = {}
+                            control_data['name'] = control_name
+                            control_data['program'] = gv_json_config['argb_programs'][argb_program]
+                            json_req = {}
+                            json_req['controls'] = []
+                            json_req['controls'].append(control_data)
+                            json_data = post_url(url + '/control', 
+                                                 json_req,
+                                                 gv_http_timeout_secs)
+                            if (json_data):
+                                track_device_status(device, url, json_data)
+
+        else:
+            log_message("program not found")
 
     # Bulk stuff
     for url in command_url_list:
@@ -1767,22 +1966,6 @@ class web_console_device_handler(object):
     index._cp_config = {'tools.trailing_slash.on': False}
 
 
-class web_console_device_handler(object):
-    @cherrypy.expose()
-
-    def index(self):
-
-        log_message("device client:%s:%d params:%s" % (
-            cherrypy.request.remote.ip,
-            cherrypy.request.remote.port,
-            cherrypy.request.params))
-
-        return build_device_web_page()
-
-    # Force trailling slash off on called URL
-    index._cp_config = {'tools.trailing_slash.on': False}
-
-
 class web_console_api_handler(object):
     @cherrypy.expose()
 
@@ -1791,7 +1974,8 @@ class web_console_api_handler(object):
               zone=None, 
               control=None, 
               state=None, 
-              program=None, 
+              rgb_program=None, 
+              argb_program=None, 
               reboot=None,
               reconfig=None,
               update=None,
@@ -1809,7 +1993,8 @@ class web_console_api_handler(object):
                                reconfig,
                                apmode, 
                                state, 
-                               program)
+                               rgb_program,
+                               argb_program)
 
         # Return nothing
         return ""
