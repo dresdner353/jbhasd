@@ -1121,8 +1121,8 @@ def build_zone_web_page():
 
         # init card lists for zone
         if not zone_name in switch_card_dict:
-            switch_card_dict[zone_name] = []
-            other_card_dict[zone_name] = []
+            switch_card_dict[zone_name] = {}
+            other_card_dict[zone_name] = {}
 
         # Controls
         for control in json_data['controls']:
@@ -1183,7 +1183,7 @@ def build_zone_web_page():
                             'btn-primary' if control_state == 1 else 'btn-secondary',
                             )
 
-                switch_card_dict[zone_name].append(card)
+                switch_card_dict[zone_name][control_name] = card
 
                 switch_str = click_get_reload_template
                 jquery_click_id = 'switch%d' % (switch_id)
@@ -1221,7 +1221,7 @@ def build_zone_web_page():
                             humidity
                             )
 
-                other_card_dict[zone_name].append(card)
+                other_card_dict[zone_name][control_name] = card
 
             if control_type == 'rgb':
                 current_colour = control['current_colour']
@@ -1249,10 +1249,8 @@ def build_zone_web_page():
                             )
 
                     href_url_program = (
-                            '/api?device=%s'
-                            '&zone=%s'
+                            '/api?zone=%s'
                             '&control=%s') % (
-                                url_safe_device,
                                 url_safe_zone,
                                 url_safe_control)
 
@@ -1282,7 +1280,7 @@ def build_zone_web_page():
                             prog_combo if prog_combo else ''
                             )
 
-                other_card_dict[zone_name].append(card)
+                other_card_dict[zone_name][control_name] = card
 
             if control_type == 'argb':
 
@@ -1309,10 +1307,8 @@ def build_zone_web_page():
                             )
 
                     href_url_program = (
-                            '/api?device=%s'
-                            '&zone=%s'
+                            '/api?zone=%s'
                             '&control=%s') % (
-                                url_safe_device,
                                 url_safe_zone,
                                 url_safe_control)
 
@@ -1360,7 +1356,7 @@ def build_zone_web_page():
                             prog_combo if prog_combo else ''
                             )
 
-                other_card_dict[zone_name].append(card)
+                other_card_dict[zone_name][control_name] = card
 
     dashboard_str = (
             '<ul class="nav nav-tabs">'
@@ -1390,12 +1386,14 @@ def build_zone_web_page():
                         'device' if num_controls == 1 else 'devices'
                         )
 
-        for card in switch_card_dict[zone_name]:
+        for control_name in switch_card_dict[zone_name]:
+            card = switch_card_dict[zone_name][control_name]
             dashboard_str += (
                     '<div class="col">%s</div>'
                     ) % (card)
 
-        for card in other_card_dict[zone_name]:
+        for control_name in other_card_dict[zone_name]:
+            card = other_card_dict[zone_name][control_name]
             dashboard_str += (
                     '<div class="col">%s</div>'
                     ) % (card)
