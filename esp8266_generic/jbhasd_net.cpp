@@ -10,7 +10,7 @@ static DNSServer dns_server;
 
 // Buffers
 static char small_buffer[1024];
-static char large_buffer[4096];
+static char large_buffer[8192];
 
 // status health check
 static uint32_t last_status = 0;
@@ -39,7 +39,7 @@ const char *get_json_status(void)
     // refresh sensors
     read_sensors();
 
-    DynamicJsonDocument json_status(4096);
+    DynamicJsonDocument json_status(8192);
 
     // top-level fields
     json_status["name"] = gv_device.hostname;
@@ -189,7 +189,7 @@ const char *get_json_status(void)
     }
 
     // Format string in prety format
-    serializeJsonPretty(json_status, large_buffer);
+    serializeJson(json_status, large_buffer);
 
     log_message("JSON status data: (%d bytes) \n%s", 
                 strlen(large_buffer), 
@@ -619,8 +619,7 @@ void sta_handle_configure(void)
 {
     log_message("sta_handle_configure()");
 
-    DynamicJsonDocument json_response(1024);
-    char response_str[512];
+    DynamicJsonDocument json_response(512);
 
     // JSON POST
     // The "plain" argument is where the full POST body will be
@@ -688,8 +687,8 @@ void sta_handle_configure(void)
     }
 
     // Return response
-    serializeJsonPretty(json_response, response_str);
-    gv_web_server.send(200, "application/json", response_str);
+    serializeJson(json_response, large_buffer);
+    gv_web_server.send(200, "application/json", large_buffer);
 }
 
 
