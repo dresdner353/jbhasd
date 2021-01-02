@@ -624,20 +624,14 @@ class ZeroConfListener(object):
 
 
 def discover_devices():
-    # Zeroconf service browser
-    # Done in a permanent loop where it backgrounds for 2 mins 
-    # and it then reset. Possibly not needed but no harm to reset it
+    # Zeroconf service browser for JBHASD devices
+    zeroconf = Zeroconf()
+    listener = ZeroConfListener()  
+    browser = ServiceBrowser(zeroconf, "_JBHASD._tcp.local.", listener)  
+
     while (1):
-        zeroconf = Zeroconf()
-        listener = ZeroConfListener()  
-        browser = ServiceBrowser(zeroconf, "_JBHASD._tcp.local.", listener)  
-
         # Give time for discovery
-        time.sleep(120)
-
-        # Reset 
-        browser.cancel()
-        zeroconf.close()
+        time.sleep(60)
 
 
 def get_url(url, url_timeout, parse_json):
