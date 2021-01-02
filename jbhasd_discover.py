@@ -9,8 +9,7 @@ import time
 import requests
 import sys
 import os
-
-http_timeout_secs = 5
+import json
 
 class MyListener(object):  
     def remove_service(self, zeroconf, type, name):
@@ -19,7 +18,7 @@ class MyListener(object):
     def add_service(self, zeroconf, type, name):
 
         info = zeroconf.get_service_info(type, name)
-        address = socket.inet_ntoa(info.address)
+        address = socket.inet_ntoa(info.addresses[0])
         port = info.port
         url = 'http://%s:%d/status' % (address, port)
         server = info.server
@@ -34,8 +33,11 @@ class MyListener(object):
             print("Error in urlopen (%s)" % (url))
 
         if response is not None:
-            response_str = str(response.text)
-            print("json len:%d \n%s" % (len(response_str), response_str))
+            response_dict = response.json()
+            print("json:\n%s" % (
+                json.dumps(
+                    response_dict, 
+                    indent = 4)))
 
         sys.stdout.flush()
 
