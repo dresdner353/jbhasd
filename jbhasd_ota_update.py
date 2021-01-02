@@ -62,7 +62,7 @@ class MyListener(object):
 
         info = zeroconf.get_service_info(type, name)
         if info is not None:
-            address = socket.inet_ntoa(info.address)
+            address = socket.inet_ntoa(info.addresses[0])
             ip_set.add(address)
         return
 
