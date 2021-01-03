@@ -624,15 +624,27 @@ class ZeroConfListener(object):
 
 
 def discover_devices():
-    # Zeroconf service browser for JBHASD devices
-    zeroconf = Zeroconf()
-    listener = ZeroConfListener()  
-    browser = ServiceBrowser(zeroconf, "_JBHASD._tcp.local.", listener)  
 
+    zeroconf = None
     while (1):
-        # Give time for discovery
-        time.sleep(60)
+        if zeroconf == None:
+            # Zeroconf service listener for JBHASD devices
+            zeroconf = Zeroconf()
+            listener = ZeroConfListener()  
+            zeroconf.add_service_listener(
+                    "_JBHASD._tcp.local.", 
+                    listener)
 
+        # let it run for 120 seconds
+        time.sleep(120)
+
+        # close all resources to it will 
+        # be recreated fresh
+        # We need to do this to ensure that 
+        # we continually refresh the set of URLs
+        # inb conjunction with the purging model
+        zeroconf.close()
+        zeroconf = None
 
 def get_url(url, url_timeout, parse_json):
     # General purpose URL GETer
@@ -946,6 +958,9 @@ def probe_devices():
 
             else:
                 failed_probes += 1
+                log_message('Failed to probe: %s .. response:%s' % (
+                    url,
+                    json_data))
         
         # Purge dead devices and URLs
         now = int(time.time())
@@ -1435,12 +1450,24 @@ def build_device_web_page():
     global gv_startup_time
 
     # safe snapshot of dict keys into list
-    device_list = list(gv_jbhasd_device_status_dict)
     url_dict_copy = copy.deepcopy(gv_jbhasd_device_url_dict)
     ts_dict_copy = copy.deepcopy(gv_jbhasd_device_ts_dict)
+    status_dict_copy = copy.deepcopy(gv_jbhasd_device_status_dict)
 
-    device_list = sorted(device_list)
+    # build list of device dicts sorted on Update
+    # delta descending
+    device_name_list = list(status_dict_copy)
     now = int(time.time())
+    device_list = []
+    for device_name in device_name_list:
+        json_data = status_dict_copy[device_name]
+        json_data['last_updated'] = now - ts_dict_copy[device_name]
+        device_list.append(json_data)
+
+    device_list = sorted(
+            device_list, 
+            key=lambda k: k['last_updated'],
+            reverse = True)
 
     jquery_str = ""
     device_id = 0
@@ -1517,11 +1544,10 @@ def build_device_web_page():
             '  <tbody>'
             )
 
-    for device_name in device_list:
+    for device in device_list:
         device_id += 1
-        json_data = gv_jbhasd_device_status_dict[device_name]
-        device_name = json_data['name']
-        zone_name = json_data['zone']
+        device_name = device['name']
+        zone_name = device['zone']
 
         # System data (only present in real devices)
         # So we condtionally access 
@@ -1530,12 +1556,12 @@ def build_device_web_page():
         memory = 0
         signal_restarts = 0
         status_restarts = 0
-        if ('system' in json_data):
-            version = json_data['system']['compile_date'].replace('JBHASD-VERSION ', '')
-            uptime = json_data['system']['uptime']
-            memory = json_data['system']['free_heap']
-            signal_restarts = json_data['system']['signal_wifi_restarts']
-            status_restarts = json_data['system']['status_wifi_restarts']
+        if ('system' in device):
+            version = device['system']['compile_date'].replace('JBHASD-VERSION ', '')
+            uptime = device['system']['uptime']
+            memory = device['system']['free_heap']
+            signal_restarts = device['system']['signal_wifi_restarts']
+            status_restarts = device['system']['status_wifi_restarts']
 
         url = url_dict_copy[device_name]
         last_update_ts = ts_dict_copy[device_name]
