@@ -1251,7 +1251,7 @@ def build_zone_web_page():
                                 '<option value="%s">%s</option>'
                                 ) % (
                                         program,
-                                        program)
+                                        program.title())
 
                     prog_combo += (
                             '</select></center>'
@@ -1309,7 +1309,7 @@ def build_zone_web_page():
                                 '<option value="%s">%s</option>'
                                 ) % (
                                         program,
-                                        program)
+                                        program.title())
 
                     prog_combo += (
                             '</select></center>'
