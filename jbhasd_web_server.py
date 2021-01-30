@@ -600,7 +600,8 @@ class ZeroConfListener(object):
 
         info = zeroconf.get_service_info(type, name)
         if info:
-            address = socket.inet_ntoa(info.addresses[0])
+            #address = socket.inet_ntoa(info.addresses[0])
+            address = socket.inet_ntoa(info.address)
             port = info.port
             url = "http://%s:%d" % (address, port)
             now = int(time.time())
