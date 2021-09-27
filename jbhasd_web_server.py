@@ -1018,6 +1018,7 @@ def get_google_icon(control_name):
                     'music',
                     'subwoofer',
                     'monitor',
+                    'mixer',
                     ]
             },
             {
