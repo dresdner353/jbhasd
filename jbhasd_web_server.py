@@ -1456,11 +1456,11 @@ def build_device_web_page():
     ts_dict_copy = copy.deepcopy(gv_jbhasd_device_ts_dict)
     status_dict_copy = copy.deepcopy(gv_jbhasd_device_status_dict)
 
-    # build list of device dicts sorted on Update
-    # delta descending
+    # build list of device dicts sorted on Name
     device_name_list = list(status_dict_copy)
     now = int(time.time())
     device_list = []
+
     for device_name in device_name_list:
         json_data = status_dict_copy[device_name]
         json_data['last_updated'] = now - ts_dict_copy[device_name]
@@ -1468,8 +1468,7 @@ def build_device_web_page():
 
     device_list = sorted(
             device_list, 
-            key=lambda k: k['last_updated'],
-            reverse = True)
+            key=lambda k: k['name'])
 
     jquery_str = ""
     device_id = 0
