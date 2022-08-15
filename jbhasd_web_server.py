@@ -2029,8 +2029,7 @@ def web_server():
     log_message("Starting console web server on port %d" % (
         gv_json_config['web']['port']))
     # Disable logging
-    do_logging = 1
-    if do_logging == 0:
+    if not gv_json_config['web']['logging']:
         cherrypy.config.update({'environment': 'production',
                                 'log.screen': False,
                                 'log.access_file': '',
@@ -2039,6 +2038,12 @@ def web_server():
     # Listen on our port on any IF
     cherrypy.server.socket_host = '0.0.0.0'
     cherrypy.server.socket_port = gv_json_config['web']['port']
+
+    # SSL
+    if 'ssl' in gv_json_config['web']:
+        cherrypy.server.ssl_module = 'pyopenssl'
+        cherrypy.server.ssl_certificate = gv_json_config['web']['ssl']['cert']
+        cherrypy.server.ssl_private_key = gv_json_config['web']['ssl']['key']
 
     # Authentication
     # If the users section in web config is populated
