@@ -19,6 +19,7 @@ class MyListener(object):
 
         info = zeroconf.get_service_info(type, name)
         address = socket.inet_ntoa(info.addresses[0])
+        #address = socket.inet_ntoa(info.address)
         port = info.port
         url = 'http://%s:%d/status' % (address, port)
         server = info.server
