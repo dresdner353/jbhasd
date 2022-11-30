@@ -1228,8 +1228,8 @@ def build_zone_web_page():
                     ) % (
                             get_google_icon(control_name),
                             control_name,
-                            temp,
-                            humidity
+                            round(temp, 2),
+                            round(humidity, 2)
                             )
 
                 other_card_dict[zone_name][control_name] = card
@@ -1468,7 +1468,7 @@ def build_device_web_page():
 
     device_list = sorted(
             device_list, 
-            key=lambda k: k['name'])
+            key=lambda k: k['zone'])
 
     jquery_str = ""
     device_id = 0
