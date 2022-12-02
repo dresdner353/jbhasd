@@ -205,7 +205,7 @@ void setup()
 void loop()
 {
     // Keep the sw watchdog happy
-    ESP.wdtFeed();
+    // ESP.wdtFeed();
 
     // Tasks
     TaskMan.nudge();
