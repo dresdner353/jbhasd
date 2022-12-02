@@ -384,10 +384,10 @@ void switch_init(void)
                      200,
                      loop_task_check_boot_switch);
 
-    // Manual Switches every 100ms
+    // Manual Switches every 200ms
     TaskMan.add_task("Switch Checks",
                      RUN_STATE_WIFI_STA_DOWN | RUN_STATE_WIFI_STA_UP,
-                     100,
+                     200,
                      loop_task_check_switches);
 }
 

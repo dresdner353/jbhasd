@@ -360,23 +360,23 @@ void wifi_init(void)
                      300000,
                      loop_task_ap_reboot);
 
-    // Web Server (AP) every 100 ms
+    // Web Server (AP) every 500 ms
     TaskMan.add_task("Webserver",
                      RUN_STATE_WIFI_AP |
                      RUN_STATE_WIFI_STA_UP,
-                     100,
+                     500,
                      loop_task_webserver);
 
-    // DNS Server every 100ms
+    // DNS Server every 500ms
     TaskMan.add_task("DNS",
                      RUN_STATE_WIFI_AP,
-                     100,
+                     500,
                      loop_task_dns);
 
-    // MDNS Server update every 100ms
+    // MDNS Server update every 500ms
     TaskMan.add_task("MDNS Update",
                      RUN_STATE_WIFI_STA_UP,
-                     100,
+                     500,
                      loop_task_mdns);
 
     // MDNS Server restart every 1 min
