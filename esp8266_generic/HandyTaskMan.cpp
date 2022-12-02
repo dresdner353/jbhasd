@@ -61,6 +61,9 @@ void HandyTaskMan::init(void)
 {
     struct loop_task *loop_task;
 
+    // init sleep time 
+    sleep_time = 0;
+
     set_run_state(HTM_RUN_STATE_STOPPED);
 
     // Task list, either create it or empty it
@@ -179,6 +182,56 @@ void HandyTaskMan::nudge(void)
     }
 }
 
+// Function sleep
+// provides a millisecond sleep based on 
+// calculating the smallest interval from now to 
+// the next scheduled task
+void HandyTaskMan::sleep(void)
+{
+    struct loop_task *loop_task;
+    uint32_t now = millis();
+    uint32_t sleep_interval = 1000;
+    uint32_t time_to_next_call;
+
+    if (run_state == HTM_RUN_STATE_STOPPED) {
+        // not running, nothing to do
+        return;
+    }
+
+    for (loop_task = HTM_LIST_NEXT(task_list);
+         loop_task != task_list;
+         loop_task = HTM_LIST_NEXT(loop_task)) {
+
+        if (loop_task->runstate_mask & run_state) {
+            // time in msecs to next call
+            if (loop_task->call_interval == 1) {
+                // bypass for 1ms interval (argb/rgb)
+                sleep_interval = 0;
+            }
+            else {
+                time_to_next_call = loop_task->last_call + loop_task->call_interval - now;
+                if (time_to_next_call < sleep_interval) {
+                    sleep_interval = time_to_next_call;
+                }
+            }
+        }
+    }
+
+    // protect against overly long sleeps
+    if (sleep_interval > 1000) {
+        sleep_interval = 1000;
+    }
+
+    // skip for short periods
+    // such as rgb/argb that use a 1msec loop
+    if (sleep_interval == 0) {
+        return;
+    }
+
+    // account for sleep and do the delay
+    sleep_time += sleep_interval;
+    delay(sleep_interval);
+}
 
 // Function set_logger
 // sets optional external logging function
@@ -228,6 +281,10 @@ void HandyTaskMan::log_stats(void)
             loop_task->cpu_time = 0;
         }
     }
+
+    // log sleep time and reset
+    log("  SleepTime:%u", sleep_time);
+    sleep_time = 0;
 }
 
 

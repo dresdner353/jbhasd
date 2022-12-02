@@ -96,6 +96,8 @@ class HandyTaskMan
 
         void nudge(void);
 
+        void sleep(void);
+
         void add_task(const char *name,
                       uint32_t runstate_mask,
                       uint32_t call_interval,
@@ -107,6 +109,7 @@ class HandyTaskMan
         void log_stats(void);
                      
     private:
+        uint32_t sleep_time;
         struct loop_task* loop_task_alloc(const char *name);
         void loop_task_free(struct loop_task* loop_task);
 

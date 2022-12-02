@@ -209,4 +209,7 @@ void loop()
 
     // Tasks
     TaskMan.nudge();
+
+    // sleep as required
+    TaskMan.sleep();
 }
