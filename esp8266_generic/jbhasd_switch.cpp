@@ -519,22 +519,6 @@ void loop_task_check_switches(void)
             }
         }
     }
-    
-    for (gpio_rgb = HTM_LIST_NEXT(gv_device.rgb_list);
-         gpio_rgb != gv_device.rgb_list;
-         gpio_rgb = HTM_LIST_NEXT(gpio_rgb)) {
-
-        // Only work with entries with a manual pin
-        if (gpio_rgb->manual_pin != NO_PIN) {
-            button_state = digitalRead(gpio_rgb->manual_pin);
-            if (button_state == LOW) {
-                log_message("Detected manual push on rgb:%s pin:%d",
-                            gpio_rgb->name,
-                            gpio_rgb->manual_pin);
-                set_rgb_random_program(gpio_rgb);
-            }
-        }
-    }
 }
 
 
