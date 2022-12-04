@@ -272,8 +272,9 @@ void HandyTaskMan::log_stats(void)
          loop_task = HTM_LIST_NEXT(loop_task)) {
 
         if (loop_task->num_calls > 0) {
-            log("  Task:%s Calls:%u CpuTime:%u",
+            log("  Task:%s Interval:%u Calls:%u CpuTime:%u",
                 loop_task->name,
+                loop_task->call_interval,
                 loop_task->num_calls,
                 loop_task->cpu_time);
 
