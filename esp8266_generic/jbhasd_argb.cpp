@@ -461,12 +461,6 @@ void setup_argb(struct gpio_argb *gpio_argb)
         // Initialize all pixels to 'off'
         gpio_argb->neopixel->begin();
         gpio_argb->neopixel->show(); 
-
-        if (gpio_argb->manual_pin != NO_PIN) {
-            log_message("    Manual pin:%d",
-                        gpio_argb->manual_pin);
-            pinMode(gpio_argb->manual_pin, INPUT_PULLUP);
-        }
     }
 }
 
