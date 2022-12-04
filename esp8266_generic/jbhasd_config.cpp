@@ -361,12 +361,11 @@ void load_config(void)
 
                 strcpy(gpio_rgb->name, control_name);
 
-                // RGB pins and manual switch
+                // RGB pins 
                 // all default to NO_PIN
                 gpio_rgb->red_pin = json_get_ival(control["red_pin"], NO_PIN);
                 gpio_rgb->green_pin = json_get_ival(control["green_pin"], NO_PIN);
                 gpio_rgb->blue_pin = json_get_ival(control["blue_pin"], NO_PIN);
-                gpio_rgb->manual_pin = json_get_ival(control["manual_pin"], NO_PIN);
 
                 gpio_rgb->init_interval = json_get_ival(control["init_interval"], 0);
                 JsonObject program = control["program"];
@@ -383,7 +382,6 @@ void load_config(void)
                 // aRGB pin and neopixel args
                 // default to NO_PIN 
                 gpio_argb->pin = json_get_ival(control["pin"], 255);
-                gpio_argb->manual_pin = json_get_ival(control["manual_pin"], 255);
                 gpio_argb->num_leds = json_get_ival(control["num_leds"], 0);
                 gpio_argb->neopixel_flags = json_get_ival(control["neopixel_flags"], 0);
                 JsonObject program = control["program"];
