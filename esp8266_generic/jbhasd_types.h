@@ -115,7 +115,6 @@ struct gpio_rgb {
     uint8_t red_pin;   // Red pin
     uint8_t green_pin; // Green pin
     uint8_t blue_pin;  // Blue pin
-    uint8_t manual_pin; // Random Program
     struct led_program_step *program; // default program
     uint16_t program_len;
     int index;
@@ -124,8 +123,10 @@ struct gpio_rgb {
     // arrays of desired and current states
     // for pins
     // these are PWM values not RGB
+    // also tracking of fade 
     uint16_t desired_states[3];
     uint16_t current_states[3];
+    uint8_t fade_in_progress; 
 
     // Determined if we discover we encounter an end
     // of program while extracting first step
@@ -142,7 +143,6 @@ struct gpio_argb {
     struct gpio_argb *prev, *next;
     char name[MAX_FIELD_LEN];
     uint8_t pin; // Data pin
-    uint8_t manual_pin; // Random Program
     uint16_t num_leds;
     uint32_t neopixel_flags;
 
@@ -262,7 +262,6 @@ struct gpio_rgb* gpio_rgb_alloc(void);
 void loop_task_transition_rgb(void);
 void set_rgb_program(struct gpio_rgb *gpio_rgb,
                      JsonObject program);
-void set_rgb_random_program(struct gpio_rgb *gpio_rgb);
 void set_rgb_state(struct gpio_rgb *gpio_rgb);
 void setup_rgb(struct gpio_rgb* gpio_rgb);
 void rgb_init(void);
