@@ -173,6 +173,10 @@ void fade_rgb(struct gpio_rgb *gpio_rgb)
         gpio_rgb->current_states[0] = gpio_rgb->desired_states[0];
         gpio_rgb->current_states[1] = gpio_rgb->desired_states[1];
         gpio_rgb->current_states[2] = gpio_rgb->desired_states[2];
+
+        // mark fade as complete
+        gpio_rgb->fade_in_progress = 0;
+
     }
     else {
         // delay mechanism
@@ -225,6 +229,17 @@ void fade_rgb(struct gpio_rgb *gpio_rgb)
             analogWrite(gpio_rgb->blue_pin,
                         gpio_rgb->current_states[2]);
         }
+
+        // determine if fade is complete
+        // desired and current states are all matched
+        if ((gpio_rgb->desired_states[0] == gpio_rgb->current_states[0] &&
+             gpio_rgb->desired_states[1] == gpio_rgb->current_states[1] &&
+             gpio_rgb->desired_states[2] == gpio_rgb->current_states[2])) {
+
+            // mark fade as complete
+            gpio_rgb->fade_in_progress = 0;
+
+        }
     }
 }
 
@@ -239,31 +254,61 @@ void loop_task_transition_rgb(void)
     for (gpio_rgb = HTM_LIST_NEXT(gv_device.rgb_list);
          gpio_rgb != gv_device.rgb_list;
          gpio_rgb = HTM_LIST_NEXT(gpio_rgb)) {
-        if (gpio_rgb->enabled && 
-            gpio_rgb->index  == -1) {
+
+        if (!gpio_rgb->enabled) {
+            // nothing to do with disabled controls
+            continue;
+        }
+
+        if (gpio_rgb->index  == -1) {
             // initial kick
             set_rgb_state(gpio_rgb);
         }
         else if (gpio_rgb->index >= 0) {
             // Fade color if the current and desired states 
             // are not yet aligned
-            if ((gpio_rgb->desired_states[0] !=
-                 gpio_rgb->current_states[0] ||
-                 gpio_rgb->desired_states[1] !=
-                 gpio_rgb->current_states[1] ||
-                 gpio_rgb->desired_states[2] !=
-                 gpio_rgb->current_states[2])) {
+            if (gpio_rgb->fade_in_progress) {
                 fade_rgb(gpio_rgb);
             }
-            else if (!gpio_rgb->single_step && 
-                     gpio_rgb->enabled) {
-                // Only transition to next colour if 
-                // we have not determined the program is 
-                // a single step
-                set_rgb_state(gpio_rgb);
+            else {
+                if (!gpio_rgb->single_step) {
+                    // Only transition to next colour if 
+                    // we have not determined the program is 
+                    // a single step
+                    set_rgb_state(gpio_rgb);
+                }
+                else {
+                    // disable the single step program
+                    gpio_rgb->enabled = 0;
+                }
             }
         }
     }
+}
+
+// Function loop_task_check_active_programs()
+void loop_task_check_active_programs(void)
+{
+    struct gpio_rgb *gpio_rgb;
+    static uint32_t last_transition_interval = 0;
+    uint32_t transition_interval;
+
+    transition_interval = 500;
+    for (gpio_rgb = HTM_LIST_NEXT(gv_device.rgb_list);
+         gpio_rgb != gv_device.rgb_list;
+         gpio_rgb = HTM_LIST_NEXT(gpio_rgb)) {
+
+        if (gpio_rgb->enabled) {
+            // nothing to do as at least 1 program
+            // is active
+            return;
+        }
+    }
+
+    // if we get here there are no active programs
+    // So we remove the transition task to 
+    // get us more sleep time and same power
+    TaskMan.remove_task("PWM LED Transitions");
 }
 
 // Function set_rgb_program
@@ -382,82 +427,15 @@ void set_rgb_program(struct gpio_rgb *gpio_rgb,
 
     // nudge into motion
     set_rgb_state(gpio_rgb);
-}
 
-
-// Function set_rgb_random_program
-// Generates a simple random program for the given RGB
-void set_rgb_random_program(struct gpio_rgb *gpio_rgb)
-{
-    static uint8_t variant = 0;
-    char *program;
-
-    log_message("set_rgb_random_program(name=%s, variant=%d)",
-                gpio_rgb->name, 
-                variant);
-
-    switch(variant) {
-      case 0:
-        // White fixed
-        program = "0xFFFFFF";
-        break;
-
-      case 1:
-        // Red
-        program = "0xFF0000";
-        break;
-
-      case 2:
-        // Green
-        program = "0x00FF00";
-        break;
-
-      case 3:
-        // Blue
-        program = "0x0000FF";
-        break;
-
-      case 4:
-        // Random 1 second
-        // no fade
-        program = "random;0;1000";
-        break;
-
-      case 5:
-        // Random 1 second
-        // 3ms fade
-        program = "random;3;1000";
-        break;
-
-      case 6:
-        // Random 200ms
-        // no fade
-        program = "random;0;200";
-        break;
-
-      case 7:
-        // Random 200ms
-        // 1ms fade
-        program = "random;1;200";
-        break;
-
-      case 8:
-        // RGB cycle
-        // 10ms fade
-        program = "0xFF0000;10;0,0x00FF00;10;0,0x0000FF;10;0";
-        break;
-
-      case 9:
-      default:
-        program = "0x000000";
-        // Off
-    }
-
-    //set_rgb_program(gpio_rgb, program);
-    // FIXME
-
-    // rotate between 10 variants
-    variant = (variant + 1) % 10;
+    // activate the 1msec LED transition 
+    // callback to drive active programs
+    TaskMan.add_task("PWM LED Transitions",
+                     RUN_STATE_WIFI_STA_UP |
+                     RUN_STATE_WIFI_STA_DOWN |
+                     RUN_STATE_INIT,
+                     1,
+                     loop_task_transition_rgb);
 }
 
 
@@ -527,6 +505,9 @@ void set_rgb_state(struct gpio_rgb *gpio_rgb)
     gpio_rgb->desired_states[0] = end_red;
     gpio_rgb->desired_states[1] = end_green;
     gpio_rgb->desired_states[2] = end_blue;
+
+    // activate fading
+    gpio_rgb->fade_in_progress = 1;
 }
 
 void setup_rgb(struct gpio_rgb *gpio_rgb)
@@ -537,6 +518,7 @@ void setup_rgb(struct gpio_rgb *gpio_rgb)
 
     gpio_rgb->enabled = 0;
     gpio_rgb->index = -1;
+    gpio_rgb->fade_in_progress = 0;
 
     if (gpio_rgb->red_pin != NO_PIN) {
         log_message("    LED Red pin:%d",
@@ -556,29 +538,17 @@ void setup_rgb(struct gpio_rgb *gpio_rgb)
         pinMode(gpio_rgb->blue_pin, OUTPUT);
         analogWrite(gpio_rgb->blue_pin, 0);
     }
-    if (gpio_rgb->manual_pin != NO_PIN) {
-        log_message("    Manual pin:%d",
-                    gpio_rgb->manual_pin);
-        pinMode(gpio_rgb->manual_pin, INPUT_PULLUP);
-    }
 }
 
 void rgb_init()
 {
     if (!HTM_LIST_EMPTY(gv_device.rgb_list)) {
-        // LED Transtions
-        // Uses 1msec delay and actual longer transitions
-        // are handled internally. 
-        // Also runs in both STA modes
-        // and init mode ensuring LEDs start working right
-        // away at boot time even during the 5-sec AP mode
-        // wait
-        TaskMan.add_task("PWM LED Transitions",
+        TaskMan.add_task("RGB Active Program Check",
                          RUN_STATE_WIFI_STA_UP |
                          RUN_STATE_WIFI_STA_DOWN |
                          RUN_STATE_INIT,
-                         1,
-                         loop_task_transition_rgb);
+                         10000,
+                         loop_task_check_active_programs);
     }
 }
 
