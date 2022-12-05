@@ -373,9 +373,18 @@ void set_argb_program(struct gpio_argb *gpio_argb,
     if (!strcmp(gpio_argb->mode, "off")) {
         log_message("program mode set to off");
         gpio_argb->enabled = 0;
+        return;
     }
-    else {
-        gpio_argb->enabled = 1;
+
+    gpio_argb->enabled = 1;
+
+    // register 1msec interval for argb transitions
+    // as we have at least 1 active program now
+    if (!HTM_LIST_EMPTY(gv_device.argb_list)) {
+        TaskMan.add_task("Neopixel LED Transitions",
+                         RUN_STATE_WIFI_STA_UP,
+                         1,
+                         loop_task_transition_argb);
     }
 
     log_message("Program: mode:%s offset:%d delay:%d",
@@ -440,6 +449,31 @@ void loop_task_transition_argb(void)
 }
 
 
+// Function loop_task_check_active_programs()
+// disables the 1msec transition task if no active
+// programs are found
+// saves on power usage
+void loop_task_check_active_argb_programs(void)
+{
+    struct gpio_argb *gpio_argb;
+
+    for (gpio_argb = HTM_LIST_NEXT(gv_device.argb_list);
+         gpio_argb != gv_device.argb_list;
+         gpio_argb = HTM_LIST_NEXT(gpio_argb)) {
+        if (gpio_argb->enabled) {
+            // nothing to do as at least 1 program
+            // is active
+            return;
+        }
+    }
+
+    // if we get here there are no active programs
+    // So we remove the transition task to 
+    // get us more sleep time and same power
+    TaskMan.remove_task("Neopixel LED Transitions");
+}
+
+
 // Function: setup_argb
 void setup_argb(struct gpio_argb *gpio_argb)
 {
@@ -464,13 +498,14 @@ void setup_argb(struct gpio_argb *gpio_argb)
     }
 }
 
+
 void argb_init(void)
 {
     if (!HTM_LIST_EMPTY(gv_device.argb_list)) {
-        TaskMan.add_task("Neopixel LED Transitions",
+        TaskMan.add_task("RGB Active Program Check",
                          RUN_STATE_WIFI_STA_UP,
-                         1,
-                         loop_task_transition_argb);
+                         10000,
+                         loop_task_check_active_argb_programs);
     }
 }
 
