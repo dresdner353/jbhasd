@@ -382,7 +382,9 @@ void set_argb_program(struct gpio_argb *gpio_argb,
     // as we have at least 1 active program now
     if (!HTM_LIST_EMPTY(gv_device.argb_list)) {
         TaskMan.add_task("Neopixel LED Transitions",
-                         RUN_STATE_WIFI_STA_UP,
+                         RUN_STATE_WIFI_STA_UP |
+                         RUN_STATE_WIFI_STA_DOWN |
+                         RUN_STATE_INIT,
                          1,
                          loop_task_transition_argb);
     }
@@ -503,7 +505,9 @@ void argb_init(void)
 {
     if (!HTM_LIST_EMPTY(gv_device.argb_list)) {
         TaskMan.add_task("RGB Active Program Check",
-                         RUN_STATE_WIFI_STA_UP,
+                         RUN_STATE_WIFI_STA_UP |
+                         RUN_STATE_WIFI_STA_DOWN |
+                         RUN_STATE_INIT,
                          10000,
                          loop_task_check_active_argb_programs);
     }
