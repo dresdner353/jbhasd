@@ -286,14 +286,11 @@ void loop_task_transition_rgb(void)
     }
 }
 
-// Function loop_task_check_active_programs()
-void loop_task_check_active_programs(void)
+// Function loop_task_check_active_rgb_programs()
+void loop_task_check_active_rgb_programs(void)
 {
     struct gpio_rgb *gpio_rgb;
-    static uint32_t last_transition_interval = 0;
-    uint32_t transition_interval;
 
-    transition_interval = 500;
     for (gpio_rgb = HTM_LIST_NEXT(gv_device.rgb_list);
          gpio_rgb != gv_device.rgb_list;
          gpio_rgb = HTM_LIST_NEXT(gpio_rgb)) {
@@ -548,7 +545,7 @@ void rgb_init()
                          RUN_STATE_WIFI_STA_DOWN |
                          RUN_STATE_INIT,
                          10000,
-                         loop_task_check_active_programs);
+                         loop_task_check_active_rgb_programs);
     }
 }
 
