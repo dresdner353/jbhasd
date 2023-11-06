@@ -25,7 +25,7 @@ LOG_FILE=/dev/null
 pgrep -f "${JBHASD_WEB_SVR}" >/dev/null
 if [ $? -ne 0 ]
 then
-    nohup ${JBHASD_WEB_SVR_PATH} > ${LOG_FILE} 2>&1 &
+    nohup python3 ${JBHASD_WEB_SVR_PATH} > ${LOG_FILE} 2>&1 &
 fi
 
 # Purge old logs
