@@ -871,6 +871,10 @@ def probe_devices():
         purged_urls = 0
         control_changes = 0
         for device_name in list(gv_device_dict.keys()):
+
+            if not device_name in gv_device_dict:
+                continue
+
             device = gv_device_dict[device_name]
             url = device['url']
             json_data = get_url(url, gv_http_timeout_secs, 1)
