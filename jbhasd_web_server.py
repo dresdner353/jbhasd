@@ -1,4 +1,3 @@
-#!/usr/bin/python3 
 
 # Cormac Long April 2017
 #
@@ -284,24 +283,9 @@ gv_sunrise_time = get_event_time(gv_actual_sunrise_time)
 
 # device global dictionaries
 
-# Init dict of discovered device URLs
-# keyed on zeroconf name
-gv_jbhasd_zconf_url_set = set()
-
-# dict of urls
+# device dict 
 # keyed on name
-gv_jbhasd_device_url_dict = {}
-
-# dict of probed device json data
-# keyed on name
-gv_jbhasd_device_status_dict = {}
-
-# timestamp of last stored status
-# keyed on name
-gv_jbhasd_device_ts_dict = {}
-
-# timestamp of last control program
-gv_jbhasd_control_program_dict = {}
+gv_device_dict = {}
 
 # timeout for all fetch calls
 gv_http_timeout_secs = 10
@@ -327,76 +311,52 @@ gv_context_title_dict = {
 
 def purge_all_devices():
     # wipe all dicts for tracked devices, states etc
-    global gv_jbhasd_device_url_dict
-    global gv_jbhasd_device_status_dict
-    global gv_jbhasd_device_ts_dict
-    global gv_jbhasd_control_program_dict
-    global gv_jbhasd_zconf_url_set
+    global gv_device_dict
 
     log_message("Resetting all device dictionaries")
 
-    gv_jbhasd_device_url_dict = {}
-    gv_jbhasd_device_status_dict = {}
-    gv_jbhasd_device_ts_dict = {}
-    gv_jbhasd_control_program_dict = {}
-    gv_jbhasd_zconf_url_set = set()
+    gv_device_dict = {}
+    return
 
 
 def purge_device(device_name, reason):
     # wipe single device from dicts etc
-    global gv_jbhasd_device_url_dict
-    global gv_jbhasd_device_status_dict
-    global gv_jbhasd_device_ts_dict
-    global gv_jbhasd_control_program_dict
-    global gv_jbhasd_zconf_url_set
+    global gv_device_dict
 
     log_message("Purging Device:%s reason:%s" % (
         device_name, 
         reason))
 
-    url = None
+    if (device_name in gv_device_dict):
+        del gv_device_dict[device_name]
 
-    if (device_name in gv_jbhasd_device_url_dict):
-        # grab URL before we purge
-        url = gv_jbhasd_device_url_dict[device_name]
-        del gv_jbhasd_device_url_dict[device_name]
-
-    if (device_name in gv_jbhasd_device_ts_dict):
-        del gv_jbhasd_device_ts_dict[device_name]
-
-    if (device_name in gv_jbhasd_device_status_dict):
-        del gv_jbhasd_device_status_dict[device_name]
-
-    if (device_name in gv_jbhasd_control_program_dict):
-        del gv_jbhasd_control_program_dict[device_name]
-
-    # Take out the device URL now from discovery set
-    if (not url is None and url in gv_jbhasd_zconf_url_set):
-        gv_jbhasd_zconf_url_set.remove(url)
+    return
 
 
 def track_device_status(device_name, url, json_data):
     # track device status data and timestamp
-    global gv_jbhasd_device_url_dict
-    global gv_jbhasd_device_status_dict
-    global gv_jbhasd_device_ts_dict
+    global gv_device_dict
 
-    gv_jbhasd_device_url_dict[device_name] = url
-    gv_jbhasd_device_status_dict[device_name] = json_data
-    gv_jbhasd_device_ts_dict[device_name] = int(time.time())
+    # device might have been purged and no longer
+    # tracked in dict.. in which case.. skip
+    if device_name in gv_device_dict:
+        device = gv_device_dict[device_name]
+        device['status'] = json_data
+        device['last_updated'] = int(time.time())
+    return
 
 
 def track_control_program(device_name, control_name, event):
-    global gv_jbhasd_control_program_dict
+    global gv_device_dict
 
-    if (not device_name in gv_jbhasd_control_program_dict):
-        gv_jbhasd_control_program_dict[device_name] = {}
+    device = gv_device_dict[device_name]
 
-    if (not control_name in gv_jbhasd_control_program_dict[device_name]):
-        gv_jbhasd_control_program_dict[device_name][control_name] = {}
+    if not control_name in device['program_reg']:
+        device['program_reg'][control_name] = {}
 
     # Track the time we programmed the given control
-    gv_jbhasd_control_program_dict[device_name][control_name][event] = int(time.time())
+    device['program_reg'][control_name][event] = int(time.time())
+    return
 
 
 def sunset_api_time_to_epoch(time_str, local_timezone):
@@ -424,10 +384,10 @@ def check_control(
         zone_name, 
         control_name):
 
+    global gv_device_dict
     global gv_sunset_time
     global gv_sunrise_time
     global gv_json_config
-    global gv_jbhasd_control_program_dict
 
     log_message('check_control(device=%s, zone=%s, control=%s' % (
         device_name,
@@ -437,6 +397,8 @@ def check_control(
     current_time = int(time.strftime("%H%M", time.localtime()))
     current_time_rel_secs = ((int(current_time / 100) * 60 * 60) + 
             ((current_time % 100) * 60))
+
+    device = gv_device_dict[device_name]
 
     # device programs
     for device_program in gv_json_config['device_programs']:
@@ -466,10 +428,9 @@ def check_control(
                         ((event_time % 100) * 60))
 
                 last_program_epoch = 0
-                if (device_name in gv_jbhasd_control_program_dict and
-                        control_name in gv_jbhasd_control_program_dict[device_name] and
-                        event_time in gv_jbhasd_control_program_dict[device_name][control_name]):
-                    last_program_epoch = gv_jbhasd_control_program_dict[device_name][control_name][event_time]
+                if (control_name in device['program_reg'] and
+                        event_time in device['program_reg'][control_name]):
+                    last_program_epoch = device['program_reg'][control_name][event_time]
                 last_program_interval = int(time.time()) - last_program_epoch
 
                 program_threshold = (current_time_rel_secs - event_time_rel_secs) % 86400 
@@ -540,51 +501,6 @@ def check_control(
     return None, None
 
 
-def check_rgb(zone_name, 
-              control_name, 
-              current_time, 
-              control_program):
-
-    global gv_sunset_time
-    global gv_sunrise_time
-
-    desired_program = None
-
-    for timer in gv_json_config['rgb_timers']:
-        #log_message(timer)
-        if timer['zone'] == zone_name and timer['control'] == control_name:
-
-            # we can now assert a default of off
-            desired_program = timer['off_program']
-
-            # parse times from fields 
-            # this also substitutes keywords
-            # like sunset and sunrise
-            on_time = get_event_time(timer['on'])
-            off_time = get_event_time(timer['off'])
-
-            if (on_time <= off_time):
-                if (current_time >= on_time and 
-                    current_time < off_time):
-                    desired_program = timer['on_program']
-                    break
-            else:
-                if (current_time > on_time):
-                    desired_program = timer['on_program']
-                    break
-                else:
-                    if (current_time < on_time and
-                        current_time < off_time):
-                        desired_program = timer['on_program']
-                        break
-
-    #log_message("return rgb program for %s/%s is %s" % (
-    #    zone_name,
-    #    control_name,
-    #    desired_program))
-    return desired_program
-
-
 class ZeroConfListener(object):  
     def remove_service(self, zeroconf, type, name):
         # Can ignore this as we will self-purge
@@ -595,13 +511,14 @@ class ZeroConfListener(object):
         # extract dns-sd info, build URL
         # and store in set
 
-        global gv_jbhasd_device_ts_dict
-        global gv_jbhasd_zconf_url_set
-
         info = zeroconf.get_service_info(type, name)
         if info:
-            #address = socket.inet_ntoa(info.addresses[0])
-            address = socket.inet_ntoa(info.address)
+            # work around python 3.x variations on support of 
+            # addresses array in the zeroconf service info
+            if hasattr(info, 'addresses'):
+                address = socket.inet_ntoa(info.addresses[0])
+            else:
+                address = socket.inet_ntoa(info.address)
             port = info.port
             url = "http://%s:%d" % (address, port)
             now = int(time.time())
@@ -612,14 +529,24 @@ class ZeroConfListener(object):
             fields = name.split('.')
             device_name = fields[0]
 
-            # Merge into URL set
-            # and init the timestamp
-            if not url in gv_jbhasd_zconf_url_set:
-                gv_jbhasd_zconf_url_set.add(url)
-                gv_jbhasd_device_ts_dict[device_name] = now
+            # register in gloval device dict
+            if not device_name in gv_device_dict:
                 log_message("Discovered %s (%s)" % (
                     device_name,
                     url))
+
+                # register empty device in global device dict
+                device = {}
+                device['name'] = device_name
+                device['url'] = url
+                device['status'] = {}
+                device['status']['name'] = device_name
+                device['status']['zone'] = 'Unknown'
+                device['status']['controls'] = []
+                device['last_updated'] = now
+                device['program_reg'] = {}
+                gv_device_dict[device_name] = device
+
 
         return
 
@@ -647,17 +574,20 @@ def discover_devices():
         zeroconf.close()
         zeroconf = None
 
+    return
+
+
 def get_url(url, url_timeout, parse_json):
     # General purpose URL GETer
     # return contents of page and parsed as json
     # if the parse_json arg is 1
 
-    global gv_jbhasd_device_url_dict
+    global gv_device_dict
 
     # Try to determine the URL name
     url_name = "Unknown"
-    for device_name in gv_jbhasd_device_url_dict:
-        if (url == gv_jbhasd_device_url_dict[device_name]):
+    for device_name in gv_device_dict:
+        if (url == gv_device_dict[device_name]):
             url_name = device_name
 
     response_str = None
@@ -717,15 +647,17 @@ def post_url(url, json_data, url_timeout):
 
 
 def get_control_state(zone_name, control_name):
-    global gv_jbhasd_device_status_dict
+    global gv_device_dict
     # Get state of specified control
     # return 0 or 1 or -1 (not found)
 
     state = -1
 
-    device_list = list(gv_jbhasd_device_status_dict)
+    device_list = list(gv_device_dict.keys())
     for device_name in device_list:
-        json_data = gv_jbhasd_device_status_dict[device_name]
+        device = gv_device_dict[device_name]
+
+        json_data = device['status']
         device_zone_name = json_data['zone']
 
         if (device_zone_name != zone_name):
@@ -744,14 +676,14 @@ def get_control_state(zone_name, control_name):
 
 
 def check_automated_devices():
-    # Check for automated devices
-    # safe snapshot of dict keys into list
-    device_list = list(gv_jbhasd_device_status_dict)
+    device_list = list(gv_device_dict.keys())
     # get time in hhmm format
     for device_name in device_list:
-        json_data = gv_jbhasd_device_status_dict[device_name]
+        device = gv_device_dict[device_name]
+
+        json_data = device['status']
         zone_name = json_data['zone']
-        url = gv_jbhasd_device_url_dict[device_name]
+        url = device['url']
 
         # Control status check 
         for control in json_data['controls']:
@@ -881,10 +813,7 @@ def probe_devices():
     global gv_actual_sunset_time 
     global gv_actual_sunrise_time 
 
-    global gv_jbhasd_device_url_dict
-    global gv_jbhasd_device_status_dict
-    global gv_jbhasd_device_ts_dict
-    global gv_jbhasd_zconf_url_set
+    global gv_device_dict
 
     # loop forever
     while (1):
@@ -936,13 +865,14 @@ def probe_devices():
 
         # iterate set of discovered device URLs as snapshot list
         # avoids issues if the set is updated mid-way
-        device_url_list = list(gv_jbhasd_zconf_url_set)
-        total_probes = len(device_url_list)
+        total_probes = len(gv_device_dict)
         successful_probes = 0
         failed_probes = 0
         purged_urls = 0
         control_changes = 0
-        for url in device_url_list:
+        for device_name in list(gv_device_dict.keys()):
+            device = gv_device_dict[device_name]
+            url = device['url']
             json_data = get_url(url, gv_http_timeout_secs, 1)
             if (json_data and 'name' in json_data):
                 device_name = json_data['name']
@@ -969,14 +899,18 @@ def probe_devices():
         # iterate the known devices with status values 
         # that were previously recorded. 
         # Check for expired timestamps and purge
-        device_name_list = list(gv_jbhasd_device_status_dict)
+        device_name_list = list(gv_device_dict.keys())
+        purged_devices = 0
         for device_name in device_name_list:
-            url = gv_jbhasd_device_url_dict[device_name]
+            device = gv_device_dict[device_name]
 
-            last_updated = now - gv_jbhasd_device_ts_dict[device_name]
+            last_updated = now - device['last_updated']
             if last_updated >= gv_json_config['discovery']['device_purge_timeout']:
-                purged_urls += 1
-                reason = "expired.. URL %s last updated %d seconds ago" % (url, last_updated)
+                purged_devices += 1
+                reason = "expired.. device %s (%s) last updated %d seconds ago" % (
+                        device_name, 
+                        device['url'],
+                        last_updated)
                 purge_device(device_name, reason)
 
         # Automated devices
@@ -986,7 +920,7 @@ def probe_devices():
             total_probes,
             successful_probes,
             failed_probes,
-            purged_urls))
+            purged_devices))
 
         # loop sleep interval
         time.sleep(gv_json_config['discovery']['device_probe_interval'])
@@ -1105,14 +1039,11 @@ def get_google_icon(control_name):
 
 
 def build_zone_web_page():
-    global gv_jbhasd_zconf_url_set
-    global gv_jbhasd_device_status_dict
-    global gv_jbhasd_device_url_dict
+    global gv_device_dict
     global gv_json_config
 
     # safe snapshot of dict keys into list
-    device_list = list(gv_jbhasd_device_status_dict)
-    url_dict_copy = copy.deepcopy(gv_jbhasd_device_url_dict)
+    device_list = list(gv_device_dict.keys())
 
     jquery_str = ""
     switch_id = 0
@@ -1125,10 +1056,12 @@ def build_zone_web_page():
 
     # Controls population
     for device_name in device_list:
-        json_data = gv_jbhasd_device_status_dict[device_name]
+        device = gv_device_dict[device_name]
+        json_data = device['status']
+
         zone_name = json_data['zone']
         zone_set.add(zone_name)
-        url = url_dict_copy[device_name]
+        url = device['url']
 
         # init card lists for zone
         if not zone_name in switch_card_dict:
@@ -1334,8 +1267,19 @@ def build_zone_web_page():
 
                 colour_list = []
                 if 'colours' in control['program']:
-                    # limit to first 25 LEDs
-                    colour_list = control['program']['colours'][:25]
+                    num_colours = len(control['program']['colours'])
+                    # limit to 25 LEDs truncated across full list
+                    if num_colours <= 25:
+                        # entire list
+                        colour_list = control['program']['colours']
+                    else:
+                        # every step colours based on division by 25
+                        # min step size of 2
+                        step = round(num_colours / 25)
+                        if step < 2:
+                            step = 2
+                        for i in range(0, num_colours - 1, step):
+                            colour_list.append(control['program']['colours'][i])
 
                 # Iterate colours and format in stack of
                 # 5 dots
@@ -1445,25 +1389,17 @@ def build_device_web_page():
     global gv_sunrise_time
     global gv_actual_sunrise_time
     global gv_json_config
-    global gv_jbhasd_zconf_url_set
-    global gv_jbhasd_device_status_dict
-    global gv_jbhasd_device_url_dict
-    global gv_jbhasd_device_ts_dict
+    global gv_device_dict
     global gv_startup_time
 
-    # safe snapshot of dict keys into list
-    url_dict_copy = copy.deepcopy(gv_jbhasd_device_url_dict)
-    ts_dict_copy = copy.deepcopy(gv_jbhasd_device_ts_dict)
-    status_dict_copy = copy.deepcopy(gv_jbhasd_device_status_dict)
-
-    # build list of device dicts sorted on Name
-    device_name_list = list(status_dict_copy)
+    # build snapshot list of device dicts sorted on Name
+    device_name_list = list(gv_device_dict.keys())
     now = int(time.time())
     device_list = []
 
     for device_name in device_name_list:
-        json_data = status_dict_copy[device_name]
-        json_data['last_updated'] = now - ts_dict_copy[device_name]
+        device = gv_device_dict[device_name]
+        json_data = device['status']
         device_list.append(json_data)
 
     device_list = sorted(
@@ -1509,7 +1445,9 @@ def build_device_web_page():
             '<table border="0" padding="5">'
             '<tr><td>Started:</td><td>%s</td></tr>'
             '<tr><td>Discovered Devices:</td><td>%s</td></tr>'
-            '<tr><td>Probed Devices:</td><td>%s</td></tr>'
+            '<tr><td>Sunrise:</td><td>%s</td></tr>'
+            '<tr><td>Sunset:</td><td>%s</td></tr>'
+            '<tr><td>Sunrise/Sunset Offset:</td><td>%s (secs)</td></tr>'
             '</table>'
             '<br>'
             '<button type="button" id="%s" class="btn btn-primary">'
@@ -1520,8 +1458,10 @@ def build_device_web_page():
             '</div>'
             ) % (
                     gv_startup_time,
-                    len(gv_jbhasd_zconf_url_set),
                     len(device_list),
+                    gv_actual_sunrise_time,
+                    gv_actual_sunset_time,
+                    gv_json_config['sunset']['offset'],
                     jquery_reboot_all_click_id,
                     jquery_reconfig_all_click_id 
                     )
@@ -1537,6 +1477,7 @@ def build_device_web_page():
             '      <th scope="col">Updated</th>'
             '      <th scope="col">Version</th>'
             '      <th scope="col">Uptime</th>'
+            '      <th scope="col">Controls</th>'
             '      <th scope="col">Status Restarts</th>'
             '      <th scope="col">Signal Restarts</th>'
             '      <th scope="col">Free Memory</th>'
@@ -1564,8 +1505,9 @@ def build_device_web_page():
             signal_restarts = device['system']['signal_wifi_restarts']
             status_restarts = device['system']['status_wifi_restarts']
 
-        url = url_dict_copy[device_name]
-        last_update_ts = ts_dict_copy[device_name]
+        device = gv_device_dict[device_name]
+        url = device['url']
+        last_update_ts = device['last_updated']
 
         # device reboot URL
         # carries device name and reboot=1
@@ -1638,6 +1580,7 @@ def build_device_web_page():
                 '      <td>%s</td>'
                 '      <td>%s</td>'
                 '      <td>%s</td>'
+                '      <td>%s</td>'
                 '      <td>%.1f Kb</td>'
                 '    </tr>'
                 ) % (
@@ -1649,6 +1592,7 @@ def build_device_web_page():
                     now - last_update_ts,
                     version,
                     uptime,
+                    len(device['status']['controls']),
                     status_restarts,
                     signal_restarts,
                     memory / 1024
@@ -1678,7 +1622,7 @@ def build_device_web_page():
 
 
 def process_console_action(
-        device, 
+        device_name, 
         zone, 
         control_name, 
         reboot, 
@@ -1688,8 +1632,7 @@ def process_console_action(
         rgb_program,
         argb_program):
 
-    global gv_jbhasd_device_url_dict
-    global gv_jbhasd_device_status_dict
+    global gv_device_dict
     global gv_json_config
 
     # list used to buok handle
@@ -1699,68 +1642,68 @@ def process_console_action(
     reboot_all = 0
     reconfig_all = 0
 
-    if (device and reboot):
+    if (device_name and reboot):
 
-        if device == 'all':
+        if device_name == 'all':
             log_message("Rebooting all devices")
             reboot_all = 1
-            for device in gv_jbhasd_device_url_dict:
-                url = gv_jbhasd_device_url_dict[device]
+            for device_name in gv_device_dict:
+                url = gv_device_dict[device_name]['url']
 
-                log_message("Rebooting %s" % (device))
+                log_message("Rebooting %s" % (device_name))
 
                 command_url_list.append('%s/reboot' % (url))
             purge_all_devices()
 
-        elif device in gv_jbhasd_device_url_dict:
-            url = gv_jbhasd_device_url_dict[device]
+        elif device_name in gv_device_dict:
+            url = gv_device_dict[device_name]['url']
 
-            log_message("Rebooting %s" % (device))
+            log_message("Rebooting %s" % (device_name))
 
             command_url_list.append('%s/reboot' % (url))
-            purge_device(device, "Rebooting")
+            purge_device(device_name, "Rebooting")
             
-    elif (device and reconfig):
+    elif (device_name and reconfig):
 
-        if device == 'all':
+        if device_name == 'all':
             log_message("Reconfiguring all devices")
             reconfig_all = 1
-            for device in gv_jbhasd_device_url_dict:
-                url = gv_jbhasd_device_url_dict[device]
+            for device_name in gv_device_dict:
+                url = gv_device_dict[device_name]['url']
 
-                log_message("Reconfiguring %s" % (device))
+                log_message("Reconfiguring %s" % (device_name))
 
                 command_url_list.append('%s/reconfigure' % (url))
 
             # Dont purge devices here as the probe stage will
             # invoke the reconfigure
 
-        elif device in gv_jbhasd_device_url_dict:
-            url = gv_jbhasd_device_url_dict[device]
+        elif device_name in gv_device_dict:
+            url = gv_device_dict[device_name]['url']
 
-            log_message("Reconfiguring %s" % (device))
+            log_message("Reconfiguring %s" % (device_name))
 
             command_url_list.append('%s/reconfigure' % (url))
 
-            # Dont purge device here as the probe stage will
+            # Dont purge device_name here as the probe stage will
             # invoke the reconfigure
 
-    elif (device and apmode):
+    elif (device_name and apmode):
 
-        if device in gv_jbhasd_device_url_dict:
-            url = gv_jbhasd_device_url_dict[device]
+        if device_name in gv_device_dict:
+            url = gv_device_dict[device_name]['url']
 
-            log_message("Rebooting %s into AP Mode" % (device))
+            log_message("Rebooting %s into AP Mode" % (device_name))
 
             command_url_list.append('%s/apmode' % (url))
 
-    elif (device and zone and control_name and state):
+    elif (device_name and zone and control_name and state):
 
-        if device in gv_jbhasd_device_url_dict:
-            url = gv_jbhasd_device_url_dict[device]
+        if device_name in gv_device_dict:
+            url = gv_device_dict[device_name]['url']
 
             log_message("Manually setting %s/%s/%s to state:%s" % (
-                device,
+                device_name,
                 zone,
                 control_name,
                 state))
@@ -1775,24 +1718,24 @@ def process_console_action(
                                  json_req,
                                  gv_http_timeout_secs)
             if (json_data):
-                track_device_status(device, url, json_data)
+                track_device_status(device_name, url, json_data)
 
     elif (zone and control_name and state):
 
         # Check all devices
-        for device in gv_jbhasd_device_status_dict:
-            json_data = gv_jbhasd_device_status_dict[device]
+        for device_name in gv_device_dict:
+            json_data = gv_device_dict[device_name]['status']
 
             if ('zone' in json_data and 
                     json_data['zone'] == zone and
                     'controls' in json_data):
                 for control in json_data['controls']:
                     if control['name'] == control_name:
-                        url = gv_jbhasd_device_url_dict[device]
+                        url = gv_device_dict[device_name]['url']
 
                         log_message("Manually setting (%s) %s/%s/%s to state:%s" % (
                             url,
-                            device,
+                            device_name,
                             zone,
                             control_name,
                             state))
@@ -1807,15 +1750,15 @@ def process_console_action(
                                              json_req,
                                              gv_http_timeout_secs)
                         if (json_data):
-                            track_device_status(device, url, json_data)
+                            track_device_status(device_name, url, json_data)
 
-    elif (device and zone and control_name and rgb_program):
+    elif (device_name and zone and control_name and rgb_program):
 
-        if device in gv_jbhasd_device_url_dict:
-            url = gv_jbhasd_device_url_dict[device]
+        if device_name in gv_device_dict:
+            url = gv_device_dict[device_name]['url']
 
             log_message("Manually setting %s/%s/%s to rgb_program:%s" % (
-                device,
+                device_name,
                 zone,
                 control_name,
                 rgb_program))
@@ -1833,7 +1776,7 @@ def process_console_action(
                                      json_req,
                                      gv_http_timeout_secs)
                 if (json_data):
-                    track_device_status(device, url, json_data)
+                    track_device_status(device_name, url, json_data)
 
             else:
                 log_message("program not found")
@@ -1843,19 +1786,19 @@ def process_console_action(
             rgb_program in gv_json_config['rgb_programs']):
 
             # Check all devices
-            for device in gv_jbhasd_device_status_dict:
-                json_data = gv_jbhasd_device_status_dict[device]
+            for device_name in gv_device_dict:
+                json_data = gv_device_dict[device_name]['status']
 
                 if ('zone' in json_data and 
                         json_data['zone'] == zone and
                         'controls' in json_data):
                     for control in json_data['controls']:
                         if control['name'] == control_name:
-                            url = gv_jbhasd_device_url_dict[device]
+                            url = gv_device_dict[device_name]['url']
 
                             log_message("Manually setting (%s) %s/%s/%s to rgb_program:%s" % (
                                 url,
-                                device,
+                                device_name,
                                 zone,
                                 control_name,
                                 rgb_program))
@@ -1870,18 +1813,18 @@ def process_console_action(
                                                  json_req,
                                                  gv_http_timeout_secs)
                             if (json_data):
-                                track_device_status(device, url, json_data)
+                                track_device_status(device_name, url, json_data)
 
         else:
             log_message("program not found")
 
-    elif (device and zone and control_name and argb_program):
+    elif (device_name and zone and control_name and argb_program):
 
-        if device in gv_jbhasd_device_url_dict:
-            url = gv_jbhasd_device_url_dict[device]
+        if device_name in gv_device_dict:
+            url = gv_device_dict[device_name]['url']
 
             log_message("Manually setting %s/%s/%s to argb_program:%s" % (
-                device,
+                device_name,
                 zone,
                 control_name,
                 argb_program))
@@ -1899,7 +1842,7 @@ def process_console_action(
                                      json_req,
                                      gv_http_timeout_secs)
                 if (json_data):
-                    track_device_status(device, url, json_data)
+                    track_device_status(device_name, url, json_data)
 
             else:
                 log_message("program not found")
@@ -1909,19 +1852,19 @@ def process_console_action(
             argb_program in gv_json_config['argb_programs']):
 
             # Check all devices
-            for device in gv_jbhasd_device_status_dict:
-                json_data = gv_jbhasd_device_status_dict[device]
+            for device_name in gv_device_dict:
+                json_data = gv_device_dict[device_name]['status']
 
                 if ('zone' in json_data and 
                         json_data['zone'] == zone and
                         'controls' in json_data):
                     for control in json_data['controls']:
                         if control['name'] == control_name:
-                            url = gv_jbhasd_device_url_dict[device]
+                            url = gv_device_dict[device_name]['url']
 
                             log_message("Manually setting (%s) %s/%s/%s to argb_program:%s" % (
                                 url,
-                                device,
+                                device_name,
                                 zone,
                                 control_name,
                                 argb_program))
@@ -1936,7 +1879,7 @@ def process_console_action(
                                                  json_req,
                                                  gv_http_timeout_secs)
                             if (json_data):
-                                track_device_status(device, url, json_data)
+                                track_device_status(device_name, url, json_data)
 
         else:
             log_message("program not found")
