@@ -343,6 +343,7 @@ def track_device_status(device_name, url, json_data):
         device = gv_device_dict[device_name]
         device['status'] = json_data
         device['last_updated'] = int(time.time())
+        device['failed_probes'] = 0
     return
 
 
@@ -539,6 +540,7 @@ class ZeroConfListener(object):
                 device = {}
                 device['name'] = device_name
                 device['url'] = url
+                device['failed_probes'] = 0
                 device['status'] = {}
                 device['status']['name'] = device_name
                 device['status']['zone'] = 'Unknown'
@@ -893,6 +895,7 @@ def probe_devices():
 
             else:
                 failed_probes += 1
+                device['failed_probes'] += 1
                 log_message('Failed to probe: %s .. response:%s' % (
                     url,
                     json_data))
@@ -1482,6 +1485,7 @@ def build_device_web_page():
             '      <th scope="col">Version</th>'
             '      <th scope="col">Uptime</th>'
             '      <th scope="col">Controls</th>'
+            '      <th scope="col">Failed Probes</th>'
             '      <th scope="col">Status Restarts</th>'
             '      <th scope="col">Signal Restarts</th>'
             '      <th scope="col">Free Memory</th>'
@@ -1585,6 +1589,7 @@ def build_device_web_page():
                 '      <td>%s</td>'
                 '      <td>%s</td>'
                 '      <td>%s</td>'
+                '      <td>%s</td>'
                 '      <td>%.1f Kb</td>'
                 '    </tr>'
                 ) % (
@@ -1597,6 +1602,7 @@ def build_device_web_page():
                     version,
                     uptime,
                     len(device['status']['controls']),
+                    device['failed_probes'],
                     status_restarts,
                     signal_restarts,
                     memory / 1024
