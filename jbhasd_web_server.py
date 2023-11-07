@@ -1478,12 +1478,11 @@ def build_device_web_page():
             '    <tr>'
             '      <th scope="col">Device Name</th>'
             '      <th scope="col">Zone</th>'
+            '      <th scope="col">Controls</th>'
             '      <th scope="col">Admin</th>'
-            '      <th scope="col">URL</th>'
             '      <th scope="col">Updated</th>'
             '      <th scope="col">Version</th>'
             '      <th scope="col">Uptime</th>'
-            '      <th scope="col">Controls</th>'
             '      <th scope="col">Failed Probes</th>'
             '      <th scope="col">Status Restarts</th>'
             '      <th scope="col">Signal Restarts</th>'
@@ -1576,14 +1575,21 @@ def build_device_web_page():
                 ) % (
                         jquery_apmode_click_id
                         )
+
+        # Controls list
+        controls_str = ''
+        for control in device['status']['controls']:
+            if controls_str:
+                controls_str += '<BR>'
+            controls_str += control['name'] 
+
         dashboard_str += (
                 '    <tr>'
-                '      <td>%s</td>'
-                '      <td>%s</td>'
-                '      <td>%s</td>'
                 '      <td><a href="%s" target="json">%s</a></td>'
-                '      <td>%02d secs</td>'
                 '      <td>%s</td>'
+                '      <td>%s</td>'
+                '      <td>%s</td>'
+                '      <td>%02d secs</td>'
                 '      <td>%s</td>'
                 '      <td>%s</td>'
                 '      <td>%s</td>'
@@ -1592,15 +1598,14 @@ def build_device_web_page():
                 '      <td>%.1f Kb</td>'
                 '    </tr>'
                 ) % (
+                    url,
                     device_name,
                     zone_name,
+                    controls_str,
                     reboot_button_str + reconfig_button_str + apmode_button_str,
-                    url,
-                    url,
                     now - last_update_ts,
                     version,
                     uptime,
-                    len(device['status']['controls']),
                     device['failed_probes'],
                     status_restarts,
                     signal_restarts,
