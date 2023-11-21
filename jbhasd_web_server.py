@@ -794,7 +794,7 @@ def configure_device(url, device_name):
                       timeout = gv_http_timeout_secs)
 
         # Remove it now from internal lists etc
-        purge_device(device_name, "Reconfiguring")
+        #purge_device(device_name, "Reconfiguring")
 
     else:
         log_message("ERROR %s not found in device config" % (device_name))
@@ -1675,7 +1675,7 @@ def process_console_action(
             log_message("Rebooting %s" % (device_name))
 
             command_url_list.append('%s/reboot' % (url))
-            purge_device(device_name, "Rebooting")
+            #purge_device(device_name, "Rebooting")
             
     elif (device_name and reconfig):
 
