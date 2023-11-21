@@ -204,8 +204,8 @@ void HandyTaskMan::sleep(void)
 
         if (loop_task->runstate_mask & run_state) {
             // time in msecs to next call
-            if (loop_task->call_interval == 1) {
-                // bypass for 1ms interval (argb/rgb)
+            if (loop_task->call_interval <= 1) {
+                // bypass for very short intervals
                 sleep_interval = 0;
             }
             else {
@@ -218,19 +218,22 @@ void HandyTaskMan::sleep(void)
     }
 
     // protect against overly long sleeps
-    if (sleep_interval > 1000) {
-        sleep_interval = 1000;
+    if (sleep_interval > 500) {
+        sleep_interval = 500;
     }
 
-    // skip for short periods
-    // such as rgb/argb that use a 1msec loop
-    if (sleep_interval == 0) {
-        return;
+    if (sleep_interval >= 1) {
+        // account for sleep and do the delay
+        sleep_time += sleep_interval;
+        delay(sleep_interval);
+    }
+    else {
+        // yield to any pending activities
+        yield();
     }
 
-    // account for sleep and do the delay
-    sleep_time += sleep_interval;
-    delay(sleep_interval);
+    // feed soft watchdog
+    ESP.wdtFeed();
 }
 
 // Function set_logger
