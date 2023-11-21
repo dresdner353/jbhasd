@@ -13,7 +13,8 @@ struct gpio_argb* gpio_argb_alloc(void)
 
 // rainbow effect adapted from Neopixel examples
 // modified here to atore the firstPixelHue value statically
-void rainbow(struct gpio_argb *gpio_argb) {
+void rainbow(struct gpio_argb *gpio_argb) 
+{
     static long firstPixelHue = 0; 
     for(int i = 0; i < gpio_argb->neopixel->numPixels(); i++) { 
         int pixelHue = firstPixelHue + (i * 65536L / gpio_argb->neopixel->numPixels());
@@ -26,7 +27,8 @@ void rainbow(struct gpio_argb *gpio_argb) {
 // chasing rainbow effect adapted from Neopixel 
 // examples. Some variabls made static to hold state 
 // between calls
-void chase_rainbow(struct gpio_argb *gpio_argb) {
+void chase_rainbow(struct gpio_argb *gpio_argb) 
+{
     static int firstPixelHue = 0;
     static int b = 0; 
     gpio_argb->neopixel->clear(); 
@@ -39,7 +41,8 @@ void chase_rainbow(struct gpio_argb *gpio_argb) {
     b = (b + 1) % 3;
 }
 
-void random_leds(struct gpio_argb *gpio_argb) {
+void random_leds(struct gpio_argb *gpio_argb) 
+{
     static uint8_t first_run = 1;
     uint16_t index, i;
     uint32_t colour;
@@ -56,156 +59,262 @@ void random_leds(struct gpio_argb *gpio_argb) {
     gpio_argb->neopixel->setPixelColor(index, colour);
 }
 
-void shift_primary(uint8_t &current_primary, 
-                  uint8_t final_primary,
-                  uint8_t interval) {
-
-    if (current_primary < final_primary) {
-        if (final_primary - current_primary >= interval) {
-            current_primary += interval;
-        }
-        else {
-            current_primary = final_primary;
-        }
-    }
-    if (current_primary > final_primary) {
-        if (current_primary - final_primary >= interval) {
-            current_primary -= interval;
-        }
-        else {
-            current_primary = final_primary;
-        }
-    }
-}
-
-void shift_colour(uint32_t &current_colour, 
-                  uint32_t final_colour,
-                  uint8_t interval) {
-    uint8_t curr_red, curr_green, curr_blue;
-    uint8_t final_red, final_green, final_blue;
-
-    log_message("shift.. current:0x%08X final:0x%08X", current_colour, final_colour);
-    curr_red = current_colour >> 16 & 0xFF;
-    curr_green = current_colour >> 8 & 0xFF;
-    curr_blue = current_colour & 0xFF;
-
-    final_red = final_colour >> 16 & 0xFF;
-    final_green = final_colour >> 8 & 0xFF;
-    final_blue = final_colour & 0xFF;
-
-    shift_primary(curr_red, final_red, interval);
-    shift_primary(curr_green, final_green, interval);
-    shift_primary(curr_blue, final_blue, interval);
-
-    current_colour = 
-        (curr_red << 16) & 0xFF0000 |
-        (curr_green << 8) & 0x00FF00 | 
-        curr_blue;
-    log_message("done.. current:0x%08X", current_colour);
-}
-
-void reveal(struct gpio_argb *gpio_argb,
-            uint8_t left,
-            uint8_t right,
-            uint8_t fade) {
-    uint16_t prog_index, limit, led;
+void chase(struct gpio_argb *gpio_argb) 
+{
+    uint16_t i; 
+    uint16_t prog_index; 
+    uint16_t pixel_index;
+    uint16_t limit;
     uint32_t colour;
-    uint8_t left_done, right_done;
-    static uint32_t current_left = 0;
-    static uint32_t current_right = 0;
 
-    if (left && right) {
-        limit = gpio_argb->num_leds / 2;
-    }
-    else {
-        limit = gpio_argb->num_leds - 1;
-    }
-
-    if (gpio_argb->index > limit) {
-        gpio_argb->index = 0;
-    }
-
-    if (gpio_argb->index == 0 && gpio_argb->wipe) {
+    // optional wipe on each draw
+    if (gpio_argb->wipe) {
         gpio_argb->neopixel->clear();
     }
 
+    pixel_index = gpio_argb->index;
+
+    // Set limit based on num LEDS (fill)
+    // or program
+    if (gpio_argb->fill) {
+        limit = gpio_argb->num_leds;
+    }
+    else {
+        limit = gpio_argb->program_len;
+    }
+
+    for (i = 0;
+         i < limit;
+         i++) { 
+        // modulo rotation of program colours
+        // 0 -> N-1
+        prog_index = i % gpio_argb->program_len;
+        colour = gpio_argb->program[prog_index];
+
+        // full int value implies random
+        if (colour == 0xFFFFFFFF) {
+            colour = random(0, 0xFFFFFF);
+        }
+        log_message("Setting LED %d to program[%d] -> %08X", 
+                    pixel_index,
+                    prog_index,
+                    colour);
+
+        gpio_argb->neopixel->setPixelColor(pixel_index,
+                                           gpio_argb->neopixel->gamma32(colour));
+
+        // move to next pixel in reverse on strip
+        // we're reading the program in order and drawing strip in 
+        // reverse
+        //
+        // This is an unsigned modulo using C's MOD (signed remainder on division)
+        // it will rotate a 0 -> -1 back to last item in array
+        pixel_index = 
+            (pixel_index - 1 + gpio_argb->num_leds) % gpio_argb->num_leds;
+    }
+
+    // toggle behaviour
+    gpio_argb->draw_count++;
+    if (gpio_argb->toggle &&
+        gpio_argb->draw_count >= gpio_argb->toggle) {
+        gpio_argb->draw_count = 0;
+        gpio_argb->offset *= -1;
+        log_message("Toggle offset to %d after %d draws", 
+                    gpio_argb->offset,
+                    gpio_argb->toggle);
+    }
+
+    // advance start index for next draw
+    // again uses a negative-friendly modulo
+    gpio_argb->index = 
+            (gpio_argb->index + gpio_argb->offset + gpio_argb->num_leds) % gpio_argb->num_leds;
+
+    log_message("Next LED is %d", 
+                gpio_argb->index);
+}
+
+void curtain(struct gpio_argb *gpio_argb,
+             uint8_t left,
+             uint8_t right) 
+{
+    uint16_t prog_index; 
+    uint16_t left_index;
+    uint16_t right_index;
+    uint32_t colour;
+
+    // init indexes from reference
+    left_index = gpio_argb->index;
+    right_index = gpio_argb->num_leds - left_index - 1;
+
+    // wipe support
+    // left or right only scenarios
+    if (gpio_argb->wipe &&
+        !(left && right) &&
+        gpio_argb->draw_count >= gpio_argb->num_leds) {
+        gpio_argb->neopixel->clear();
+        gpio_argb->draw_count = 0;
+    }
+    
+    // left colour
     if (left) {
-        prog_index = gpio_argb->index % gpio_argb->program_len;
-        colour = gpio_argb->neopixel->gamma32(gpio_argb->program[prog_index]); 
-        led = gpio_argb->index;
+        prog_index = left_index % gpio_argb->program_len;
 
-        if (fade == 0) {
-            gpio_argb->neopixel->setPixelColor(led, colour);
+        // select colour from program or black if left and right have crossed
+        // each other
+        if (right && 
+            left_index >= right_index) {
+            colour = 0x00;
         }
-        else {
-            left_done = 0;
-            shift_colour(current_left, colour, fade);
-            log_message("set.. led:%d colour:0x%08X (0x%08X)", led, current_left, colour);
-            gpio_argb->neopixel->setPixelColor(led, current_left);
-
-            if (current_left == colour) {
-                left_done = 1;
-            }
+        else{
+            colour = gpio_argb->program[prog_index];
         }
-    }
-    else {
-        left_done = 1;
+
+        // full int value implies random
+        if (colour == 0xFFFFFFFF) {
+            colour = random(0, 0xFFFFFF);
+        }
+
+        log_message("Setting Left LED %d to program[%d] -> %08X", 
+                    left_index,
+                    prog_index,
+                    colour);
+
+        gpio_argb->neopixel->setPixelColor(left_index,
+                                           gpio_argb->neopixel->gamma32(colour));
+        gpio_argb->draw_count++;
     }
 
+    // right colour
     if (right) {
-        prog_index = (gpio_argb->program_len - 1) - (gpio_argb->index % gpio_argb->program_len);
-        colour = gpio_argb->neopixel->gamma32(gpio_argb->program[prog_index]); 
-        led = gpio_argb->num_leds - 1 - gpio_argb->index;
+        prog_index = right_index % gpio_argb->program_len;
+        colour = gpio_argb->program[prog_index];
 
-        if (fade == 0) {
-            gpio_argb->neopixel->setPixelColor(led, colour);
+        // select colour from program or black if left and right have crossed
+        // each other
+        if (left && 
+            left_index >= right_index) {
+            colour = 0x00;
+        }
+        else{
+            colour = gpio_argb->program[prog_index];
+        }
+
+        // full int value implies random
+        if (colour == 0xFFFFFFFF) {
+            colour = random(0, 0xFFFFFF);
+        }
+
+        log_message("Setting Right LED %d to program[%d] -> %08X", 
+                    right_index,
+                    prog_index,
+                    colour);
+
+        gpio_argb->neopixel->setPixelColor(right_index,
+                                           gpio_argb->neopixel->gamma32(colour));
+        gpio_argb->draw_count++;
+    }
+
+    // advance start index for next draw
+    // again uses a negative-friendly modulo
+    gpio_argb->index = 
+            (gpio_argb->index + gpio_argb->offset + gpio_argb->num_leds) % gpio_argb->num_leds;
+    left_index = gpio_argb->index;
+    right_index = gpio_argb->num_leds - left_index - 1;
+
+    log_message("Next left:%d right:%d", 
+                left_index,
+                right_index);
+}
+
+void abacus(struct gpio_argb *gpio_argb) 
+{
+    uint16_t prog_index; 
+    uint32_t colour;
+    uint32_t chase_offset;
+
+    // initial setup and 
+    // wipe support 
+    if (gpio_argb->wipe && 
+        gpio_argb->index == 0) {
+        gpio_argb->neopixel->clear();
+
+        // place target index at last pixel position
+        gpio_argb->index = gpio_argb->num_leds - 1;
+
+        // temp index (chaser) at start 
+        gpio_argb->temp_index = 0;
+        gpio_argb->draw_count = 0;
+
+        // negative protection
+        if (gpio_argb->offset < 1) {
+            gpio_argb->offset = 1;
+        }
+    }
+
+    prog_index = gpio_argb->index % gpio_argb->program_len;
+    colour = gpio_argb->program[prog_index];
+
+    // full int value implies random
+    if (colour == 0xFFFFFFFF) {
+        colour = random(0, 0xFFFFFF);
+    }
+
+    // draw chaser pixel
+    log_message("Setting LED %d to program[%d] -> %08X", 
+                gpio_argb->temp_index,
+                prog_index,
+                colour);
+
+    gpio_argb->neopixel->setPixelColor(gpio_argb->temp_index,
+                                       gpio_argb->neopixel->gamma32(colour));
+
+    // wipe predecessor
+    if (gpio_argb->draw_count != gpio_argb->temp_index) {
+        log_message("Setting LED %d to black", 
+                    gpio_argb->draw_count);
+
+        gpio_argb->neopixel->setPixelColor(gpio_argb->draw_count,
+                                           gpio_argb->neopixel->gamma32(0));
+    }
+
+    if (gpio_argb->temp_index >= gpio_argb->index) {
+        // advance main index backward for next draw
+        gpio_argb->temp_index = 0;
+        gpio_argb->index = 
+            (gpio_argb->index - 1 + gpio_argb->num_leds) % gpio_argb->num_leds;
+    }
+    else {
+        // advance temp index forward for next draw
+        if (gpio_argb->index - gpio_argb->temp_index < gpio_argb->offset) {
+            chase_offset = 1;
         }
         else {
-            right_done = 0;
-            shift_colour(current_right, colour, fade);
-            log_message("set.. led:%d colour:0x%08X (0x%08X)", led, current_right, colour);
-            gpio_argb->neopixel->setPixelColor(led, current_right);
-
-            if (current_right == colour) {
-                right_done = 1;
-            }
+            chase_offset = gpio_argb->offset;
         }
-    }
-    else {
-        right_done = 1;
+        gpio_argb->draw_count = gpio_argb->temp_index;
+        gpio_argb->temp_index = 
+            (gpio_argb->temp_index + chase_offset + gpio_argb->num_leds) % gpio_argb->num_leds;
     }
 
-    // advance to next
-    if (fade) {
-        if (left_done && right_done) {
-            gpio_argb->index = 
-                (gpio_argb->index + gpio_argb->offset) % gpio_argb->num_leds;
-            current_left = 0;
-            current_right = 0;
-        }
-    }
-    else {
-        gpio_argb->index = 
-            (gpio_argb->index + gpio_argb->offset) % gpio_argb->num_leds;
-    }
+    log_message("Next temp:%d index:%d", 
+                gpio_argb->temp_index,
+                gpio_argb->index);
 }
 
 // Function set_argb_state
 // Drives aRGB program by applying the 
-// program list of colours to the addressable LED
-// strip
+// appropriate program iterator
 void set_argb_state(struct gpio_argb *gpio_argb)
 {
-    uint32_t now;
-    uint16_t limit;
-    uint16_t i, prog_index, pixel_index;
-    uint32_t colour;
+    // disabled control
+    if (!gpio_argb->enabled) {
+        return;
+    }
 
     // invoke early return until delay
     // msec period reached
-    now = millis();
     if (gpio_argb->delay && 
-        now - gpio_argb->timestamp < 
+        millis() - gpio_argb->timestamp < 
         gpio_argb->delay) {
         return;
     }
@@ -219,13 +328,8 @@ void set_argb_state(struct gpio_argb *gpio_argb)
                 gpio_argb->mode,
                 gpio_argb->delay);
 
-    // special cases
-    if (!strcmp(gpio_argb->mode, "off")) {
-        log_message("Mode is off.. returning");
-        gpio_argb->timestamp = now;
-        return;
-    }
-    else if (!strcmp(gpio_argb->mode, "rainbow")) {
+    // mode handlers
+    if (!strcmp(gpio_argb->mode, "rainbow")) {
         rainbow(gpio_argb);
     }
     else if (!strcmp(gpio_argb->mode, "chase_rainbow")) {
@@ -234,86 +338,31 @@ void set_argb_state(struct gpio_argb *gpio_argb)
     else if (!strcmp(gpio_argb->mode, "random")) {
         random_leds(gpio_argb);
     }
-    else if (!strcmp(gpio_argb->mode, "reveal")) {
-        reveal(gpio_argb, 1, 1, 0);
+    else if (!strcmp(gpio_argb->mode, "chase")) {
+        chase(gpio_argb);
     }
-    else if (!strcmp(gpio_argb->mode, "reveal_left")) {
-        reveal(gpio_argb, 1, 0, 0);
+    else if (!strcmp(gpio_argb->mode, "abacus")) {
+        abacus(gpio_argb);
     }
-    else if (!strcmp(gpio_argb->mode, "reveal_right")) {
-        reveal(gpio_argb, 0, 1, 0);
+    else if (!strcmp(gpio_argb->mode, "curtain")) {
+        curtain(gpio_argb, 1, 1);
     }
-    else if (!strcmp(gpio_argb->mode, "reveal_fade")) {
-        reveal(gpio_argb, 1, 1, gpio_argb->fade);
+    else if (!strcmp(gpio_argb->mode, "curtain_left")) {
+        curtain(gpio_argb, 1, 0);
     }
-    else if (!strcmp(gpio_argb->mode, "reveal_left_fade")) {
-        reveal(gpio_argb, 1, 0, gpio_argb->fade);
-    }
-    else if (!strcmp(gpio_argb->mode, "reveal_right_fade")) {
-        reveal(gpio_argb, 0, 1, gpio_argb->fade);
+    else if (!strcmp(gpio_argb->mode, "curtain_right")) {
+        curtain(gpio_argb, 0, 1);
     }
     else {
-        // optional wipe on each draw
-        if (gpio_argb->wipe) {
-            gpio_argb->neopixel->clear();
-        }
+        log_message("Invalid mode: %s.. disabling control",
+                    gpio_argb->mode);
 
-        pixel_index = gpio_argb->index;
-
-        // Set limit based on num LEDS (fill)
-        // or program
-        if (gpio_argb->fill) {
-            limit = gpio_argb->num_leds;
-        }
-        else {
-            limit = gpio_argb->program_len;
-        }
-
-        for (i = 0;
-             i < limit;
-             i++) { 
-
-
-            // read program in reverse always
-            prog_index = (gpio_argb->program_len - 1) - (i % gpio_argb->program_len);
-             
-            colour = gpio_argb->program[prog_index];
-
-            // full int value implies random
-            if (colour == 0xFFFFFFFF) {
-                colour = random(0, 0xFFFFFF);
-            }
-            log_message("Setting LED %d to program[%d] -> %08X", 
-                        pixel_index,
-                        prog_index,
-                        colour);
-
-            gpio_argb->neopixel->setPixelColor(pixel_index,
-                                               gpio_argb->neopixel->gamma32(colour));
-
-            if (gpio_argb->offset >= 0) {
-                // forward modulo
-                pixel_index = (pixel_index + 1) % gpio_argb->num_leds;
-            }
-            else {
-                // reverse modulo
-                pixel_index = (pixel_index - 1 + gpio_argb->num_leds) % gpio_argb->num_leds;
-            }
-        }
-
-        // advance index for next colour
-        if (gpio_argb->offset >= 0) {
-            gpio_argb->index = 
-                (gpio_argb->index + gpio_argb->offset) % gpio_argb->num_leds;
-        }
-        else {
-            gpio_argb->index = 
-                (gpio_argb->index + gpio_argb->offset + gpio_argb->num_leds) % gpio_argb->num_leds;
-        }
-        log_message("Next LED is %d", 
-                    gpio_argb->index);
+        // disable
+        gpio_argb->neopixel->clear();
+        gpio_argb->enabled = 0;
     }
 
+    gpio_argb->neopixel->setBrightness(gpio_argb->brightness);
     gpio_argb->neopixel->show();
 
     // Update activity timestamp
@@ -356,6 +405,8 @@ void set_argb_program(struct gpio_argb *gpio_argb,
     // wipe any existing program
     gpio_argb->program_len = 0;
     gpio_argb->index = 0;
+    gpio_argb->temp_index = 0;
+    gpio_argb->draw_count = 0;
     gpio_argb->enabled = 0;
     if (gpio_argb->program) {
         free(gpio_argb->program);
@@ -365,10 +416,11 @@ void set_argb_program(struct gpio_argb *gpio_argb,
     // parse details from JSON program object
     strcpy(gpio_argb->mode, json_get_sval(program["mode"], "off"));
     gpio_argb->wipe = json_get_ival(program["wipe"], 0);
-    gpio_argb->fade = json_get_ival(program["fade"], 0);
     gpio_argb->fill = json_get_ival(program["fill"], 0);
     gpio_argb->offset = json_get_ival(program["offset"], 0);
     gpio_argb->delay = json_get_ival(program["delay"], 0);
+    gpio_argb->toggle = json_get_ival(program["toggle"], 0);
+    gpio_argb->brightness = json_get_ival(program["brightness"], 255);
 
     if (!strcmp(gpio_argb->mode, "off")) {
         log_message("program mode set to off");
