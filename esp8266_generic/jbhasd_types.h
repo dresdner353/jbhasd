@@ -148,15 +148,18 @@ struct gpio_argb {
 
     uint32_t timestamp;
     uint16_t index;
+    uint16_t temp_index;
+    uint16_t draw_count;
 
     // program details
     char mode[MAX_FIELD_LEN];
     uint8_t enabled;
     uint8_t wipe;
-    uint8_t fade;
     uint8_t fill;
+    uint8_t brightness;
     int16_t offset;
     uint16_t delay;
+    uint16_t toggle;
     uint32_t *program;
     uint16_t program_len;
 
