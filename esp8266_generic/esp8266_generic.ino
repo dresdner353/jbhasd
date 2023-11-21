@@ -148,13 +148,6 @@ void setup()
                      30000,
                      loop_task_log_stats);
 
-    // Watchdog timer reconfigure
-    // for longer period (8 seconds)
-    // Helps stop spontaneous watchdog
-    // timers resetting the device
-    ESP.wdtDisable();
-    ESP.wdtEnable(WDTO_8S);
-
     log_message("Device boot: ChipId:%u FreeHeap:%u ResetReason:%s",
                 ESP.getChipId(),
                 ESP.getFreeHeap(),
@@ -200,13 +193,9 @@ void setup()
 
 
 // Function: loop
-// Except for watchgdog feeding, 
 // the entire loop is run by the task manager
 void loop()
 {
-    // Keep the sw watchdog happy
-    // ESP.wdtFeed();
-
     // Tasks
     TaskMan.nudge();
 
