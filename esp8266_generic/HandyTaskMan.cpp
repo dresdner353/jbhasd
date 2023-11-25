@@ -218,8 +218,8 @@ void HandyTaskMan::sleep(void)
     }
 
     // protect against overly long sleeps
-    if (sleep_interval > 500) {
-        sleep_interval = 500;
+    if (sleep_interval > 1000) {
+        sleep_interval = 1000;
     }
 
     if (sleep_interval >= 1) {
