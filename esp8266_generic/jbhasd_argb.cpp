@@ -230,7 +230,13 @@ void abacus(struct gpio_argb *gpio_argb)
 {
     uint16_t prog_index; 
     uint32_t colour;
-    uint32_t chase_offset;
+    uint16_t offset_index; 
+    uint16_t i; 
+
+    // negative/zero protection for offset
+    if (gpio_argb->offset < 1) {
+        gpio_argb->offset = 1;
+    }
 
     // initial setup and 
     // wipe support 
@@ -242,58 +248,55 @@ void abacus(struct gpio_argb *gpio_argb)
         gpio_argb->index = gpio_argb->num_leds - 1;
 
         // temp index (chaser) at start 
-        gpio_argb->temp_index = 0;
-        gpio_argb->draw_count = 0;
+        // position which is the effective
+        // value of the ofset -1 
+        gpio_argb->temp_index = gpio_argb->offset - 1;
+    }
+      
 
-        // negative protection
-        if (gpio_argb->offset < 1) {
-            gpio_argb->offset = 1;
+    for (i = 0;
+         i <= gpio_argb->offset;
+         i++) {
+        offset_index =  gpio_argb->temp_index - i;
+        prog_index = (gpio_argb->index + offset_index) % gpio_argb->program_len;
+        colour = gpio_argb->program[prog_index];
+
+        // full int value implies random
+        if (colour == 0xFFFFFFFF) {
+            colour = random(0, 0xFFFFFF);
         }
-    }
 
-    prog_index = gpio_argb->index % gpio_argb->program_len;
-    colour = gpio_argb->program[prog_index];
+        // clear last pixel
+        if (i == gpio_argb->offset) {
+            colour = 0; // black
+        }
 
-    // full int value implies random
-    if (colour == 0xFFFFFFFF) {
-        colour = random(0, 0xFFFFFF);
-    }
+        // draw chaser pixels
+        log_message("Setting LED %d to program[%d] -> %08X", 
+                    offset_index,
+                    prog_index,
+                    colour);
 
-    // draw chaser pixel
-    log_message("Setting LED %d to program[%d] -> %08X", 
-                gpio_argb->temp_index,
-                prog_index,
-                colour);
-
-    gpio_argb->neopixel->setPixelColor(gpio_argb->temp_index,
-                                       gpio_argb->neopixel->gamma32(colour));
-
-    // wipe predecessor
-    if (gpio_argb->draw_count != gpio_argb->temp_index) {
-        log_message("Setting LED %d to black", 
-                    gpio_argb->draw_count);
-
-        gpio_argb->neopixel->setPixelColor(gpio_argb->draw_count,
-                                           gpio_argb->neopixel->gamma32(0));
+        gpio_argb->neopixel->setPixelColor(offset_index,
+                                           gpio_argb->neopixel->gamma32(colour));
     }
 
     if (gpio_argb->temp_index >= gpio_argb->index) {
         // advance main index backward for next draw
-        gpio_argb->temp_index = 0;
         gpio_argb->index = 
-            (gpio_argb->index - 1 + gpio_argb->num_leds) % gpio_argb->num_leds;
+            (gpio_argb->index - gpio_argb->offset + gpio_argb->num_leds) % gpio_argb->num_leds;
+
+        if (gpio_argb->index < gpio_argb->offset) {
+            gpio_argb->index = 0;
+        }
+
+        // temp index resets to starting point
+        gpio_argb->temp_index = gpio_argb->offset - 1;
     }
     else {
         // advance temp index forward for next draw
-        if (gpio_argb->index - gpio_argb->temp_index < gpio_argb->offset) {
-            chase_offset = 1;
-        }
-        else {
-            chase_offset = gpio_argb->offset;
-        }
-        gpio_argb->draw_count = gpio_argb->temp_index;
         gpio_argb->temp_index = 
-            (gpio_argb->temp_index + chase_offset + gpio_argb->num_leds) % gpio_argb->num_leds;
+            (gpio_argb->temp_index + 1 + gpio_argb->num_leds) % gpio_argb->num_leds;
     }
 
     log_message("Next temp:%d index:%d", 
