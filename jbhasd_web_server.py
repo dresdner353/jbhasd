@@ -1292,11 +1292,14 @@ def build_zone_web_page():
                 i = 0
                 colour_str = ''
                 for colour in colour_list:
-                    colour_int = int(colour, 0)
-                    colour_str += (
-                            '<span style="color:#%06X">'
-                            '&#x25cf;'
-                            '</span>') % (colour_int)
+                    if colour == 'random':
+                        colour_str += '?'
+                    else:
+                        colour_int = int(colour, 0)
+                        colour_str += (
+                                '<span style="color:#%06X">'
+                                '&#x25cf;'
+                                '</span>') % (colour_int)
                     i += 1
                     if (i % 5 == 0):
                         colour_str += '<br>'
