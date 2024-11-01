@@ -1,0 +1,668 @@
+<head>   
+    <meta id="META" name="viewport" content="width=device-width, initial-scale=1.0" >
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-rbsA2VBKQhggwzxH7pPCaAqO46MgnOM80zW1RWuH61DGLwZJEdK2Kadq2F9CUG65" crossorigin="anonymous">
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-kenU1KFdBIe4zVF0s0G1M5b4hcpxyD9F7jL+jjXkk+Q2h455rYXK/7HAuoJl+0I4" crossorigin="anonymous"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <meta name="mobile-web-app-capable" content="yes">
+    <style>
+:root {
+    /* metric and material icon sizing
+     * two variations for large and smaller screens
+     */
+    --metric-font-size-large-screen: 3.0vw;
+    --metric-font-size-small-screen: 4.5vw;
+    --metric-font-size-portrait-screen: 8.0vw;
+
+    --metric-unit-font-size-large-screen: 1.0vw;
+    --metric-unit-font-size-small-screen: 1.5vw;
+    --metric-unit-font-size-portrait-screen: 3.0vw;
+
+    --title-font-size-large-screen: 1.0vw;
+    --title-font-size-small-screen: 1.5vw;
+    --title-font-size-portrait-screen: 4.5vw;
+
+    --metric-font-size: var(--metric-font-size-large-screen);
+    --metric-unit-font-size: var(--metric-unit-font-size-large-screen);
+    --title-font-size: var(--title-font-size-large-screen);
+}
+        #bgdark {
+            height: 200px;
+            /*background-color: #202025; */
+            background-color: #000000; 
+        }
+        .title{
+            font-size: var(--title-font-size);
+            color: white;
+        }
+        .metric{
+            font-size: var(--metric-font-size);
+        }
+        .metric-white{
+            color: white;
+        }
+        .metric-grey{
+            color: #525252;
+        }
+        .metric-yellow{
+            color: #DDDD00;
+        }
+        .metric-orange{
+            color: #FC6600;
+        }
+        .metric-red{
+            color: #CC0000;
+        }
+        .metric-green{
+            color: 028A0F;
+        }
+        .metric-blue{
+            color: #0096FF;
+        }
+        .metric-unit{
+            font-size: var(--metric-unit-font-size);
+            color: #929292;
+        }
+        g.google-visualization-tooltip { 
+            /* fixes flickering tooltip */
+            pointer-events: none 
+        }
+        .material-icons.metric { 
+            font-size: var(--metric-font-size);
+        }
+        .custom-tooltip {
+            --bs-tooltip-bg: var(--bs-primary);
+        }
+        .material-icons.md-18 { font-size: 18px; }
+        .material-icons.md-24 { font-size: 24px; }
+        .material-icons.md-36 { font-size: 36px; }
+        .material-icons.md-48 { font-size: 48px; }
+    </style>
+    <title>JBHASD Dashboard</title>
+
+    <script>
+        // popper tooltips init
+        $(function(){
+            $('body').tooltip({ selector: '[data-bs-toggle="tooltip"]' });
+        });
+
+        // quick refresh timer 
+        // used for initial refresh and resize events
+        var quick_refresh_timer = setInterval(quick_refresh, 1000);
+
+        // standard refresh timer 
+        // normal refresh timer when window is
+        // in focus
+        var standard_refresh_timer = setInterval(refresh_data, 10000);
+
+        // Window focus activates/deactivates 
+        // the standard refresh timer
+        // avoids background activity when not in focus
+        $(window).focus(function() {
+            clearInterval(standard_refresh_timer);
+            refresh_data();
+            standard_refresh_timer = setInterval(refresh_data, 10000);
+        }).blur(function() {
+            clearInterval(standard_refresh_timer);
+        });
+
+        // forced fast refresh on resize to redraw
+        $(window).resize(function () { 
+            clearInterval(quick_refresh_timer);
+            quick_refresh_timer = setInterval(quick_refresh, 1000);
+        });
+
+        // does one refresh and clears the 
+        // quick refresh timer
+        function quick_refresh() {
+            clearInterval(quick_refresh_timer);
+            refresh_data();
+        }
+
+        var refresh_error_count = 0;
+
+        function refresh_data() {
+            console.log("refresh_data()");
+
+            var data_request = $.get('/data');
+
+            data_request.fail(function() {
+                refresh_error_count += 1;
+                $("#last_updated").html(`Error (${refresh_error_count})`);
+            });           
+
+            data_request.done(function(data) {
+                data_dict = JSON.parse(data);
+
+                // reset error count
+                refresh_error_count = 0
+
+                // devices tab (table)
+                $("#nav-devices").html(build_devices_html(data_dict));
+
+                // zone tab (cards)
+                $("#nav-zones").html(build_zones_html(data_dict));
+
+                });
+            }
+
+        function get_google_icon(control_name) {
+            icon_register = [
+                {
+                    'google_icon' : 'wb_incandescent',
+                    'keywords' : [
+                    'light',
+                    'lamp',
+                ]
+                },
+                {
+                    'google_icon' : 'wb_iridescent',
+                    'keywords' : [
+                    'rgb',
+                    'argb',
+                    'strip',
+                    'white',
+                ]
+                },
+                {
+                    'google_icon' : 'speaker',
+                    'keywords' : [
+                    'stereo',
+                    'music',
+                    'subwoofer',
+                    'monitor',
+                    'mixer',
+                ]
+                },
+                {
+                    'google_icon' : 'tv',
+                    'keywords' : [
+                    'tv',
+                    'cinema',
+                    'avr',
+                ]
+                },
+                {
+                    'google_icon' : 'ac_unit',
+                    'keywords' : [
+                    'fan',
+                    'cooler',
+                    'hvac',
+                    'temp',
+                ]
+                },
+                {
+                    'google_icon' : 'nature_people',
+                    'keywords' : [
+                    'tree',
+                    'bush',
+                    'hedge',
+                ]
+                },
+                {
+                    'google_icon' : 'pets',
+                    'keywords' : [
+                    'dog',
+                    'cat',
+                    'deer',
+                ]
+                },
+                {
+                    'google_icon' : 'sensor_door',
+                    'keywords' : [
+                    'door',
+                ]
+                },
+                {
+                    'google_icon' : 'videogame_asset',
+                    'keywords' : [
+                    'xbox',
+                    'playstation',
+                    'nintendo',
+                ]
+                },
+                {
+                    'google_icon' : 'outlet',
+                    'keywords' : [
+                    'socket',
+                    'outlet',
+                    'power',
+                ]
+                },
+                {
+                    'google_icon' : 'roofing',
+                    'keywords' : [
+                    'roof',
+                    'fascia',
+                    'gutter',
+                ]
+                },
+                {
+                    'google_icon' : 'desktop_mac',
+                    'keywords' : [
+                    'desk',
+                    'computer',
+                    'pc',
+                    'mac',
+                ]
+                },
+            ];
+
+            control_name_lcase = control_name.toLowerCase();
+            for (icon_obj of icon_register) {
+                for (keyword of icon_obj['keywords']) {
+                    if (control_name_lcase.includes(keyword)) {
+                        return icon_obj['google_icon'];
+                    }
+                }
+            }
+
+            return 'outlet'
+        }
+
+        gv_context_symbol_dict = {
+            'network' : 'settings_remote',
+            'manual' : 'touch_app',
+            'init' : '',
+            'motion' : 'directions_walk',
+        };
+
+        function switch_action(zone_name, device_name, control_name, state) {
+            action_url = 
+                `/api?zone=${zone_name}` +
+                `&device=${device_name}`+
+                `&control=${control_name}`+
+                `&state=${state}`;
+
+            console.log("switch_action().. url:" + action_url);
+
+            var action_request = $.get(action_url);
+            action_request.done(function(data) {
+                clearInterval(standard_refresh_timer);
+                refresh_data();
+                standard_refresh_timer = setInterval(refresh_data, 10000);
+                });
+            }
+
+        function rgb_action(zone_name, device_name, control_name, program) {
+            action_url = 
+                `/api?zone=${zone_name}` +
+                `&device=${device_name}`+
+                `&control=${control_name}`+
+                `&rgb_program=${program}`;
+
+            console.log("rgb_action().. url:" + action_url);
+
+            var action_request = $.get(action_url);
+            action_request.done(function(data) {
+                clearInterval(standard_refresh_timer);
+                refresh_data();
+                standard_refresh_timer = setInterval(refresh_data, 10000);
+                });
+            }
+
+        function argb_action(zone_name, device_name, control_name, program) {
+            action_url = 
+                `/api?zone=${zone_name}` +
+                `&device=${device_name}`+
+                `&control=${control_name}`+
+                `&argb_program=${program}`;
+
+            console.log("argb_action().. url:" + action_url);
+
+            var action_request = $.get(action_url);
+            action_request.done(function(data) {
+                clearInterval(standard_refresh_timer);
+                refresh_data();
+                standard_refresh_timer = setInterval(refresh_data, 10000);
+                });
+            }
+
+        function device_action(action_url) {
+
+            console.log("device_action().. url:" + action_url);
+            var action_request = $.get(action_url);
+        }
+
+        function build_devices_html(data_dict) {
+
+            // global action URLs
+            reboot_all_url = `/api?device=all&reboot=1`;
+            reconfig_all_url = `/api?device=all&reconfig=1`;
+
+            dashboard_str =
+                `<div class="card">` +
+                `<div class="card-body">` +
+                `<table border="0" padding="5">` +
+                `<tr><td>Started:</td><td>${data_dict['system']['startup_time']}</td></tr>` +
+                `<tr><td>Discovered Devices:</td><td>${Object.keys(data_dict['devices']).length}</td></tr>` +
+                `<tr><td>Sunrise:</td><td>${data_dict['system']['sunrise_time']}</td></tr>` +
+                `<tr><td>Sunset:</td><td>${data_dict['system']['sunset_time']}</td></tr>` +
+                `<tr><td>Sunrise/Sunset Offset:</td><td>${data_dict['system']['sunset_offset']} (secs)</td></tr>` +
+                `</table>` +
+                `<br>` +
+                `<a class="btn btn-primary mt-4" href="${reboot_all_url}" role="button">Reboot All Devices</a> ` +
+                `<a class="btn btn-primary mt-4" href="${reconfig_all_url}" role="button">Reconfigure All Devices</a> ` +
+                `</div>` +
+                `</div>`;
+
+            dashboard_str +=
+                `<table class="table">` +
+                `  <thead>` +
+                `    <tr>` +
+                `      <th scope="col">Device Name</th>` +
+                `      <th scope="col">Zone</th>` +
+                `      <th scope="col">Controls</th>` +
+                `      <th scope="col">Admin</th>` +
+                `      <th scope="col">Updated</th>` +
+                `      <th scope="col">Version</th>` +
+                `      <th scope="col">Uptime</th>` +
+                `      <th scope="col">Failed Probes</th>` +
+                `      <th scope="col">Status Restarts</th>` +
+                `      <th scope="col">Signal Restarts</th>` +
+                `      <th scope="col">Free Memory</th>` +
+                `    </tr>` +
+                `  </thead>` +
+                `  <tbody>`;
+
+            device_list = Object.keys(data_dict['devices']);
+            now = Math.floor(Date.now() / 1000);
+
+            for (device_name of device_list) {
+                device = data_dict['devices'][device_name];
+                json_data = device['status'];
+                zone_name = json_data['zone'];
+                url = device['url'];
+                last_update_ts = device['last_updated'];
+
+                //System data (only present in real devices)
+                //So we condtionally access 
+                version = 'N/A';
+                uptime = 'N/A';
+                memory = 0;
+                signal_restarts = 0;
+                status_restarts = 0;
+                if ('system' in json_data){
+                    version = json_data['system']['compile_date'].replace('JBHASD-VERSION ', '');
+                    uptime = json_data['system']['uptime'];
+                    memory = json_data['system']['free_heap'];
+                    signal_restarts = json_data['system']['signal_wifi_restarts'];
+                    status_restarts = json_data['system']['status_wifi_restarts'];
+                }
+
+                // device action URLs
+                device_reboot_url = `/api?device=${device_name}&reboot=1`;
+                device_reconfig_url = `/api?device=${device_name}&reconfig=1`;
+                device_apmode_url = `/api?device=${device_name}&apmode=1`;
+
+                // Controls list
+                controls_str = '';
+                for (control of json_data['controls']) {
+                    if (controls_str){
+                        controls_str += '<BR>';
+                    }
+                    controls_str += control['name']; 
+                }
+
+                dashboard_str += 
+                    `<tr>` +
+                    `  <td><a href="${url}" target="json">${device_name}</a></td>` +
+                    `  <td>${zone_name}</td>` +
+                    `  <td>${controls_str}</td>` +
+                    `  <td>` +
+                    `  <button class="btn btn-primary btn-sm" onclick='device_action("${device_reboot_url}")'><i class="material-icons md-18">power_settings_new</i></button>` +
+                    `  <button class="btn btn-primary btn-sm" onclick='device_action("${device_reconfig_url}")'><i class="material-icons md-18">autorenew</i></button>` +
+                    `  <button class="btn btn-primary btn-sm" onclick='device_action("${device_apmode_url}")'><i class="material-icons md-18">settings_input_antenna</i></button>` +
+                    `  </td>` +
+                    `  <td>${now - last_update_ts} secs</td>` +
+                    `  <td>${version}</td>` +
+                    `  <td>${uptime}</td>` +
+                    `  <td>${device['failed_probes']}</td>` +
+                    `  <td>${status_restarts}</td>` +
+                    `  <td>${signal_restarts}</td>` +
+                    `  <td>${(memory / 1024).toFixed(1)} Kb</td>` +
+                    `</tr>` ;
+
+            }
+
+            dashboard_str += '</tbody></table>';
+
+            return dashboard_str;
+        }
+
+        function build_zones_html(data_dict) {
+            device_list = Object.keys(data_dict['devices']);
+
+            switch_card_dict = {};
+            other_card_dict = {};
+            zone_set = new Set();
+
+            for (device_name of device_list) {
+                device = data_dict['devices'][device_name];
+                json_data = device['status'];
+                zone_name = json_data['zone'];
+
+                zone_set.add(zone_name);
+
+                if (switch_card_dict[zone_name] == undefined) {
+                    switch_card_dict[zone_name] = {};
+                    other_card_dict[zone_name] = {};
+                }
+
+                for (control of json_data['controls']) {
+                    control_name = control['name'];
+                    control_type = control['type'];
+
+                    if (control_type == 'switch') {
+                        control_state = control['state'];
+                        control_context = control['context'];
+
+                        google_icon = get_google_icon(control_name);
+                        google_context_icon = gv_context_symbol_dict[control_context];
+
+                        // set class for on/off states for both buttons
+                        off_switch_class = (control_state == 0) ? 'btn-primary' : 'btn-secondary'
+                        on_switch_class = (control_state == 1) ? 'btn-primary' : 'btn-secondary';
+
+                        card = 
+                            `<div class="card text-center border-0">` +
+                            `<div class="card-body">` +
+                            `<i class="material-icons md-48">${google_icon}</i>` +
+                            `<i class="material-icons md-18">${google_context_icon}</i>` +
+                            `<p>${control_name}</p>` +
+                            `<div class="btn-group">` +
+                            `<button type="button" class="btn ${off_switch_class}" ` +
+                            `onclick='switch_action("${zone_name}", "${device_name}", "${control_name}", 0)' ` + 
+                            `>Off</button>` +
+                            `<button type="button" class="btn ${on_switch_class}" ` +
+                            `onclick='switch_action("${zone_name}", "${device_name}", "${control_name}", 1)' ` +
+                            `>On</button>` +
+                            `</div>` +
+                            `&nbsp;` +
+                            `</div>` +
+                            `</div>`;
+
+                        switch_card_dict[zone_name][control_name] = card;
+                    }
+
+                    if (control_type == 'temp/humidity') {
+                        temp = control['temp'];
+                        humidity = control['humidity']
+                        google_icon = get_google_icon(control_name);
+
+                        card = 
+                            `<div class="card text-center border-0">` +
+                            `<div class="card-body">` +
+                            `<i class="material-icons md-48">${google_icon}</i>` +
+                            `<p>${control_name}</p>` +
+                            `<p class="card-title">&#x1F321; ${temp}C</p>` +
+                            `<p class="card-title">&#x1F4A7; ${humidity} %</p>` +
+                            `</div>` +
+                            `</div>`
+
+                        other_card_dict[zone_name][control_name] = card;
+                    }
+
+                    if (control_type == 'rgb') {
+                        current_colour = control['current_colour'].slice(4);
+                        google_icon = get_google_icon(control_name);
+
+                        prog_combo = 
+                            `<center><select class="form-select form-select-sm" style="width:auto;"` +
+                            `aria-label=".form-select-sm example" ` +
+                            `onchange='rgb_action("${zone_name}", "${device_name}", "${control_name}", this.value)'>` +
+                            `<option value="">Program</option>`;
+
+                        for (program of data_dict['rgb_programs']) {
+                            prog_combo += `<option value="${program}">${program}</option>`;
+                        }
+
+                        prog_combo += `</select></center>`;
+
+                        card = 
+                            `<div class="card text-center border-0">` +
+                            `<div class="card-body">` +
+                            `<i class="material-icons md-48">${google_icon}</i>` +
+                            `<p>${control_name}</p>` +
+                            `<span style="color:#${current_colour}">` +
+                            `&#x25cf;&#x25cf;&#x25cf;&#x25cf;&#x25cf;</span>` +
+                            `${prog_combo}` +
+                            `</div>` +
+                            `</div>`;
+
+                        other_card_dict[zone_name][control_name] = card;
+                    }
+
+                    if (control_type == 'argb') {
+                        google_icon = get_google_icon(control_name);
+
+                        prog_combo = 
+                            `<center><select class="form-select form-select-sm" style="width:auto;"` +
+                            `aria-label=".form-select-sm example" ` +
+                            `onchange='argb_action("${zone_name}", "${device_name}", "${control_name}", this.value)'>` +
+                            `<option value="">Program</option>`;
+
+                        for (program of data_dict['argb_programs']) {
+                            prog_combo += `<option value="${program}">${program}</option>`;
+                        }
+
+                        prog_combo += `</select></center>`;
+
+                        colour_list = [];
+                        if ('colours' in control['program']) {
+                            num_colours = control['program']['colours'].length;
+                            // limit to 25 LEDs truncated across full list
+                            if (num_colours <= 25) {
+                                // entire list
+                                colour_list = control['program']['colours'];
+                            } else {
+                                // every step colours based on division by 25
+                                // min step size of 2
+                                step = Math.round(num_colours / 25);
+                                if (step < 2) {
+                                    step = 2;
+                                }
+                                for (i = 0; i < num_colours - 1; i += step) {
+                                    colour_list.push(control['program']['colours'][i]);
+                                }
+                            }
+                        }
+
+                        // Iterate colours and format in stack of
+                        // 5 large dots
+                        i = 0;
+                        colour_str = ``;
+                        for (colour of colour_list) {
+                            if (colour == 'random') {
+                                colour_str += '?';
+                            }
+                            else {
+                                colour_hex = colour.slice(2)
+                                colour_str += 
+                                    `<span style="color:#${colour_hex}">` +
+                                    `&#x25cf;</span>`
+                            }
+                            i += 1;
+                            if (i % 5 == 0){
+                                colour_str += '<br>';
+                            }
+                        }
+
+                        card = 
+                            `<div class="card text-center border-0">` +
+                            `<div class="card-body">` +
+                            `<i class="material-icons md-48">${google_icon}</i>` +
+                            `<p>${control_name}</p>` +
+                            `${colour_str}` +
+                            `${prog_combo}` +
+                            `</div>` +
+                            `</div>`;
+
+                        other_card_dict[zone_name][control_name] = card;
+                    }
+                }
+            }
+
+            dashboard_str = `<div class="container">`;
+            zone_list = Array.from(zone_set);
+            zone_list.sort();
+            for (zone_name of zone_list) {
+                num_controls = Object.keys(switch_card_dict[zone_name]).length + Object.keys(other_card_dict[zone_name]).length;
+                num_devices_suffix = (num_controls == 1) ? 'device' : 'devices';
+                dashboard_str += 
+                    `<div class="card border-start-0 border-end-0 border-bottom-0">` +
+                    `<div class="card-body">` +
+                    `<center><h6>${zone_name}</h6></center>` +
+                    `<center><p><small>${num_controls} ${num_devices_suffix}</small></p></center>` +
+                    `<div class="container">` +
+                    `<div class="row">`;
+
+                for (control_name of Object.keys(switch_card_dict[zone_name])) {
+                    card = switch_card_dict[zone_name][control_name];
+                    dashboard_str += `<div class="col">${card}</div>`;
+                }
+
+                for (control_name of Object.keys(other_card_dict[zone_name])) {
+                    card = other_card_dict[zone_name][control_name]
+                    dashboard_str += `<div class="col">${card}</div>`;
+                }
+
+                dashboard_str += 
+                    `</div>` +
+                    `</div>` +
+                    `</div>` +
+                    `</div>`;
+            }
+
+            date_str = new Date();
+            dashboard_str += 
+                `</div>` +
+                `<br>` +
+                `<center><i><small><p class="fw-lighter">Last updated: ${date_str}</p></small></i><center>`;
+            return dashboard_str;
+        }
+
+    </script>
+</head>   
+
+<body id="bgbright">
+    <div id="dashboard" class="container-fluid">
+
+        <nav>
+            <div class="nav nav-tabs" id="nav-tab" role="tablist">
+                <button class="nav-link active" id="nav-zones-tab" data-bs-toggle="tab" data-bs-target="#nav-zones" type="button" role="tab" aria-controls="nav-zones" aria-selected="true">Zones</button>
+                <button class="nav-link" id="nav-devices-tab" data-bs-toggle="tab" data-bs-target="#nav-devices" type="button" role="tab" aria-controls="nav-devices" aria-selected="false">Devices</button>
+            </div>
+        </nav>
+        <div class="tab-content" id="nav-tabContent">
+            <div class="tab-pane fade show active" id="nav-zones" role="tabpanel" aria-labelledby="nav-zones-tab" tabindex="0">
+            </div>
+
+            <div class="tab-pane fade" id="nav-devices" role="tabpanel" aria-labelledby="nav-devices-tab" tabindex="0">
+            </div>
+        </div>
+
+    </div>
+</body>
