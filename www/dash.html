@@ -269,10 +269,9 @@
             'motion' : 'directions_walk',
         };
 
-        function switch_action(zone_name, device_name, control_name, state) {
+        function switch_action(zone_name, control_name, state) {
             action_url = 
                 `/api?zone=${zone_name}` +
-                `&device=${device_name}`+
                 `&control=${control_name}`+
                 `&state=${state}`;
 
@@ -286,10 +285,9 @@
                 });
             }
 
-        function rgb_action(zone_name, device_name, control_name, program) {
+        function rgb_action(zone_name, control_name, program) {
             action_url = 
                 `/api?zone=${zone_name}` +
-                `&device=${device_name}`+
                 `&control=${control_name}`+
                 `&rgb_program=${program}`;
 
@@ -303,10 +301,9 @@
                 });
             }
 
-        function argb_action(zone_name, device_name, control_name, program) {
+        function argb_action(zone_name, control_name, program) {
             action_url = 
                 `/api?zone=${zone_name}` +
-                `&device=${device_name}`+
                 `&control=${control_name}`+
                 `&argb_program=${program}`;
 
@@ -474,10 +471,10 @@
                             `<p>${control_name}</p>` +
                             `<div class="btn-group">` +
                             `<button type="button" class="btn ${off_switch_class}" ` +
-                            `onclick='switch_action("${zone_name}", "${device_name}", "${control_name}", 0)' ` + 
+                            `onclick='switch_action("${zone_name}", "${control_name}", 0)' ` + 
                             `>Off</button>` +
                             `<button type="button" class="btn ${on_switch_class}" ` +
-                            `onclick='switch_action("${zone_name}", "${device_name}", "${control_name}", 1)' ` +
+                            `onclick='switch_action("${zone_name}", "${control_name}", 1)' ` +
                             `>On</button>` +
                             `</div>` +
                             `&nbsp;` +
@@ -512,7 +509,7 @@
                         prog_combo = 
                             `<center><select class="form-select form-select-sm" style="width:auto;"` +
                             `aria-label=".form-select-sm example" ` +
-                            `onchange='rgb_action("${zone_name}", "${device_name}", "${control_name}", this.value)'>` +
+                            `onchange='rgb_action("${zone_name}", "${control_name}", this.value)'>` +
                             `<option value="">Program</option>`;
 
                         for (program of data_dict['rgb_programs']) {
@@ -541,7 +538,7 @@
                         prog_combo = 
                             `<center><select class="form-select form-select-sm" style="width:auto;"` +
                             `aria-label=".form-select-sm example" ` +
-                            `onchange='argb_action("${zone_name}", "${device_name}", "${control_name}", this.value)'>` +
+                            `onchange='argb_action("${zone_name}", "${control_name}", this.value)'>` +
                             `<option value="">Program</option>`;
 
                         for (program of data_dict['argb_programs']) {
