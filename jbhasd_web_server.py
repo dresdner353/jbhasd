@@ -1333,6 +1333,25 @@ def web_server(dev_mode):
         cherrypy.server.ssl_certificate = gv_json_config['web']['ssl']['cert']
         cherrypy.server.ssl_private_key = gv_json_config['web']['ssl']['key']
 
+    # www dir and related static config for hosting
+    www_dir = '%s/www' % (
+            os.path.dirname(os.path.realpath(__file__))
+            )
+
+    # static hosting from www dir and index file 
+    # is dash.html
+    static_conf = {
+            '/': {
+                'tools.staticdir.on': True,
+                'tools.staticdir.dir': www_dir,
+                'tools.staticdir.index': 'dash.html',
+                }
+            }
+
+    # API config
+    # none by default
+    api_conf = {}
+
     # Authentication
     # If the users section in web config is populated
     # We generate a config string with HTTP digest
@@ -1353,37 +1372,23 @@ def web_server(dev_mode):
                 'tools.auth_digest.key': digest_key,
         }
 
-        conf = {
-            '/': digest_conf
-        }
+        # merge in digest settings for static and 
+        # api access
+        static_conf['/'].update(digest_conf)
+        api_conf['/'] = digest_conf
+
     else:
         log_message(
                 1,
                 "No users provisioned in config.. bypassing authentation")
-        conf = {}
-
-    # www dir and related static config for hosting
-    www_dir = '%s/www' % (
-            os.path.dirname(os.path.realpath(__file__))
-            )
-
-    # static hosting from www dir and index file 
-    # is dash.html
-    static_conf = {
-            '/': {
-                'tools.staticdir.on': True,
-                'tools.staticdir.dir': www_dir,
-                'tools.staticdir.index': 'dash.html',
-                }
-            }
 
     cherrypy.tree.mount(None, '/', static_conf)
 
     # webhook for status data
-    cherrypy.tree.mount(web_console_data_handler(), '/data')
+    cherrypy.tree.mount(web_console_data_handler(), '/data', api_conf)
 
     # webhook for action API
-    cherrypy.tree.mount(web_console_api_handler(), '/api')
+    cherrypy.tree.mount(web_console_api_handler(), '/api', api_conf)
 
     # Cherrypy main loop
     cherrypy.engine.start()
